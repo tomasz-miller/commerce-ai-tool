@@ -1,5 +1,5 @@
 import cors from "cors";
-import type { Express, Request, Response } from "express";
+import type { Express, Response } from "express";
 import { Router } from "express";
 import type { CommerceAIConfig } from "@commerce-ai-tool/core";
 import { createHandlers } from "./handlers.js";
