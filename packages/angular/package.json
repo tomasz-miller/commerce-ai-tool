@@ -18,7 +18,7 @@
         "default": "./dist/index.cjs"
       }
     },
-    "./styles.css": "./dist/styles.css"
+    "./styles.css": "./dist/index.css"
   },
   "files": [
     "dist"
@@ -27,7 +27,7 @@
     "**/*.css"
   ],
   "scripts": {
-    "build": "tsup && cp src/styles/commerce-ai-search.css dist/styles.css",
+    "build": "tsup",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
