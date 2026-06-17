@@ -17,7 +17,32 @@
 - [ ] Internationalization (i18n) for widget labels
 - [ ] Short-lived response cache on server
 
-## v1.5
+## v1.2 — Langfuse (AI observability)
+
+Integrate [Langfuse](https://langfuse.com) for every AI step in the search pipeline: text query interpretation, image analysis, voice transcript enhancement, and localized voice result summaries (OpenRouter / AWS Bedrock).
+
+### Why Langfuse
+
+- **End-to-end traces** — one trace per search request spanning STT → AI interpret → commercetools → TTS summary, with nested spans per provider call
+- **Latency breakdown** — see which step dominates (ElevenLabs STT, LLM, Product Search API, ElevenLabs TTS) and optimize the slow path
+- **Cost & token usage** — track spend per model, provider, and endpoint; compare OpenRouter vs Bedrock in production
+- **Prompt management** — version and deploy prompts (`TEXT_QUERY`, image, voice enhance, TTS summary) without code releases; roll back bad prompt changes quickly
+- **Locale-aware debugging** — correlate `queryLocale` / `catalogLocale` with AI inputs and outputs (e.g. wrong-language `searchTerms`, empty CT results despite high `total`)
+- **Production debugging** — replace ad-hoc `CAT_DEBUG` logs with searchable traces, inputs/outputs, and error context in staging and production
+- **Quality & evaluations** — score interpretations and voice summaries; build datasets from real queries for regression tests when changing prompts or models
+- **User/session context** — attach `sessionId`, widget props, and search mode (text / voice / image) to traces for support and analytics
+- **Governance** — audit trail of what was sent to external LLMs (retention policies, PII considerations for voice transcripts)
+
+### Implementation checklist
+
+- [ ] Langfuse SDK in `@commerce-ai-tool/core` (wrap AI provider calls or orchestrator spans)
+- [ ] Env config: `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL` (optional self-host)
+- [ ] Trace metadata: `queryLocale`, `catalogLocale`, search type, commercetools `projectKey`, model id
+- [ ] Instrument all `AIProvider` methods: `interpretTextQuery`, `interpretImageQuery`, `enhanceVoiceTranscript`, `summarizeVoiceResults`
+- [ ] Link server voice handler span to core child spans (single trace id returned optionally in dev)
+- [ ] Document setup in `.env.example` and README; note relationship to existing `CAT_DEBUG` dev tracing
+- [ ] Optional: Langfuse prompt labels synced with `packages/core/src/prompts` for managed prompts
+
 
 - [ ] Add to cart via commercetools Cart API
 - [ ] Anonymous and authenticated cart sessions

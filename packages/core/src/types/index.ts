@@ -36,6 +36,9 @@ export interface ElevenLabsConfig {
 }
 
 export interface CommerceAIDefaults {
+  /** Language products are indexed in within commercetools */
+  catalogLocale?: string;
+  /** @deprecated Use catalogLocale */
   locale?: string;
   storeKey?: string;
   limit?: number;
@@ -67,7 +70,10 @@ export interface SearchMeta {
   total: number;
   limit: number;
   offset: number;
+  /** @deprecated Use catalogLocale */
   locale: string;
+  catalogLocale: string;
+  queryLocale: string;
   queryInterpretation?: string;
 }
 
@@ -78,9 +84,26 @@ export interface SearchResult {
 
 export interface TextSearchRequest {
   query: string;
+  /** Language of the user query (AI input) */
+  queryLocale?: string;
+  /** Language products are indexed in commercetools */
+  catalogLocale?: string;
+  /** @deprecated Use queryLocale */
   locale?: string;
   limit?: number;
   offset?: number;
+}
+
+export interface SearchLocaleOptions {
+  queryLocale?: string;
+  catalogLocale?: string;
+  /** @deprecated Use queryLocale */
+  locale?: string;
+}
+
+export interface SearchLocaleContext {
+  queryLocale: string;
+  catalogLocale: string;
 }
 
 export interface VoiceSearchResult extends SearchResult {

@@ -55,6 +55,32 @@ export const POST = handlers.search;
 
 See [`apps/demo-next`](./apps/demo-next) for all route handlers (voice, image, TTS, health).
 
+### Locale configuration
+
+Search uses two locale concepts:
+
+| Field | Purpose | Source |
+|-------|---------|--------|
+| `catalogLocale` | Language products are indexed in commercetools | `CAT_CATALOG_LOCALE` env, widget `catalogLocale` prop |
+| `queryLocale` | Language the user types or speaks in (AI input) | Widget `queryLocale` prop / request body; defaults to `catalogLocale` |
+
+The AI translates `searchTerms` into the catalog language before querying commercetools. Product names in results use `catalogLocale`.
+
+### Voice search TTS
+
+Spoken result summaries are **voice-search only** (text and image search show visual results without TTS).
+
+- Auto-play and the replay button appear only after a voice search
+- Summary language follows `queryLocale` (e.g. `pl` → Polish, `en` → English)
+- Product names in the spoken summary are translated to `queryLocale` when they differ from the catalog language
+- Set `queryLocale` on the widget (or `NEXT_PUBLIC_CAT_QUERY_LOCALE` in the demo) to match the language you speak
+
+Server env vars (see `apps/demo-next/.env.example`):
+
+- `CAT_CATALOG_LOCALE` — primary catalog language (e.g. `no` for Norwegian shops)
+- `CAT_DEFAULT_LOCALE` — deprecated alias for `CAT_CATALOG_LOCALE`
+- `CAT_DEBUG=true` — structured dev tracing for search and commercetools calls
+
 ### 4. Add the widget
 
 ```tsx
@@ -68,7 +94,8 @@ export function Search() {
     <CommerceAISearch
       apiBaseUrl="/api/commerce-ai"
       theme="auto"
-      locale="en"
+      catalogLocale="no"
+      queryLocale="en"
       enableVoice
       enableImageSearch
       enableTts

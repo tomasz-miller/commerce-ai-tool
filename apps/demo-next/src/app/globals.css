@@ -42,11 +42,32 @@ body {
   text-align: center;
 }
 
-.demo-hero h1 {
+.demo-hero-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.15em;
   font-size: 2rem;
   font-weight: 700;
   margin: 0 0 0.5rem;
   letter-spacing: -0.02em;
+}
+
+.demo-hero-word--muted {
+  color: #9ca3af;
+}
+
+.demo-hero-word--emphasis {
+  color: #1f2937;
+}
+
+@media (prefers-color-scheme: dark) {
+  .demo-hero-word--muted {
+    color: #6b7280;
+  }
+
+  .demo-hero-word--emphasis {
+    color: #f0f0f5;
+  }
 }
 
 .demo-hero p {

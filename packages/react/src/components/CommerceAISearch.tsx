@@ -5,9 +5,16 @@ import { useCommerceAISearch } from "../hooks/useCommerceAISearch.js";
 import { useVoiceSearch } from "../hooks/useVoiceSearch.js";
 import "../styles/commerce-ai-search.css";
 
+export type SearchMode = "text" | "image" | "voice" | null;
+
 export interface CommerceAISearchProps {
   apiBaseUrl: string;
   theme?: ThemeMode;
+  /** Language products are indexed in commercetools */
+  catalogLocale?: string;
+  /** Language of the user search input */
+  queryLocale?: string;
+  /** @deprecated Use queryLocale */
   locale?: string;
   placeholder?: string;
   enableVoice?: boolean;
@@ -20,7 +27,9 @@ export interface CommerceAISearchProps {
 export function CommerceAISearch({
   apiBaseUrl,
   theme = "auto",
-  locale = "en",
+  catalogLocale,
+  queryLocale,
+  locale,
   placeholder = "Search products...",
   enableVoice = true,
   enableImageSearch = true,
@@ -30,12 +39,12 @@ export function CommerceAISearch({
 }: CommerceAISearchProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [lastSearchMode, setLastSearchMode] = useState<SearchMode>(null);
 
   const {
     query,
     setQuery,
     results,
-    meta,
     isLoading,
     error,
     search,
@@ -44,38 +53,61 @@ export function CommerceAISearch({
     setMeta,
     setError,
     setIsLoading,
-  } = useCommerceAISearch({ apiBaseUrl, locale });
+  } = useCommerceAISearch({ apiBaseUrl, catalogLocale, queryLocale, locale });
 
   const voice = useVoiceSearch({
     apiBaseUrl,
+    catalogLocale,
+    queryLocale,
     locale,
     enableTts,
     onResults: (products, resultMeta) => {
+      setLastSearchMode("voice");
       setResults(products);
       setMeta(resultMeta);
       setError(null);
       setIsLoading(false);
     },
-    onTranscript: (transcript) => setQuery(transcript),
+    onTranscript: (transcript) => setQuery(transcript, { search: false }),
   });
 
   const displayResults = results;
-  const showResults = displayResults.length > 0 || isLoading || error;
+  const showResults =
+    query.trim().length > 0 && (displayResults.length > 0 || isLoading || !!error);
 
   const handleSubmit = useCallback(
     (event: React.FormEvent) => {
       event.preventDefault();
-      void search();
+      setLastSearchMode("text");
+      voice.clearAudioSummary();
+      void search(query);
     },
-    [search],
+    [query, search, voice],
+  );
+
+  const handleQueryChange = useCallback(
+    (value: string) => {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        setLastSearchMode(null);
+        voice.clearAudioSummary();
+      } else if (trimmed.length >= 2) {
+        setLastSearchMode("text");
+        voice.clearAudioSummary();
+      }
+      setQuery(value);
+    },
+    [setQuery, voice],
   );
 
   const handleImageSelect = useCallback(
     (file: File) => {
       if (!file.type.startsWith("image/")) return;
+      setLastSearchMode("image");
+      voice.clearAudioSummary();
       void searchByImage(file);
     },
-    [searchByImage],
+    [searchByImage, voice],
   );
 
   const handleDrop = useCallback(
@@ -88,20 +120,8 @@ export function CommerceAISearch({
     [handleImageSelect],
   );
 
-  const playTts = useCallback(async () => {
-    if (!meta?.queryInterpretation) return;
-    const response = await fetch(`${apiBaseUrl.replace(/\/$/, "")}/tts`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: meta.queryInterpretation }),
-    });
-    if (response.ok) {
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      void audio.play();
-    }
-  }, [apiBaseUrl, meta?.queryInterpretation]);
+  const showVoiceReplay =
+    enableTts && lastSearchMode === "voice" && Boolean(voice.audioSummary);
 
   return (
     <div
@@ -128,7 +148,7 @@ export function CommerceAISearch({
           type="search"
           className="cat-search-input"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => handleQueryChange(e.target.value)}
           placeholder={placeholder}
           aria-label="Search query"
           autoComplete="off"
@@ -171,12 +191,12 @@ export function CommerceAISearch({
           </>
         )}
 
-        {enableTts && meta?.queryInterpretation && (
+        {showVoiceReplay && (
           <button
             type="button"
             className="cat-icon-btn"
-            onClick={() => void playTts()}
-            aria-label="Read interpretation aloud"
+            onClick={() => voice.replayAudioSummary()}
+            aria-label="Replay voice result summary"
           >
             <Volume2 size={16} />
           </button>

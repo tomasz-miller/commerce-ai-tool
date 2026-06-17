@@ -1,23 +1,47 @@
 import { useCallback, useRef, useState } from "react";
 import type { ProductCard, SearchResult } from "@commerce-ai-tool/core";
+import { appendLocaleFields, type SearchLocaleProps } from "./useCommerceAISearch.js";
 
-export interface UseVoiceSearchOptions {
+export interface UseVoiceSearchOptions extends SearchLocaleProps {
   apiBaseUrl: string;
-  locale?: string;
   onResults?: (results: ProductCard[], meta: SearchResult["meta"]) => void;
   onTranscript?: (transcript: string) => void;
   enableTts?: boolean;
 }
 
+function playAudioSummary(base64: string): void {
+  const audio = new Audio(`data:audio/mpeg;base64,${base64}`);
+  void audio.play();
+}
+
 export function useVoiceSearch(options: UseVoiceSearchOptions) {
-  const { apiBaseUrl, locale = "en", onResults, onTranscript, enableTts = true } = options;
+  const {
+    apiBaseUrl,
+    queryLocale,
+    catalogLocale,
+    locale,
+    onResults,
+    onTranscript,
+    enableTts = true,
+  } = options;
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [audioSummary, setAudioSummary] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
   const baseUrl = apiBaseUrl.replace(/\/$/, "");
+
+  const clearAudioSummary = useCallback(() => {
+    setAudioSummary(null);
+  }, []);
+
+  const replayAudioSummary = useCallback(() => {
+    if (audioSummary) {
+      playAudioSummary(audioSummary);
+    }
+  }, [audioSummary]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current?.state === "recording") {
@@ -28,6 +52,7 @@ export function useVoiceSearch(options: UseVoiceSearchOptions) {
 
   const startRecording = useCallback(async () => {
     setError(null);
+    setAudioSummary(null);
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -49,7 +74,7 @@ export function useVoiceSearch(options: UseVoiceSearchOptions) {
         try {
           const formData = new FormData();
           formData.append("audio", blob, "recording.webm");
-          formData.append("locale", locale);
+          appendLocaleFields(formData, { queryLocale, catalogLocale, locale });
           formData.append("enableTts", String(enableTts));
 
           const response = await fetch(`${baseUrl}/search/voice`, {
@@ -66,6 +91,7 @@ export function useVoiceSearch(options: UseVoiceSearchOptions) {
             transcript: string;
             products: ProductCard[];
             meta: SearchResult["meta"];
+            ttsText?: string;
             audioSummary?: string;
           };
 
@@ -73,11 +99,14 @@ export function useVoiceSearch(options: UseVoiceSearchOptions) {
           onResults?.(data.products, data.meta);
 
           if (data.audioSummary) {
-            const audio = new Audio(`data:audio/mpeg;base64,${data.audioSummary}`);
-            void audio.play();
+            setAudioSummary(data.audioSummary);
+            playAudioSummary(data.audioSummary);
+          } else {
+            setAudioSummary(null);
           }
         } catch (err) {
           setError(err instanceof Error ? err.message : "Voice search failed");
+          setAudioSummary(null);
         } finally {
           setIsProcessing(false);
         }
@@ -88,7 +117,7 @@ export function useVoiceSearch(options: UseVoiceSearchOptions) {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Microphone access denied");
     }
-  }, [baseUrl, enableTts, locale, onResults, onTranscript]);
+  }, [baseUrl, catalogLocale, enableTts, locale, onResults, onTranscript, queryLocale]);
 
   const toggleRecording = useCallback(async () => {
     if (isRecording) {
@@ -102,6 +131,9 @@ export function useVoiceSearch(options: UseVoiceSearchOptions) {
     isRecording,
     isProcessing,
     error,
+    audioSummary,
+    clearAudioSummary,
+    replayAudioSummary,
     toggleRecording,
     stopRecording,
   };

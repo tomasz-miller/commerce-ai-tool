@@ -8,9 +8,11 @@ import type { CommercetoolsConfig, ProductCard } from "../types/index.js";
 import type { ProductSearchQueryBody } from "../types/index.js";
 import {
   buildProjectionSearchQueryArgs,
+  extractProductSearchIds,
   isProductSearchUnavailable,
   productSearchUnavailableMessage,
 } from "./search-helpers.js";
+import { logSearchTrace } from "../utils/dev-trace.js";
 
 export interface CommercetoolsClient {
   searchProducts(
@@ -108,6 +110,8 @@ async function searchWithProductSearchApi(
   apiRoot: ReturnType<ReturnType<typeof createApiBuilderFromCtpClient>["withProjectKey"]>,
   body: ProductSearchQueryBody,
 ) {
+  logSearchTrace("commercetools", { api: "products.search", request: body });
+
   const response = await apiRoot
     .products()
     .search()
@@ -115,13 +119,18 @@ async function searchWithProductSearchApi(
     .execute();
 
   const results = response.body.results ?? [];
-  const productIds = results
-    .map((result) => result.productProjection?.id)
-    .filter((id): id is string => Boolean(id));
+  const productIds = extractProductSearchIds(results);
+
+  const total = response.body.total ?? productIds.length;
+  logSearchTrace("commercetools", {
+    api: "products.search",
+    total,
+    productIds,
+  });
 
   return {
     productIds,
-    total: response.body.total ?? productIds.length,
+    total,
   };
 }
 
@@ -130,20 +139,30 @@ async function searchWithProductProjectionSearch(
   body: ProductSearchQueryBody,
   currency?: string,
 ) {
+  const queryArgs = buildProjectionSearchQueryArgs(body, currency);
+  logSearchTrace("commercetools", { api: "productProjections.search", request: queryArgs });
+
   const response = await apiRoot
     .productProjections()
     .search()
     .get({
-      queryArgs: buildProjectionSearchQueryArgs(body, currency),
+      queryArgs,
     })
     .execute();
 
   const results = response.body.results ?? [];
   const productIds = results.map((projection) => projection.id).filter(Boolean);
 
+  const total = response.body.total ?? productIds.length;
+  logSearchTrace("commercetools", {
+    api: "productProjections.search",
+    total,
+    productIds,
+  });
+
   return {
     productIds,
-    total: response.body.total ?? productIds.length,
+    total,
   };
 }
 

@@ -111,6 +111,14 @@ Release (`.github/workflows/release.yml`) is disabled (`workflow_dispatch` only)
 4. Integration in `apps/demo-next` (+ E2E if user flow applies)
 5. Full verification: `pnpm lint && pnpm typecheck && pnpm test && pnpm build`
 
+## Locale model
+
+- **`catalogLocale`** — commercetools index language (`fullText.language`, `localeProjection`). Set via `CAT_CATALOG_LOCALE` or per-request/widget override.
+- **`queryLocale`** — user input language for AI interpretation. Defaults to `catalogLocale` when omitted.
+- AI returns `searchTerms` in catalog language; product cards use catalog language.
+- Resolver: `packages/core/src/locale/resolve.ts` (`resolveSearchLocales`).
+- Dev tracing: `logSearchTrace` in `packages/core/src/utils/dev-trace.ts` (enabled when `NODE_ENV !== production` or `CAT_DEBUG=true`).
+
 ## Key config files
 
 | File | Role |

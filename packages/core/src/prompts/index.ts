@@ -1,7 +1,11 @@
-import type { InterpretedSearchQuery, ProductSearchQueryBody } from "../types/index.js";
+import type { InterpretedSearchQuery, ProductSearchQueryBody, SearchLocaleContext } from "../types/index.js";
 
 export const TEXT_QUERY_SYSTEM_PROMPT = `You are a product search assistant for a commercetools storefront.
 Given a natural language query, extract search terms and optional filters.
+The user may search in any language (including speech-to-text in a different language than the stated query locale).
+searchTerms must ALWAYS be in the product catalog language only — translate product keywords from the query into that language.
+Never put the user's query language into searchTerms when it differs from the catalog language.
+Write interpretation in the user's query language when known; otherwise use the catalog language.
 Respond with valid JSON only, matching this schema:
 {
   "searchTerms": ["string"],
@@ -10,10 +14,17 @@ Respond with valid JSON only, matching this schema:
   "interpretation": "brief explanation of how you interpreted the query"
 }
 Use searchTerms for product names, brands, categories, or attributes.
-Keep searchTerms concise and commerce-focused.`;
+Keep searchTerms concise and commerce-focused.
+Examples when catalog language is Norwegian (no):
+- query "red shoes" → searchTerms: ["røde sko"]
+- query "nóż do tapet" → searchTerms: ["tapetkniv"]
+- query "wallpaper knife" → searchTerms: ["tapetkniv"]`;
 
 export const IMAGE_QUERY_SYSTEM_PROMPT = `You are a product search assistant for a commercetools storefront.
 Analyze the product image and extract searchable attributes.
+Return searchTerms in the product catalog language only so commercetools full-text search matches indexed product names.
+Never use a language other than the catalog language in searchTerms.
+Write interpretation in the user's query language when provided.
 Respond with valid JSON only, matching this schema:
 {
   "searchTerms": ["string"],
@@ -21,19 +32,39 @@ Respond with valid JSON only, matching this schema:
   "sort": "relevance" | "price_asc" | "price_desc",
   "interpretation": "brief description of the product visible in the image"
 }
-Focus on product type, color, brand, style, and distinguishing features.`;
+Focus on product type, color, brand, style, and distinguishing features.
+Prefer one short primary search phrase when possible.`;
 
 export const VOICE_ENHANCE_SYSTEM_PROMPT = `You are a voice search query enhancer for an e-commerce storefront.
-Given a speech-to-text transcript, return a clean, concise product search query.
+Given a speech-to-text transcript, return a clean, concise product search query in the same language as the transcript.
 Remove filler words and fix obvious transcription errors.
 Respond with the enhanced query text only, no JSON or quotes.`;
 
-export const TTS_SUMMARY_PROMPT = `Summarize these product search results in one short spoken sentence for a voice assistant.
-Mention the number of results and highlight the top product name if available.`;
+export function formatLocaleContext(locales: SearchLocaleContext): string {
+  return [
+    `User query language: ${locales.queryLocale}`,
+    `Product catalog language: ${locales.catalogLocale}`,
+    `CRITICAL: searchTerms must use only the catalog language (${locales.catalogLocale}).`,
+    "Translate product keywords from the query into the catalog language.",
+    "The query text may be in another language (e.g. speech recognition).",
+  ].join("\n");
+}
+
+export function buildTextQueryUserMessage(text: string, locales: SearchLocaleContext): string {
+  return `${formatLocaleContext(locales)}\nQuery: ${text}`;
+}
+
+export function buildImageQueryUserMessage(locales: SearchLocaleContext): string {
+  return `${formatLocaleContext(locales)}\nAnalyze this product image.`;
+}
+
+export function buildVoiceEnhanceUserMessage(transcript: string, locales: SearchLocaleContext): string {
+  return `${formatLocaleContext(locales)}\nTranscript: ${transcript}`;
+}
 
 export function buildProductSearchBody(
   interpreted: InterpretedSearchQuery,
-  locale: string,
+  catalogLocale: string,
   limit = 20,
   offset = 0,
 ): ProductSearchQueryBody {
@@ -50,7 +81,7 @@ export function buildProductSearchBody(
       body.query = {
         fullText: {
           field: "name",
-          language: locale,
+          language: catalogLocale,
           value: primaryTerm,
         },
       };
@@ -59,7 +90,7 @@ export function buildProductSearchBody(
         or: terms.map((term) => ({
           fullText: {
             field: "name",
-            language: locale,
+            language: catalogLocale,
             value: term,
           },
         })),

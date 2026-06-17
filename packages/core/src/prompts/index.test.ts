@@ -1,5 +1,38 @@
 import { describe, expect, it } from "vitest";
-import { buildProductSearchBody, parseInterpretedQuery } from "./index.js";
+import {
+  buildProductSearchBody,
+  buildTextQueryUserMessage,
+  formatLocaleContext,
+  parseInterpretedQuery,
+} from "./index.js";
+
+describe("formatLocaleContext", () => {
+  it("includes query and catalog locales", () => {
+    expect(
+      formatLocaleContext({ queryLocale: "en", catalogLocale: "no" }),
+    ).toContain("User query language: en");
+    expect(
+      formatLocaleContext({ queryLocale: "en", catalogLocale: "no" }),
+    ).toContain("Product catalog language: no");
+  });
+
+  it("requires searchTerms in catalog language", () => {
+    expect(
+      formatLocaleContext({ queryLocale: "pl", catalogLocale: "no" }),
+    ).toContain("CRITICAL: searchTerms must use only the catalog language (no)");
+  });
+});
+
+describe("buildTextQueryUserMessage", () => {
+  it("includes locale context and query text", () => {
+    const message = buildTextQueryUserMessage("red shoes", {
+      queryLocale: "en",
+      catalogLocale: "no",
+    });
+    expect(message).toContain("Query: red shoes");
+    expect(message).toContain("catalog language: no");
+  });
+});
 
 describe("parseInterpretedQuery", () => {
   it("parses valid JSON response", () => {
@@ -29,11 +62,12 @@ describe("buildProductSearchBody", () => {
         interpretation: "shoes",
         sort: "relevance",
       },
-      "en",
+      "no",
       10,
     );
 
     expect(body.query?.fullText?.value).toBe("shoes");
+    expect(body.query?.fullText?.language).toBe("no");
     expect(body.limit).toBe(10);
   });
 

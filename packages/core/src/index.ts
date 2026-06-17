@@ -8,5 +8,11 @@ export type { SearchOrchestrator } from "./search/orchestrator.js";
 export {
   buildProductSearchBody,
   parseInterpretedQuery,
-  TTS_SUMMARY_PROMPT,
 } from "./prompts/index.js";
+export {
+  buildTtsSummaryFallback,
+  buildTtsSummaryUserMessage,
+  TTS_SUMMARY_PROMPT,
+} from "./search/voice-tts.js";
+export { resolveSearchLocales } from "./locale/resolve.js";
+export { logSearchTrace } from "./utils/dev-trace.js";

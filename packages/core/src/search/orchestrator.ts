@@ -1,9 +1,14 @@
 import { createAIProvider } from "../ai/index.js";
 import { createCommercetoolsClient } from "../commercetools/client.js";
+import { resolveSearchLocales } from "../locale/resolve.js";
 import { buildProductSearchBody } from "../prompts/index.js";
+import { buildTtsSummaryFallback } from "./voice-tts.js";
+import { logSearchTrace } from "../utils/dev-trace.js";
 import type {
   CommerceAIConfig,
   ImageSearchResult,
+  SearchLocaleContext,
+  SearchLocaleOptions,
   SearchResult,
   TextSearchRequest,
   VoiceSearchResult,
@@ -14,12 +19,12 @@ export interface SearchOrchestrator {
   searchByVoice(
     audio: Uint8Array,
     mimeType: string,
-    options?: { locale?: string; limit?: number; enableTts?: boolean },
+    options?: SearchLocaleOptions & { limit?: number; enableTts?: boolean },
   ): Promise<VoiceSearchResult & { ttsText?: string }>;
   searchByImage(
     image: Uint8Array,
     mimeType: string,
-    options?: { locale?: string; limit?: number },
+    options?: SearchLocaleOptions & { limit?: number },
   ): Promise<ImageSearchResult>;
 }
 
@@ -30,22 +35,32 @@ export interface SearchOrchestratorDeps {
 
 export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOrchestrator {
   const { config } = deps;
-  const locale = config.defaults?.locale ?? "en";
   const limit = config.defaults?.limit ?? 20;
   const currency = config.defaults?.currency ?? "EUR";
 
   const ai = createAIProvider(config.ai);
   const ct = createCommercetoolsClient(config.commercetools);
 
+  function resolveLocales(request?: SearchLocaleOptions): SearchLocaleContext {
+    return resolveSearchLocales({ defaults: config.defaults, request });
+  }
+
   async function executeSearch(
     interpreted: Awaited<ReturnType<typeof ai.interpretTextQuery>>,
-    searchLocale: string,
+    locales: SearchLocaleContext,
     searchLimit: number,
     offset = 0,
   ): Promise<SearchResult> {
-    const body = buildProductSearchBody(interpreted, searchLocale, searchLimit, offset);
+    const body = buildProductSearchBody(interpreted, locales.catalogLocale, searchLimit, offset);
+
+    logSearchTrace("ai", {
+      searchTerms: interpreted.searchTerms,
+      interpretation: interpreted.interpretation,
+      catalogLocale: locales.catalogLocale,
+    });
+
     const { productIds, total } = await ct.searchProducts(body, { currency });
-    const products = await ct.getProductProjections(productIds, searchLocale, currency);
+    const products = await ct.getProductProjections(productIds, locales.catalogLocale, currency);
 
     return {
       products,
@@ -53,7 +68,9 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
         total,
         limit: searchLimit,
         offset,
-        locale: searchLocale,
+        locale: locales.catalogLocale,
+        catalogLocale: locales.catalogLocale,
+        queryLocale: locales.queryLocale,
         queryInterpretation: interpreted.interpretation,
       },
     };
@@ -61,10 +78,17 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
 
   return {
     async searchByText(request) {
-      const searchLocale = request.locale ?? locale;
+      const locales = resolveLocales(request);
       const searchLimit = request.limit ?? limit;
-      const interpreted = await ai.interpretTextQuery(request.query, searchLocale);
-      return executeSearch(interpreted, searchLocale, searchLimit, request.offset ?? 0);
+
+      logSearchTrace("input", {
+        query: request.query,
+        queryLocale: locales.queryLocale,
+        catalogLocale: locales.catalogLocale,
+      });
+
+      const interpreted = await ai.interpretTextQuery(request.query, locales);
+      return executeSearch(interpreted, locales, searchLimit, request.offset ?? 0);
     },
 
     async searchByVoice(audio, mimeType, options = {}) {
@@ -72,17 +96,37 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
         throw new Error("Voice search requires a transcribeAudio implementation");
       }
 
-      const searchLocale = options.locale ?? locale;
+      const locales = resolveLocales(options);
       const searchLimit = options.limit ?? limit;
-      const transcript = await deps.transcribeAudio(audio, mimeType);
-      const enhancedQuery = await ai.enhanceVoiceTranscript(transcript, searchLocale);
-      const interpreted = await ai.interpretTextQuery(enhancedQuery, searchLocale);
-      const result = await executeSearch(interpreted, searchLocale, searchLimit);
 
-      const ttsText =
-        options.enableTts !== false
-          ? buildTtsSummary(result.products.length, result.products[0]?.name)
-          : undefined;
+      logSearchTrace("input", {
+        type: "voice",
+        mimeType,
+        queryLocale: locales.queryLocale,
+        catalogLocale: locales.catalogLocale,
+      });
+
+      const transcript = await deps.transcribeAudio(audio, mimeType);
+      const enhancedQuery = await ai.enhanceVoiceTranscript(transcript, locales);
+      const interpreted = await ai.interpretTextQuery(enhancedQuery, locales);
+      const result = await executeSearch(interpreted, locales, searchLimit);
+
+      let ttsText: string | undefined;
+      if (options.enableTts !== false) {
+        try {
+          ttsText = await ai.summarizeVoiceResults(
+            result.products.length,
+            result.products[0]?.name,
+            locales,
+          );
+        } catch {
+          ttsText = buildTtsSummaryFallback(
+            result.products.length,
+            result.products[0]?.name,
+            locales.queryLocale,
+          );
+        }
+      }
 
       return {
         ...result,
@@ -93,11 +137,19 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
     },
 
     async searchByImage(image, mimeType, options = {}) {
-      const searchLocale = options.locale ?? locale;
+      const locales = resolveLocales(options);
       const searchLimit = options.limit ?? limit;
+
+      logSearchTrace("input", {
+        type: "image",
+        mimeType,
+        queryLocale: locales.queryLocale,
+        catalogLocale: locales.catalogLocale,
+      });
+
       const base64 = uint8ArrayToBase64(image);
-      const interpreted = await ai.interpretImageQuery(base64, mimeType, searchLocale);
-      const result = await executeSearch(interpreted, searchLocale, searchLimit);
+      const interpreted = await ai.interpretImageQuery(base64, mimeType, locales);
+      const result = await executeSearch(interpreted, locales, searchLimit);
 
       return {
         ...result,
@@ -105,18 +157,6 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
       };
     },
   };
-}
-
-function buildTtsSummary(count: number, topProductName?: string): string {
-  if (count === 0) {
-    return "No products found for your search.";
-  }
-
-  if (topProductName) {
-    return `Found ${count} product${count === 1 ? "" : "s"}. Top result: ${topProductName}.`;
-  }
-
-  return `Found ${count} product${count === 1 ? "" : "s"}.`;
 }
 
 function uint8ArrayToBase64(bytes: Uint8Array): string {

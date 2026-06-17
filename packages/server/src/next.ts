@@ -1,7 +1,9 @@
 import type { CommerceAIConfig } from "@commerce-ai-tool/core";
+import { logSearchTrace } from "@commerce-ai-tool/core";
 import { createHandlers } from "./handlers.js";
 import { createCommerceAIServer } from "./server.js";
 import { logServerError, logServerWarning } from "./utils/log-error.js";
+import { parseSearchLocaleOptions } from "./utils/locale.js";
 import { parseMultipartRequest, type ParsedMultipart } from "./utils/multipart.js";
 
 export interface NextHandlers {
@@ -24,15 +26,29 @@ export function createNextHandlers(config: CommerceAIConfig): NextHandlers {
 
     search: async (req: Request) => {
       try {
-        const body = (await req.json()) as { query: string; locale?: string; limit?: number };
+        const body = (await req.json()) as {
+          query: string;
+          queryLocale?: string;
+          catalogLocale?: string;
+          locale?: string;
+          limit?: number;
+        };
 
         if (!body.query?.trim()) {
           return Response.json({ error: "query is required" }, { status: 400 });
         }
 
+        const localeOptions = parseSearchLocaleOptions(body);
+        logSearchTrace("handler", {
+          type: "text",
+          query: body.query,
+          queryLocale: localeOptions.queryLocale,
+          catalogLocale: localeOptions.catalogLocale,
+        });
+
         const result = await server.orchestrator.searchByText({
           query: body.query,
-          locale: body.locale,
+          ...localeOptions,
           limit: body.limit,
         });
 
@@ -56,11 +72,19 @@ export function createNextHandlers(config: CommerceAIConfig): NextHandlers {
           return Response.json({ error: "audio file is required" }, { status: 400 });
         }
 
+        const localeOptions = parseSearchLocaleOptions(fields);
+        logSearchTrace("handler", {
+          type: "voice",
+          mimeType: file.mimeType,
+          queryLocale: localeOptions.queryLocale,
+          catalogLocale: localeOptions.catalogLocale,
+        });
+
         const result = await server.orchestrator.searchByVoice(
           new Uint8Array(file.buffer),
           file.mimeType,
           {
-            locale: fields.locale,
+            ...localeOptions,
             limit: fields.limit ? Number(fields.limit) : undefined,
             enableTts: fields.enableTts !== "false",
           },
@@ -83,11 +107,13 @@ export function createNextHandlers(config: CommerceAIConfig): NextHandlers {
           enhancedQuery: result.enhancedQuery,
           products: result.products,
           meta: result.meta,
+          ttsText: result.ttsText,
           audioSummary,
         });
       } catch (error) {
         logServerError("searchVoice", error, {
-          locale: fields.locale,
+          queryLocale: fields.queryLocale ?? fields.locale,
+          catalogLocale: fields.catalogLocale,
           mimeType: file?.mimeType,
           size: file?.buffer.length,
         });
@@ -103,11 +129,19 @@ export function createNextHandlers(config: CommerceAIConfig): NextHandlers {
           return Response.json({ error: "image file is required" }, { status: 400 });
         }
 
+        const localeOptions = parseSearchLocaleOptions(fields);
+        logSearchTrace("handler", {
+          type: "image",
+          mimeType: file.mimeType,
+          queryLocale: localeOptions.queryLocale,
+          catalogLocale: localeOptions.catalogLocale,
+        });
+
         const result = await server.orchestrator.searchByImage(
           new Uint8Array(file.buffer),
           file.mimeType,
           {
-            locale: fields.locale,
+            ...localeOptions,
             limit: fields.limit ? Number(fields.limit) : undefined,
           },
         );

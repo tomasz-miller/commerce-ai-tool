@@ -1,18 +1,42 @@
 import { Injectable } from "@angular/core";
 import type { ProductCard, SearchResult } from "@commerce-ai-tool/core";
 
+export interface SearchLocaleFields {
+  queryLocale?: string;
+  catalogLocale?: string;
+  /** @deprecated Use queryLocale */
+  locale?: string;
+}
+
+function buildLocalePayload(options: SearchLocaleFields): Record<string, string> {
+  const payload: Record<string, string> = {};
+  const queryLocale = options.queryLocale ?? options.locale;
+
+  if (options.catalogLocale) {
+    payload.catalogLocale = options.catalogLocale;
+  }
+
+  if (queryLocale) {
+    payload.queryLocale = queryLocale;
+  }
+
+  return payload;
+}
+
 @Injectable({ providedIn: "root" })
 export class CommerceAiApiService {
   search(
     apiBaseUrl: string,
     query: string,
-    locale = "en",
+    locales: SearchLocaleFields = {},
+    signal?: AbortSignal,
   ): Promise<SearchResult> {
     const baseUrl = apiBaseUrl.replace(/\/$/, "");
     return fetch(`${baseUrl}/search`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query, locale }),
+      body: JSON.stringify({ query, ...buildLocalePayload(locales) }),
+      signal,
     }).then(async (response) => {
       if (!response.ok) {
         const data = (await response.json()) as { error?: string };
@@ -25,12 +49,14 @@ export class CommerceAiApiService {
   searchByImage(
     apiBaseUrl: string,
     file: File,
-    locale = "en",
+    locales: SearchLocaleFields = {},
   ): Promise<SearchResult & { interpretation?: string }> {
     const baseUrl = apiBaseUrl.replace(/\/$/, "");
     const formData = new FormData();
     formData.append("image", file);
-    formData.append("locale", locale);
+    for (const [key, value] of Object.entries(buildLocalePayload(locales))) {
+      formData.append(key, value);
+    }
 
     return fetch(`${baseUrl}/search/image`, {
       method: "POST",
@@ -47,18 +73,21 @@ export class CommerceAiApiService {
   searchByVoice(
     apiBaseUrl: string,
     audio: Blob,
-    locale = "en",
+    locales: SearchLocaleFields = {},
     enableTts = true,
   ): Promise<{
     transcript: string;
     products: ProductCard[];
     meta: SearchResult["meta"];
+    ttsText?: string;
     audioSummary?: string;
   }> {
     const baseUrl = apiBaseUrl.replace(/\/$/, "");
     const formData = new FormData();
     formData.append("audio", audio, "recording.webm");
-    formData.append("locale", locale);
+    for (const [key, value] of Object.entries(buildLocalePayload(locales))) {
+      formData.append(key, value);
+    }
     formData.append("enableTts", String(enableTts));
 
     return fetch(`${baseUrl}/search/voice`, {
@@ -73,6 +102,7 @@ export class CommerceAiApiService {
         transcript: string;
         products: ProductCard[];
         meta: SearchResult["meta"];
+        ttsText?: string;
         audioSummary?: string;
       }>;
     });

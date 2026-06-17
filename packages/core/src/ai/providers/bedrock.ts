@@ -4,14 +4,21 @@ import {
   type ContentBlock,
   type Message,
 } from "@aws-sdk/client-bedrock-runtime";
-import type { BedrockConfig } from "../../types/index.js";
+import type { BedrockConfig, SearchLocaleContext } from "../../types/index.js";
 import type { AIProvider } from "../types.js";
 import {
+  buildImageQueryUserMessage,
+  buildTextQueryUserMessage,
+  buildVoiceEnhanceUserMessage,
   IMAGE_QUERY_SYSTEM_PROMPT,
   TEXT_QUERY_SYSTEM_PROMPT,
   VOICE_ENHANCE_SYSTEM_PROMPT,
   parseInterpretedQuery,
 } from "../../prompts/index.js";
+import {
+  buildTtsSummaryUserMessage,
+  TTS_SUMMARY_PROMPT,
+} from "../../search/voice-tts.js";
 
 const DEFAULT_MODEL_ID = "anthropic.claude-3-5-sonnet-20241022-v2:0";
 
@@ -26,15 +33,22 @@ export class BedrockProvider implements AIProvider {
     this.visionModelId = config.visionModelId ?? config.modelId ?? DEFAULT_MODEL_ID;
   }
 
-  async interpretTextQuery(text: string, locale: string) {
+  async interpretTextQuery(text: string, locales: SearchLocaleContext) {
     const response = await this.converse(this.modelId, [
-      { role: "user", content: [{ text: `${TEXT_QUERY_SYSTEM_PROMPT}\n\nLocale: ${locale}\nQuery: ${text}` }] },
+      {
+        role: "user",
+        content: [
+          {
+            text: `${TEXT_QUERY_SYSTEM_PROMPT}\n\n${buildTextQueryUserMessage(text, locales)}`,
+          },
+        ],
+      },
     ]);
 
     return parseInterpretedQuery(this.extractText(response));
   }
 
-  async interpretImageQuery(imageBase64: string, mimeType: string, locale: string) {
+  async interpretImageQuery(imageBase64: string, mimeType: string, locales: SearchLocaleContext) {
     const rawBase64 = imageBase64.replace(/^data:[^;]+;base64,/, "");
     const format = mimeType.includes("png") ? "png" : mimeType.includes("webp") ? "webp" : "jpeg";
 
@@ -42,7 +56,7 @@ export class BedrockProvider implements AIProvider {
       {
         role: "user",
         content: [
-          { text: `${IMAGE_QUERY_SYSTEM_PROMPT}\n\nLocale: ${locale}` },
+          { text: `${IMAGE_QUERY_SYSTEM_PROMPT}\n\n${buildImageQueryUserMessage(locales)}` },
           {
             image: {
               format,
@@ -56,13 +70,32 @@ export class BedrockProvider implements AIProvider {
     return parseInterpretedQuery(this.extractText(response));
   }
 
-  async enhanceVoiceTranscript(transcript: string, locale: string) {
+  async enhanceVoiceTranscript(transcript: string, locales: SearchLocaleContext) {
     const response = await this.converse(this.modelId, [
       {
         role: "user",
         content: [
           {
-            text: `${VOICE_ENHANCE_SYSTEM_PROMPT}\n\nLocale: ${locale}\nTranscript: ${transcript}`,
+            text: `${VOICE_ENHANCE_SYSTEM_PROMPT}\n\n${buildVoiceEnhanceUserMessage(transcript, locales)}`,
+          },
+        ],
+      },
+    ]);
+
+    return this.extractText(response).trim();
+  }
+
+  async summarizeVoiceResults(
+    count: number,
+    topProductName: string | undefined,
+    locales: SearchLocaleContext,
+  ) {
+    const response = await this.converse(this.modelId, [
+      {
+        role: "user",
+        content: [
+          {
+            text: `${TTS_SUMMARY_PROMPT}\n\n${buildTtsSummaryUserMessage(count, topProductName, locales)}`,
           },
         ],
       },

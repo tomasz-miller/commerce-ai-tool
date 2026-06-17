@@ -1,7 +1,8 @@
 export { CommerceAISearch } from "./components/CommerceAISearch.js";
-export type { CommerceAISearchProps } from "./components/CommerceAISearch.js";
+export type { CommerceAISearchProps, SearchMode } from "./components/CommerceAISearch.js";
 export { useCommerceAISearch } from "./hooks/useCommerceAISearch.js";
 export type {
+  SetQueryOptions,
   UseCommerceAISearchOptions,
   UseCommerceAISearchReturn,
 } from "./hooks/useCommerceAISearch.js";

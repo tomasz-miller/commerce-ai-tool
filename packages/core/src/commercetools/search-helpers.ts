@@ -55,6 +55,14 @@ export function buildProjectionSearchQueryArgs(
   return queryArgs;
 }
 
+export function extractProductSearchIds(
+  results: Array<{ id?: string; productProjection?: { id?: string } }>,
+): string[] {
+  return results
+    .map((result) => result.id ?? result.productProjection?.id)
+    .filter((id): id is string => Boolean(id));
+}
+
 export function isProductSearchUnavailable(error: unknown): boolean {
   const message = getErrorMessage(error);
 

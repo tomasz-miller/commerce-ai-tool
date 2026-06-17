@@ -1,5 +1,7 @@
 import type { CommerceAIServer } from "./server.js";
+import { logSearchTrace } from "@commerce-ai-tool/core";
 import { logServerError, logServerWarning } from "./utils/log-error.js";
+import { parseSearchLocaleOptions } from "./utils/locale.js";
 import { parseMultipart, readJsonBody } from "./utils/multipart.js";
 
 export interface HandlerResponse {
@@ -28,15 +30,29 @@ export function createHandlers(server: CommerceAIServer) {
 
     async search(req: import("node:http").IncomingMessage): Promise<HandlerResponse> {
       try {
-        const body = await readJsonBody<{ query: string; locale?: string; limit?: number }>(req);
+        const body = await readJsonBody<{
+          query: string;
+          queryLocale?: string;
+          catalogLocale?: string;
+          locale?: string;
+          limit?: number;
+        }>(req);
 
         if (!body.query?.trim()) {
           return errorResponse("query is required", 400);
         }
 
+        const localeOptions = parseSearchLocaleOptions(body);
+        logSearchTrace("handler", {
+          type: "text",
+          query: body.query,
+          queryLocale: localeOptions.queryLocale,
+          catalogLocale: localeOptions.catalogLocale,
+        });
+
         const result = await server.orchestrator.searchByText({
           query: body.query,
-          locale: body.locale,
+          ...localeOptions,
           limit: body.limit,
         });
 
@@ -55,14 +71,23 @@ export function createHandlers(server: CommerceAIServer) {
           return errorResponse("audio file is required", 400);
         }
 
+        const localeOptions = parseSearchLocaleOptions(fields);
+        logSearchTrace("handler", {
+          type: "voice",
+          mimeType: file.mimeType,
+          queryLocale: localeOptions.queryLocale,
+          catalogLocale: localeOptions.catalogLocale,
+        });
+
         const result = await server.orchestrator.searchByVoice(
           new Uint8Array(file.buffer),
           file.mimeType,
           {
-          locale: fields.locale,
-          limit: fields.limit ? Number(fields.limit) : undefined,
-          enableTts: fields.enableTts !== "false",
-        });
+            ...localeOptions,
+            limit: fields.limit ? Number(fields.limit) : undefined,
+            enableTts: fields.enableTts !== "false",
+          },
+        );
 
         let audioSummary: string | undefined;
         if (result.ttsText && server) {
@@ -81,6 +106,7 @@ export function createHandlers(server: CommerceAIServer) {
           enhancedQuery: result.enhancedQuery,
           products: result.products,
           meta: result.meta,
+          ttsText: result.ttsText,
           audioSummary,
         });
       } catch (error) {
@@ -97,13 +123,22 @@ export function createHandlers(server: CommerceAIServer) {
           return errorResponse("image file is required", 400);
         }
 
+        const localeOptions = parseSearchLocaleOptions(fields);
+        logSearchTrace("handler", {
+          type: "image",
+          mimeType: file.mimeType,
+          queryLocale: localeOptions.queryLocale,
+          catalogLocale: localeOptions.catalogLocale,
+        });
+
         const result = await server.orchestrator.searchByImage(
           new Uint8Array(file.buffer),
           file.mimeType,
           {
-          locale: fields.locale,
-          limit: fields.limit ? Number(fields.limit) : undefined,
-        });
+            ...localeOptions,
+            limit: fields.limit ? Number(fields.limit) : undefined,
+          },
+        );
 
         return jsonResponse(result);
       } catch (error) {

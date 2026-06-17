@@ -1,13 +1,15 @@
 "use client";
 
 import { CommerceAISearch } from "@commerce-ai-tool/react";
+import { demoCatalogLocale, demoQueryLocale } from "../lib/search-config";
 
 export function DemoSearch() {
   return (
     <CommerceAISearch
       apiBaseUrl="/api/commerce-ai"
       theme="auto"
-      locale="en"
+      catalogLocale={demoCatalogLocale}
+      queryLocale={demoQueryLocale}
       enableVoice
       enableImageSearch
       enableTts

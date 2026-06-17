@@ -125,7 +125,9 @@ export function loadConfigFromEnv(): CommerceAIConfig {
         }
       : undefined,
     defaults: {
-      locale: process.env.CAT_DEFAULT_LOCALE ?? "en",
+      catalogLocale:
+        process.env.CAT_CATALOG_LOCALE ?? process.env.CAT_DEFAULT_LOCALE ?? "en",
+      locale: process.env.CAT_DEFAULT_LOCALE,
       currency: process.env.CAT_DEFAULT_CURRENCY ?? "EUR",
       limit: process.env.CAT_DEFAULT_LIMIT ? Number(process.env.CAT_DEFAULT_LIMIT) : 20,
       storeKey: process.env.CAT_STORE_KEY,

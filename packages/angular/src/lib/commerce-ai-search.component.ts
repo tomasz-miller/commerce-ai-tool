@@ -10,6 +10,8 @@ import { FormsModule } from "@angular/forms";
 import type { ProductCard, ThemeMode } from "@commerce-ai-tool/core";
 import { CommerceAiApiService } from "./commerce-ai-api.service.js";
 
+type SearchMode = "text" | "image" | "voice" | null;
+
 @Component({
   selector: "commerce-ai-search",
   standalone: true,
@@ -94,12 +96,12 @@ import { CommerceAiApiService } from "./commerce-ai-api.service.js";
           />
         }
 
-        @if (enableTts && meta?.queryInterpretation) {
+        @if (showVoiceReplay) {
           <button
             type="button"
             class="cat-icon-btn"
-            aria-label="Read interpretation aloud"
-            (click)="playTts()"
+            aria-label="Replay voice result summary"
+            (click)="replayVoiceSummary()"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
@@ -153,7 +155,10 @@ export class CommerceAiSearchComponent {
 
   @Input() apiBaseUrl = "/api/commerce-ai";
   @Input() theme: ThemeMode = "auto";
-  @Input() locale = "en";
+  @Input() catalogLocale?: string;
+  @Input() queryLocale?: string;
+  /** @deprecated Use queryLocale */
+  @Input() locale?: string;
   @Input() placeholder = "Search products...";
   @Input() enableVoice = true;
   @Input() enableImageSearch = true;
@@ -169,36 +174,98 @@ export class CommerceAiSearchComponent {
   isDragging = false;
   isRecording = false;
   isProcessing = false;
+  lastSearchMode: SearchMode = null;
+  audioSummary: string | null = null;
 
   private mediaRecorder: MediaRecorder | null = null;
   private audioChunks: Blob[] = [];
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private searchAbort: AbortController | null = null;
+  private searchRequestId = 0;
 
   get showResults(): boolean {
-    return this.results.length > 0 || this.isLoading || !!this.error;
+    return (
+      this.query.trim().length > 0 &&
+      (this.results.length > 0 || this.isLoading || !!this.error)
+    );
+  }
+
+  get showVoiceReplay(): boolean {
+    return this.enableTts && this.lastSearchMode === "voice" && !!this.audioSummary;
   }
 
   onQueryChange(value: string): void {
-    if (this.debounceTimer) clearTimeout(this.debounceTimer);
-    if (value.trim().length >= 2) {
-      this.debounceTimer = setTimeout(() => void this.onSubmit(), 300);
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
     }
+
+    const trimmed = value.trim();
+    if (trimmed.length === 0 || trimmed.length < 2) {
+      this.lastSearchMode = null;
+      this.clearVoiceAudio();
+      this.clearResults();
+      return;
+    }
+
+    this.lastSearchMode = "text";
+    this.clearVoiceAudio();
+    this.isLoading = true;
+    this.error = null;
+    this.results = [];
+    this.meta = null;
+
+    this.debounceTimer = setTimeout(() => this.onSubmit(), 250);
+  }
+
+  private clearResults(): void {
+    this.searchAbort?.abort();
+    this.searchAbort = null;
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
+    }
+    this.results = [];
+    this.meta = null;
+    this.error = null;
+    this.isLoading = false;
+  }
+
+  private get localeFields() {
+    return {
+      catalogLocale: this.catalogLocale,
+      queryLocale: this.queryLocale,
+      locale: this.locale,
+    };
   }
 
   onSubmit(): void {
     const q = this.query.trim();
     if (!q) return;
 
+    this.lastSearchMode = "text";
+    this.clearVoiceAudio();
+
+    this.searchAbort?.abort();
+    const controller = new AbortController();
+    this.searchAbort = controller;
+    const requestId = ++this.searchRequestId;
+
     this.isLoading = true;
     this.error = null;
+    this.results = [];
+    this.meta = null;
 
-    void this.api.search(this.apiBaseUrl, q, this.locale).then(
+    void this.api.search(this.apiBaseUrl, q, this.localeFields, controller.signal).then(
       (data) => {
+        if (requestId !== this.searchRequestId) return;
         this.results = data.products;
         this.meta = data.meta;
         this.isLoading = false;
       },
       (err: Error) => {
+        if (err.name === "AbortError") return;
+        if (requestId !== this.searchRequestId) return;
         this.error = err.message;
         this.results = [];
         this.meta = null;
@@ -228,10 +295,21 @@ export class CommerceAiSearchComponent {
   searchByImage(file: File): void {
     if (!file.type.startsWith("image/")) return;
 
+    this.lastSearchMode = "image";
+    this.clearVoiceAudio();
+
+    this.searchAbort?.abort();
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
+    }
+
     this.isLoading = true;
     this.error = null;
+    this.results = [];
+    this.meta = null;
 
-    void this.api.searchByImage(this.apiBaseUrl, file, this.locale).then(
+    void this.api.searchByImage(this.apiBaseUrl, file, this.localeFields).then(
       (data) => {
         this.results = data.products;
         this.meta = data.meta;
@@ -265,15 +343,18 @@ export class CommerceAiSearchComponent {
         stream.getTracks().forEach((t) => t.stop());
         const blob = new Blob(this.audioChunks, { type: "audio/webm" });
         this.isProcessing = true;
+        this.clearVoiceAudio();
 
         void this.api
-          .searchByVoice(this.apiBaseUrl, blob, this.locale, this.enableTts)
+          .searchByVoice(this.apiBaseUrl, blob, this.localeFields, this.enableTts)
           .then((data) => {
+            this.lastSearchMode = "voice";
             this.query = data.transcript;
             this.results = data.products;
             this.meta = data.meta;
             this.error = null;
             if (data.audioSummary) {
+              this.audioSummary = data.audioSummary;
               const audio = new Audio(`data:audio/mpeg;base64,${data.audioSummary}`);
               void audio.play();
             }
@@ -293,14 +374,14 @@ export class CommerceAiSearchComponent {
     }
   }
 
-  playTts(): void {
-    const text = this.meta?.queryInterpretation;
-    if (!text) return;
+  replayVoiceSummary(): void {
+    if (!this.audioSummary) return;
 
-    void this.api.synthesizeSpeech(this.apiBaseUrl, text).then((blob) => {
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      void audio.play();
-    });
+    const audio = new Audio(`data:audio/mpeg;base64,${this.audioSummary}`);
+    void audio.play();
+  }
+
+  private clearVoiceAudio(): void {
+    this.audioSummary = null;
   }
 }

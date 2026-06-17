@@ -1,9 +1,29 @@
 import { describe, expect, it } from "vitest";
 import {
   buildProjectionSearchQueryArgs,
+  extractProductSearchIds,
   extractSearchTerms,
   isProductSearchUnavailable,
 } from "./search-helpers.js";
+
+describe("extractProductSearchIds", () => {
+  it("reads id from Product Search API results", () => {
+    expect(
+      extractProductSearchIds([
+        { id: "product-1" },
+        { id: "product-2" },
+      ]),
+    ).toEqual(["product-1", "product-2"]);
+  });
+
+  it("falls back to deprecated productProjection.id", () => {
+    expect(
+      extractProductSearchIds([
+        { productProjection: { id: "legacy-projection-id" } },
+      ]),
+    ).toEqual(["legacy-projection-id"]);
+  });
+});
 
 describe("extractSearchTerms", () => {
   it("extracts a single fullText query", () => {
