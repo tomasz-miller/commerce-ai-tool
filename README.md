@@ -128,6 +128,23 @@ All third-party API keys stay on the server. The UI only calls your `/api/commer
 
 See [ROADMAP.md](./ROADMAP.md).
 
+## Publishing to npm
+
+Packages are versioned with [Changesets](https://github.com/changesets/changesets). To publish:
+
+1. Create an npm organization `commerce-ai-tool` (or update scope in `package.json`)
+2. Log in: `npm login`
+3. Add `NPM_TOKEN` to GitHub repository secrets for CI releases
+4. Run locally:
+
+```bash
+pnpm changeset          # describe changes (optional after initial release)
+pnpm version-packages   # bump versions from changesets
+pnpm release            # build + publish all packages
+```
+
+Current release workflow (`.github/workflows/release.yml`) publishes automatically on merge to `main` when changesets are present.
+
 ## License
 
 MIT

@@ -1,6 +1,6 @@
 {
   "name": "@commerce-ai-tool/core",
-  "version": "0.1.0-alpha.0",
+  "version": "0.1.0",
   "description": "Core business logic for Commerce AI Tool — commercetools search with AI interpretation",
   "license": "MIT",
   "type": "module",
@@ -19,7 +19,9 @@
       }
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "sideEffects": false,
   "scripts": {
     "build": "tsup",

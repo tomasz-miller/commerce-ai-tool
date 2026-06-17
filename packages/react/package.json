@@ -1,6 +1,6 @@
 {
   "name": "@commerce-ai-tool/react",
-  "version": "0.1.0-alpha.0",
+  "version": "0.1.0",
   "description": "React component for Commerce AI Tool — glass morphism product search widget",
   "license": "MIT",
   "type": "module",
@@ -20,8 +20,12 @@
     },
     "./styles.css": "./dist/styles.css"
   },
-  "files": ["dist"],
-  "sideEffects": ["**/*.css"],
+  "files": [
+    "dist"
+  ],
+  "sideEffects": [
+    "**/*.css"
+  ],
   "scripts": {
     "build": "tsup && cp src/styles/commerce-ai-search.css dist/styles.css",
     "dev": "tsup --watch",

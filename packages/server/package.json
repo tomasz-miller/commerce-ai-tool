@@ -1,6 +1,6 @@
 {
   "name": "@commerce-ai-tool/server",
-  "version": "0.1.0-alpha.0",
+  "version": "0.1.0",
   "description": "Server-side API handlers for Commerce AI Tool",
   "license": "MIT",
   "type": "module",
@@ -39,7 +39,9 @@
       }
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
@@ -59,8 +61,12 @@
     "next": ">=14.0.0"
   },
   "peerDependenciesMeta": {
-    "express": { "optional": true },
-    "next": { "optional": true }
+    "express": {
+      "optional": true
+    },
+    "next": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@types/busboy": "^1.5.4",
