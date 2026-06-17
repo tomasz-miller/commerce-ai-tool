@@ -1,4 +1,5 @@
 import type { CommerceAIServer } from "./server.js";
+import { logServerError, logServerWarning } from "./utils/log-error.js";
 import { parseMultipart, readJsonBody } from "./utils/multipart.js";
 
 export interface HandlerResponse {
@@ -41,6 +42,7 @@ export function createHandlers(server: CommerceAIServer) {
 
         return jsonResponse(result);
       } catch (error) {
+        logServerError("search", error);
         return errorResponse(error instanceof Error ? error.message : "Search failed");
       }
     },
@@ -67,8 +69,10 @@ export function createHandlers(server: CommerceAIServer) {
           try {
             const audio = await server.synthesizeSpeech(result.ttsText);
             audioSummary = audio.toString("base64");
-          } catch {
-            // TTS is optional; continue without audio summary
+          } catch (error) {
+            logServerWarning("searchVoice", "TTS summary skipped", {
+              reason: error instanceof Error ? error.message : "unknown",
+            });
           }
         }
 
@@ -80,6 +84,7 @@ export function createHandlers(server: CommerceAIServer) {
           audioSummary,
         });
       } catch (error) {
+        logServerError("searchVoice", error);
         return errorResponse(error instanceof Error ? error.message : "Voice search failed");
       }
     },
@@ -102,6 +107,7 @@ export function createHandlers(server: CommerceAIServer) {
 
         return jsonResponse(result);
       } catch (error) {
+        logServerError("searchImage", error);
         return errorResponse(error instanceof Error ? error.message : "Image search failed");
       }
     },
@@ -122,6 +128,7 @@ export function createHandlers(server: CommerceAIServer) {
           body: audio,
         };
       } catch (error) {
+        logServerError("tts", error);
         return errorResponse(error instanceof Error ? error.message : "TTS failed");
       }
     },

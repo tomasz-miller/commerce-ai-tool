@@ -6,6 +6,11 @@
       "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
     },
     "dev": {
+      "dependsOn": ["^build", "build"],
+      "cache": false,
+      "persistent": true
+    },
+    "demo-next#dev": {
       "dependsOn": ["^build"],
       "cache": false,
       "persistent": true

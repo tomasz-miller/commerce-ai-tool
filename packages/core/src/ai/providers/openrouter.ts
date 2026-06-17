@@ -1,6 +1,6 @@
 import { OpenRouter } from "@openrouter/sdk";
-import type { OpenRouterConfig } from "../types/index.js";
-import type { AIProvider } from "./types.js";
+import type { OpenRouterConfig } from "../../types/index.js";
+import type { AIProvider } from "../types.js";
 import {
   IMAGE_QUERY_SYSTEM_PROMPT,
   TEXT_QUERY_SYSTEM_PROMPT,
@@ -24,17 +24,15 @@ export class OpenRouterProvider implements AIProvider {
 
   async interpretTextQuery(text: string, locale: string) {
     const response = await this.client.chat.send({
-      chatGenerationParams: {
-        model: this.model,
-        messages: [
-          { role: "system", content: TEXT_QUERY_SYSTEM_PROMPT },
-          {
-            role: "user",
-            content: `Locale: ${locale}\nQuery: ${text}`,
-          },
-        ],
-        responseFormat: { type: "json_object" },
-      },
+      model: this.model,
+      messages: [
+        { role: "system", content: TEXT_QUERY_SYSTEM_PROMPT },
+        {
+          role: "user",
+          content: `Locale: ${locale}\nQuery: ${text}`,
+        },
+      ],
+      responseFormat: { type: "json_object" },
     });
 
     const content = this.extractContent(response);
@@ -47,20 +45,18 @@ export class OpenRouterProvider implements AIProvider {
       : `data:${mimeType};base64,${imageBase64}`;
 
     const response = await this.client.chat.send({
-      chatGenerationParams: {
-        model: this.visionModel,
-        messages: [
-          { role: "system", content: IMAGE_QUERY_SYSTEM_PROMPT },
-          {
-            role: "user",
-            content: [
-              { type: "text", text: `Locale: ${locale}. Analyze this product image.` },
-              { type: "image_url", imageUrl: { url: dataUrl } },
-            ],
-          },
-        ],
-        responseFormat: { type: "json_object" },
-      },
+      model: this.visionModel,
+      messages: [
+        { role: "system", content: IMAGE_QUERY_SYSTEM_PROMPT },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: `Locale: ${locale}. Analyze this product image.` },
+            { type: "image_url", imageUrl: { url: dataUrl } },
+          ],
+        },
+      ],
+      responseFormat: { type: "json_object" },
     });
 
     const content = this.extractContent(response);
@@ -69,16 +65,14 @@ export class OpenRouterProvider implements AIProvider {
 
   async enhanceVoiceTranscript(transcript: string, locale: string) {
     const response = await this.client.chat.send({
-      chatGenerationParams: {
-        model: this.model,
-        messages: [
-          { role: "system", content: VOICE_ENHANCE_SYSTEM_PROMPT },
-          {
-            role: "user",
-            content: `Locale: ${locale}\nTranscript: ${transcript}`,
-          },
-        ],
-      },
+      model: this.model,
+      messages: [
+        { role: "system", content: VOICE_ENHANCE_SYSTEM_PROMPT },
+        {
+          role: "user",
+          content: `Locale: ${locale}\nTranscript: ${transcript}`,
+        },
+      ],
     });
 
     return this.extractContent(response).trim();

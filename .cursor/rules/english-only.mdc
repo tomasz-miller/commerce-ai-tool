@@ -1,0 +1,22 @@
+---
+description: All project files must be written in English — code, docs, comments, rules
+alwaysApply: true
+---
+
+# English only
+
+**All files in this repository must be written in English.**
+
+This applies to:
+
+- Source code, tests, and configuration
+- Comments and JSDoc/TSDoc
+- Documentation (`README.md`, `AGENTS.md`, `CONTRIBUTING.md`, changelogs)
+- Cursor rules (`.cursor/rules/*.mdc`)
+- Commit messages and PR descriptions (when the agent writes them)
+- User-facing error messages and log prefixes in application code
+- Variable names, function names, and API surface strings
+
+Do **not** create or edit project files in Polish or any other language, even if the user communicates in another language.
+
+Exception: replying to the user in chat may use their preferred language; repository artifacts remain English.

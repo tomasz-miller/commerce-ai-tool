@@ -1,0 +1,30 @@
+---
+description: Commerce AI Tool project context — monorepo, packages, architecture
+alwaysApply: true
+---
+
+# Commerce AI Tool
+
+AI-powered product search plugin for commercetools (text, voice, image). pnpm + Turborepo monorepo.
+
+## Packages
+
+- `packages/core` — business logic, AI (OpenRouter/Bedrock), commercetools client
+- `packages/server` — Next.js/Express handlers, ElevenLabs STT/TTS
+- `packages/react` — React search widget (glass UI)
+- `packages/angular` — Angular component
+- `apps/demo-next` — Next.js 15 demo app
+
+Dependencies: `server` / `react` / `angular` → `core`. API secrets stay on the server only.
+
+## Stack
+
+TypeScript strict, tsup, Vitest, ESLint 9, Turbo 2, pnpm 9.15.9, Node ≥ 24.
+
+## Architecture
+
+```
+Browser → /api/commerce-ai/* (server) → core → AI + commercetools
+```
+
+Never expose API keys in client-side code.

@@ -1,7 +1,8 @@
 import type { CommerceAIConfig } from "@commerce-ai-tool/core";
 import { createHandlers } from "./handlers.js";
 import { createCommerceAIServer } from "./server.js";
-import { parseMultipartRequest } from "./utils/multipart.js";
+import { logServerError, logServerWarning } from "./utils/log-error.js";
+import { parseMultipartRequest, type ParsedMultipart } from "./utils/multipart.js";
 
 export interface NextHandlers {
   health: () => Promise<Response>;
@@ -37,16 +38,19 @@ export function createNextHandlers(config: CommerceAIConfig): NextHandlers {
 
         return Response.json(result);
       } catch (error) {
-        return Response.json(
-          { error: error instanceof Error ? error.message : "Search failed" },
-          { status: 500 },
-        );
+        logServerError("search", error);
+        return errorJson(error, "Search failed");
       }
     },
 
     searchVoice: async (req: Request) => {
+      let fields: Record<string, string> = {};
+      let file: ParsedMultipart["file"];
+
       try {
-        const { fields, file } = await parseMultipartRequest(req);
+        const parsed = await parseMultipartRequest(req);
+        fields = parsed.fields;
+        file = parsed.file;
 
         if (!file) {
           return Response.json({ error: "audio file is required" }, { status: 400 });
@@ -56,18 +60,21 @@ export function createNextHandlers(config: CommerceAIConfig): NextHandlers {
           new Uint8Array(file.buffer),
           file.mimeType,
           {
-          locale: fields.locale,
-          limit: fields.limit ? Number(fields.limit) : undefined,
-          enableTts: fields.enableTts !== "false",
-        });
+            locale: fields.locale,
+            limit: fields.limit ? Number(fields.limit) : undefined,
+            enableTts: fields.enableTts !== "false",
+          },
+        );
 
         let audioSummary: string | undefined;
         if (result.ttsText) {
           try {
             const audio = await server.synthesizeSpeech(result.ttsText);
             audioSummary = audio.toString("base64");
-          } catch {
-            // optional
+          } catch (error) {
+            logServerWarning("searchVoice", "TTS summary skipped", {
+              reason: error instanceof Error ? error.message : "unknown",
+            });
           }
         }
 
@@ -79,10 +86,12 @@ export function createNextHandlers(config: CommerceAIConfig): NextHandlers {
           audioSummary,
         });
       } catch (error) {
-        return Response.json(
-          { error: error instanceof Error ? error.message : "Voice search failed" },
-          { status: 500 },
-        );
+        logServerError("searchVoice", error, {
+          locale: fields.locale,
+          mimeType: file?.mimeType,
+          size: file?.buffer.length,
+        });
+        return errorJson(error, "Voice search failed");
       }
     },
 
@@ -98,16 +107,15 @@ export function createNextHandlers(config: CommerceAIConfig): NextHandlers {
           new Uint8Array(file.buffer),
           file.mimeType,
           {
-          locale: fields.locale,
-          limit: fields.limit ? Number(fields.limit) : undefined,
-        });
+            locale: fields.locale,
+            limit: fields.limit ? Number(fields.limit) : undefined,
+          },
+        );
 
         return Response.json(result);
       } catch (error) {
-        return Response.json(
-          { error: error instanceof Error ? error.message : "Image search failed" },
-          { status: 500 },
-        );
+        logServerError("searchImage", error);
+        return errorJson(error, "Image search failed");
       }
     },
 
@@ -125,13 +133,18 @@ export function createNextHandlers(config: CommerceAIConfig): NextHandlers {
           headers: { "Content-Type": "audio/mpeg" },
         });
       } catch (error) {
-        return Response.json(
-          { error: error instanceof Error ? error.message : "TTS failed" },
-          { status: 500 },
-        );
+        logServerError("tts", error);
+        return errorJson(error, "TTS failed");
       }
     },
   };
+}
+
+function errorJson(error: unknown, fallback: string): Response {
+  return Response.json(
+    { error: error instanceof Error ? error.message : fallback },
+    { status: 500 },
+  );
 }
 
 function toWebResponse(handlerResponse: {

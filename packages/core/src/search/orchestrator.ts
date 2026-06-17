@@ -44,7 +44,7 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
     offset = 0,
   ): Promise<SearchResult> {
     const body = buildProductSearchBody(interpreted, searchLocale, searchLimit, offset);
-    const { productIds, total } = await ct.searchProducts(body);
+    const { productIds, total } = await ct.searchProducts(body, { currency });
     const products = await ct.getProductProjections(productIds, searchLocale, currency);
 
     return {

@@ -1,0 +1,28 @@
+---
+description: Mandatory tests and quality gates before completing a feature
+alwaysApply: true
+---
+
+# Quality gates
+
+For every new feature, the agent **must** deliver:
+
+## Tests
+
+- **Unit tests — always** for new logic (Vitest, `*.test.ts` under `packages/`)
+- Reference: `packages/core/src/prompts/index.test.ts`
+- ESM imports with `.js`: `from "./index.js"`
+- **E2E — when the flow requires it**: full UI → API → response path (e.g. search, voice). No E2E framework yet — add one on the first such scenario
+
+## Verification (all must pass)
+
+```bash
+pnpm lint && pnpm typecheck && pnpm test && pnpm build
+```
+
+- Zero ESLint errors (`eslint.config.mjs`, unused vars → prefix `_`)
+- Zero TypeScript errors
+- All tests green
+- Green monorepo build (including `demo-next`)
+
+Do not finish work with a failing lint, typecheck, test, or build. CI runs the same steps in `.github/workflows/ci.yml`.

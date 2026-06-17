@@ -3,12 +3,20 @@ import {
   type Client,
   type HttpMiddlewareOptions,
 } from "@commercetools/sdk-client-v2";
-import { createApiBuilderFromCtpClient } from "@commercetools/platform-sdk";
+import { createApiBuilderFromCtpClient, type ProductSearchRequest } from "@commercetools/platform-sdk";
 import type { CommercetoolsConfig, ProductCard } from "../types/index.js";
 import type { ProductSearchQueryBody } from "../types/index.js";
+import {
+  buildProjectionSearchQueryArgs,
+  isProductSearchUnavailable,
+  productSearchUnavailableMessage,
+} from "./search-helpers.js";
 
 export interface CommercetoolsClient {
-  searchProducts(body: ProductSearchQueryBody): Promise<{
+  searchProducts(
+    body: ProductSearchQueryBody,
+    options?: { currency?: string },
+  ): Promise<{
     productIds: string[];
     total: number;
   }>;
@@ -53,22 +61,21 @@ export function createCommercetoolsClient(config: CommercetoolsConfig): Commerce
   });
 
   return {
-    async searchProducts(body) {
-      const response = await apiRoot
-        .products()
-        .search()
-        .post({ body: body as never })
-        .execute();
+    async searchProducts(body, options) {
+      try {
+        return await searchWithProductSearchApi(apiRoot, body);
+      } catch (error) {
+        if (!isProductSearchUnavailable(error)) {
+          throw error;
+        }
 
-      const results = response.body.results ?? [];
-      const productIds = results
-        .map((result) => result.productProjection?.id)
-        .filter((id): id is string => Boolean(id));
+        if (process.env.NODE_ENV !== "production") {
+          console.warn(`[commerce-ai-tool/core] ${productSearchUnavailableMessage(config.projectKey)}`);
+          console.warn("[commerce-ai-tool/core] Falling back to productProjections().search()");
+        }
 
-      return {
-        productIds,
-        total: response.body.total ?? productIds.length,
-      };
+        return searchWithProductProjectionSearch(apiRoot, body, options?.currency);
+      }
     },
 
     async getProductProjections(productIds, locale, currency = "EUR") {
@@ -94,6 +101,49 @@ export function createCommercetoolsClient(config: CommercetoolsConfig): Commerce
         .map((projection) => mapProjectionToCard(projection, locale, currency))
         .sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
     },
+  };
+}
+
+async function searchWithProductSearchApi(
+  apiRoot: ReturnType<ReturnType<typeof createApiBuilderFromCtpClient>["withProjectKey"]>,
+  body: ProductSearchQueryBody,
+) {
+  const response = await apiRoot
+    .products()
+    .search()
+    .post({ body: body as ProductSearchRequest })
+    .execute();
+
+  const results = response.body.results ?? [];
+  const productIds = results
+    .map((result) => result.productProjection?.id)
+    .filter((id): id is string => Boolean(id));
+
+  return {
+    productIds,
+    total: response.body.total ?? productIds.length,
+  };
+}
+
+async function searchWithProductProjectionSearch(
+  apiRoot: ReturnType<ReturnType<typeof createApiBuilderFromCtpClient>["withProjectKey"]>,
+  body: ProductSearchQueryBody,
+  currency?: string,
+) {
+  const response = await apiRoot
+    .productProjections()
+    .search()
+    .get({
+      queryArgs: buildProjectionSearchQueryArgs(body, currency),
+    })
+    .execute();
+
+  const results = response.body.results ?? [];
+  const productIds = results.map((projection) => projection.id).filter(Boolean);
+
+  return {
+    productIds,
+    total: response.body.total ?? productIds.length,
   };
 }
 

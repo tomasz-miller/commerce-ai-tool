@@ -1,0 +1,39 @@
+---
+description: Monorepo conventions — pnpm, Turbo, tsup, package structure
+globs: packages/**/*,apps/**/*
+alwaysApply: false
+---
+
+# Monorepo conventions
+
+## Language
+
+All files under `packages/` and `apps/` must be in **English** (see `english-only` rule).
+
+## Dependencies
+
+- Add deps in the specific package `package.json`, not root (except shared dev tools)
+- Workspace: `"workspace:*"` for internal packages
+- Peer deps: React, Angular, Next, Express — in UI/server packages
+
+## Build (tsup)
+
+- Entry in `tsup.config.ts`, output in `dist/` (gitignored)
+- `clean: !process.argv.includes("--watch")` — watch must not wipe dist (avoids monorepo races)
+- `dts: true` — types required by dependent packages
+
+## Turbo
+
+- `build` depends on `^build` (dependencies first)
+- Library `dev`: `dependsOn: ["^build", "build"]`
+- `lint` / `typecheck` / `test` depend on `^build`
+
+## New feature order
+
+1. `core` (+ tests) → 2. `server` (+ tests) → 3. UI (`react`/`angular`) → 4. `demo-next`
+2. Finish with: `pnpm lint && pnpm typecheck && pnpm test && pnpm build`
+
+## Style
+
+- Minimal diff, English in code and public APIs
+- Public API changes → update README / CHANGELOG
