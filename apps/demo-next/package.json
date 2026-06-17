@@ -1,0 +1,26 @@
+{
+  "name": "demo-next",
+  "version": "0.1.0-alpha.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start",
+    "lint": "echo 'No lint configured'",
+    "typecheck": "tsc --noEmit",
+    "test": "echo 'No tests'"
+  },
+  "dependencies": {
+    "@commerce-ai-tool/react": "workspace:*",
+    "@commerce-ai-tool/server": "workspace:*",
+    "next": "^15.2.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "@types/react": "^19.0.12",
+    "@types/react-dom": "^19.0.4",
+    "typescript": "^5.8.2"
+  }
+}

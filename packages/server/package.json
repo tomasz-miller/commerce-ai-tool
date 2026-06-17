@@ -1,0 +1,79 @@
+{
+  "name": "@commerce-ai-tool/server",
+  "version": "0.1.0-alpha.0",
+  "description": "Server-side API handlers for Commerce AI Tool",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./next": {
+      "import": {
+        "types": "./dist/next.d.ts",
+        "default": "./dist/next.js"
+      },
+      "require": {
+        "types": "./dist/next.d.cts",
+        "default": "./dist/next.cjs"
+      }
+    },
+    "./express": {
+      "import": {
+        "types": "./dist/express.d.ts",
+        "default": "./dist/express.js"
+      },
+      "require": {
+        "types": "./dist/express.d.cts",
+        "default": "./dist/express.cjs"
+      }
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vitest run --passWithNoTests",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@commerce-ai-tool/core": "workspace:*",
+    "@elevenlabs/elevenlabs-js": "^2.5.0",
+    "busboy": "^1.6.0",
+    "cors": "^2.8.5"
+  },
+  "peerDependencies": {
+    "express": "^5.0.0",
+    "next": ">=14.0.0"
+  },
+  "peerDependenciesMeta": {
+    "express": { "optional": true },
+    "next": { "optional": true }
+  },
+  "devDependencies": {
+    "@types/busboy": "^1.5.4",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.13.10",
+    "express": "^5.0.1",
+    "next": "^15.2.3",
+    "tsup": "^8.4.0",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.9"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
