@@ -1,0 +1,71 @@
+- description: English query translated to Norwegian catalog (red shoes)
+  vars:
+    query: red shoes
+    queryLocale: en
+    catalogLocale: no
+  assert:
+    - type: javascript
+      value: JSON.parse(output).searchTerms.length > 0
+    - type: javascript
+      value: |
+        const terms = JSON.parse(output).searchTerms.join(' ').toLowerCase();
+        return terms.includes('rød') || terms.includes('røde') || terms.includes('sko');
+
+- description: Polish query translated to Norwegian catalog (wallpaper knife)
+  vars:
+    query: nóż do tapet
+    queryLocale: pl
+    catalogLocale: no
+  assert:
+    - type: javascript
+      value: JSON.parse(output).searchTerms.length > 0
+    - type: javascript
+      value: |
+        const terms = JSON.parse(output).searchTerms.join(' ').toLowerCase();
+        return terms.includes('tapetkniv');
+
+- description: English query mapped to Norwegian catalog term (wallpaper knife)
+  vars:
+    query: wallpaper knife
+    queryLocale: en
+    catalogLocale: no
+  assert:
+    - type: javascript
+      value: JSON.parse(output).searchTerms.length > 0
+    - type: javascript
+      value: |
+        const terms = JSON.parse(output).searchTerms.join(' ').toLowerCase();
+        return terms.includes('tapetkniv');
+
+- description: Price ascending sort intent (cheapest running shoes)
+  vars:
+    query: cheapest running shoes
+    queryLocale: en
+    catalogLocale: no
+  assert:
+    - type: javascript
+      value: JSON.parse(output).searchTerms.length > 0
+    - type: javascript
+      value: JSON.parse(output).sort === 'price_asc'
+
+- description: Price descending sort intent (most expensive laptop)
+  vars:
+    query: most expensive laptop
+    queryLocale: en
+    catalogLocale: no
+  assert:
+    - type: javascript
+      value: JSON.parse(output).searchTerms.length > 0
+    - type: javascript
+      value: JSON.parse(output).sort === 'price_desc'
+
+- description: Non-commerce query still returns valid structured output
+  vars:
+    query: hello
+    queryLocale: en
+    catalogLocale: no
+  assert:
+    - type: javascript
+      value: |
+        const parsed = JSON.parse(output);
+        return typeof parsed.interpretation === 'string' && parsed.interpretation.length > 0;

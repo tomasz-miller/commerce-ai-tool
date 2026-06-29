@@ -60,9 +60,22 @@ pnpm dev                  # dev (demo-next :3000 + library watch)
 pnpm lint                 # ESLint
 pnpm typecheck            # tsc --noEmit
 pnpm test                 # Vitest
+pnpm eval:promptfoo       # LLM prompt evals (local, requires OPENROUTER_API_KEY)
+pnpm eval:promptfoo:view  # Promptfoo results web UI
 ```
 
-Before finishing a feature, run **all of the above** (same order as CI).
+Before finishing a feature, run **all of the above** (same order as CI), except prompt evals which are optional and local-only.
+
+## Prompt evaluations (Promptfoo)
+
+Local LLM regression tests live in [`evals/`](evals/). They call the same `createAIProvider` → `interpretTextQuery` path as production.
+
+- **Setup:** `cp evals/.env.example evals/.env` and set `OPENROUTER_API_KEY`
+- **Run:** `pnpm eval:promptfoo` (builds core first)
+- **Docs:** [`evals/README.md`](evals/README.md)
+- **Not in CI** — requires API key and incurs OpenRouter cost
+
+Vitest (`pnpm test`) remains mandatory in CI for deterministic parser/builder logic.
 
 ## Quality gates (mandatory)
 
@@ -128,4 +141,5 @@ Release (`.github/workflows/release.yml`) is disabled (`workflow_dispatch` only)
 | `eslint.config.mjs` | Root ESLint flat config |
 | `vitest.config.ts` | `packages/**/*.test.ts` pattern |
 | `apps/demo-next/.env.example` | Required environment variables |
+| `evals/` | Promptfoo LLM prompt evaluations (local only) |
 | `.cursor/rules/` | Cursor agent rules (English only) |

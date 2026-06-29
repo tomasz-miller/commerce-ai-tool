@@ -9,6 +9,7 @@
 - [x] Glass morphism UI with light / dark / auto theme
 - [x] React, Next.js, and Angular packages
 - [x] Server package (Express + Next.js handlers)
+- [x] Promptfoo LLM evals for text search interpretation ([`evals/`](evals/))
 
 ## v1.1
 
@@ -16,6 +17,25 @@
 - [ ] Faceted search filters in UI
 - [ ] Internationalization (i18n) for widget labels
 - [ ] Short-lived response cache on server
+
+## Prompt evaluations (Promptfoo)
+
+Local [Promptfoo](https://www.promptfoo.dev/) regression tests for AI prompts. Complements Vitest (deterministic parsers) and future Langfuse (production traces + datasets).
+
+### Done (phase 1)
+
+- [x] `evals/` harness with custom provider → `createAIProvider` → `interpretTextQuery`
+- [x] Text search test cases: locale translation, sort intent, non-commerce edge cases
+- [x] Scripts: `pnpm eval:promptfoo`, `pnpm eval:promptfoo:view`
+- [x] English docs: [`evals/README.md`](evals/README.md)
+
+### Later phases
+
+- [ ] Voice enhance + TTS summary evals (`similar` / `llm-rubric` assertions)
+- [ ] Red teaming (`promptfoo redteam`: prompt injection, jailbreak)
+- [ ] Image search evals (fixture images + `interpretImageQuery` provider)
+- [ ] Compare OpenRouter vs Bedrock models side-by-side in eval matrix
+- [ ] Optional CI workflow (manual dispatch; API cost + secrets)
 
 ## v1.2 — Langfuse (AI observability)
 
@@ -29,7 +49,7 @@ Integrate [Langfuse](https://langfuse.com) for every AI step in the search pipel
 - **Prompt management** — version and deploy prompts (`TEXT_QUERY`, image, voice enhance, TTS summary) without code releases; roll back bad prompt changes quickly
 - **Locale-aware debugging** — correlate `queryLocale` / `catalogLocale` with AI inputs and outputs (e.g. wrong-language `searchTerms`, empty CT results despite high `total`)
 - **Production debugging** — replace ad-hoc `CAT_DEBUG` logs with searchable traces, inputs/outputs, and error context in staging and production
-- **Quality & evaluations** — score interpretations and voice summaries; build datasets from real queries for regression tests when changing prompts or models
+- **Quality & evaluations** — score interpretations and voice summaries; build datasets from real queries for regression tests when changing prompts or models (offline regression covered today by [Promptfoo](evals/); Langfuse adds production-sourced datasets and scoring)
 - **User/session context** — attach `sessionId`, widget props, and search mode (text / voice / image) to traces for support and analytics
 - **Governance** — audit trail of what was sent to external LLMs (retention policies, PII considerations for voice transcripts)
 
@@ -43,6 +63,7 @@ Integrate [Langfuse](https://langfuse.com) for every AI step in the search pipel
 - [ ] Document setup in `.env.example` and README; note relationship to existing `CAT_DEBUG` dev tracing
 - [ ] Optional: Langfuse prompt labels synced with `packages/core/src/prompts` for managed prompts
 
+## v1.3 — Cart
 
 - [ ] Add to cart via commercetools Cart API
 - [ ] Anonymous and authenticated cart sessions
