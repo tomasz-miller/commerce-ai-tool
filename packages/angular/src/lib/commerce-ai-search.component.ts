@@ -141,8 +141,21 @@ type SearchMode = "text" | "image" | "voice" | null;
             </button>
           }
 
-          @if (!isLoading && !error && results.length === 0 && query) {
-            <div class="cat-status">No products found</div>
+          @if (!isLoading && !error && results.length === 0 && hasSearched && query.trim()) {
+            <div class="cat-status cat-status--empty" role="status" aria-live="polite">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.3-4.3" />
+                <path d="m13 9-4 4" />
+                <path d="m9 9 4 4" />
+              </svg>
+              <div class="cat-status__content">
+                <div class="cat-status__title">No products found</div>
+                @if (meta?.queryInterpretation) {
+                  <div class="cat-status__hint">Searched for: {{ meta?.queryInterpretation }}</div>
+                }
+              </div>
+            </div>
           }
         </div>
       }
@@ -159,7 +172,7 @@ export class CommerceAiSearchComponent {
   @Input() queryLocale?: string;
   /** @deprecated Use queryLocale */
   @Input() locale?: string;
-  @Input() placeholder = "Search products...";
+  @Input() placeholder = "What are you looking for?";
   @Input() enableVoice = true;
   @Input() enableImageSearch = true;
   @Input() enableTts = true;
@@ -170,6 +183,7 @@ export class CommerceAiSearchComponent {
   results: ProductCard[] = [];
   meta: { queryInterpretation?: string } | null = null;
   isLoading = false;
+  hasSearched = false;
   error: string | null = null;
   isDragging = false;
   isRecording = false;
@@ -184,9 +198,13 @@ export class CommerceAiSearchComponent {
   private searchRequestId = 0;
 
   get showResults(): boolean {
+    const hasQuery = this.query.trim().length > 0;
+    const showEmptyResults =
+      !this.isLoading && !this.error && this.hasSearched && this.results.length === 0 && hasQuery;
+
     return (
-      this.query.trim().length > 0 &&
-      (this.results.length > 0 || this.isLoading || !!this.error)
+      hasQuery &&
+      (this.results.length > 0 || this.isLoading || !!this.error || showEmptyResults)
     );
   }
 
@@ -229,6 +247,7 @@ export class CommerceAiSearchComponent {
     this.meta = null;
     this.error = null;
     this.isLoading = false;
+    this.hasSearched = false;
   }
 
   private get localeFields() {
@@ -262,6 +281,7 @@ export class CommerceAiSearchComponent {
         this.results = data.products;
         this.meta = data.meta;
         this.isLoading = false;
+        this.hasSearched = true;
       },
       (err: Error) => {
         if (err.name === "AbortError") return;
@@ -270,6 +290,7 @@ export class CommerceAiSearchComponent {
         this.results = [];
         this.meta = null;
         this.isLoading = false;
+        this.hasSearched = true;
       },
     );
   }
@@ -315,10 +336,12 @@ export class CommerceAiSearchComponent {
         this.meta = data.meta;
         if (data.interpretation) this.query = data.interpretation;
         this.isLoading = false;
+        this.hasSearched = true;
       },
       (err: Error) => {
         this.error = err.message;
         this.isLoading = false;
+        this.hasSearched = true;
       },
     );
   }
@@ -353,6 +376,7 @@ export class CommerceAiSearchComponent {
             this.results = data.products;
             this.meta = data.meta;
             this.error = null;
+            this.hasSearched = true;
             if (data.audioSummary) {
               this.audioSummary = data.audioSummary;
               const audio = new Audio(`data:audio/mpeg;base64,${data.audioSummary}`);

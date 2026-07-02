@@ -1,8 +1,10 @@
 import { useCallback, useRef, useState } from "react";
-import { ImageIcon, Mic, Package, Search, Volume2 } from "lucide-react";
+import { ImageIcon, Mic, Package, Search, SearchX, Square, Volume2 } from "lucide-react";
 import type { ProductCard, ThemeMode } from "@commerce-ai-tool/core";
 import { useCommerceAISearch } from "../hooks/useCommerceAISearch.js";
+import { useRecordingDuration } from "../hooks/useRecordingDuration.js";
 import { useVoiceSearch } from "../hooks/useVoiceSearch.js";
+import { VoiceStatusBanner } from "./VoiceStatusBanner.js";
 import "../styles/commerce-ai-search.css";
 
 export type SearchMode = "text" | "image" | "voice" | null;
@@ -30,7 +32,7 @@ export function CommerceAISearch({
   catalogLocale,
   queryLocale,
   locale,
-  placeholder = "Search products...",
+  placeholder = "What are you looking for?",
   enableVoice = true,
   enableImageSearch = true,
   enableTts = true,
@@ -46,7 +48,10 @@ export function CommerceAISearch({
     setQuery,
     results,
     isLoading,
+    hasSearched,
+    setHasSearched,
     error,
+    meta,
     search,
     searchByImage,
     setResults,
@@ -67,13 +72,21 @@ export function CommerceAISearch({
       setMeta(resultMeta);
       setError(null);
       setIsLoading(false);
+      setHasSearched(true);
     },
     onTranscript: (transcript) => setQuery(transcript, { search: false }),
   });
 
+  const recordingDuration = useRecordingDuration(voice.isRecording);
+  const showVoiceBanner =
+    voice.isRecording || voice.isProcessing || voice.isLoadingTts || Boolean(voice.error);
+
   const displayResults = results;
+  const showEmptyResults =
+    !isLoading && !error && hasSearched && displayResults.length === 0 && query.trim().length > 0;
   const showResults =
-    query.trim().length > 0 && (displayResults.length > 0 || isLoading || !!error);
+    query.trim().length > 0 &&
+    (isLoading || !!error || displayResults.length > 0 || showEmptyResults);
 
   const handleSubmit = useCallback(
     (event: React.FormEvent) => {
@@ -142,7 +155,10 @@ export function CommerceAISearch({
         </div>
       )}
 
-      <form className="cat-search-bar" onSubmit={handleSubmit}>
+      <form
+        className={`cat-search-bar ${voice.isRecording ? "cat-search-bar--voice-active" : ""}`}
+        onSubmit={handleSubmit}
+      >
         <Search size={18} aria-hidden="true" color="var(--cat-text-muted)" />
         <input
           type="search"
@@ -163,7 +179,7 @@ export function CommerceAISearch({
             aria-label={voice.isRecording ? "Stop recording" : "Voice search"}
             aria-pressed={voice.isRecording}
           >
-            <Mic size={16} />
+            {voice.isRecording ? <Square size={16} /> : <Mic size={16} />}
           </button>
         )}
 
@@ -203,11 +219,20 @@ export function CommerceAISearch({
         )}
       </form>
 
+      {showVoiceBanner && (
+        <VoiceStatusBanner
+          isRecording={voice.isRecording}
+          isProcessing={voice.isProcessing}
+          isLoadingTts={voice.isLoadingTts}
+          error={voice.error}
+          durationSeconds={recordingDuration}
+        />
+      )}
+
       {showResults && (
         <div className="cat-results" role="listbox" aria-label="Search results">
           {isLoading && <div className="cat-status">Searching...</div>}
           {error && <div className="cat-status cat-status--error">{error}</div>}
-          {voice.error && <div className="cat-status cat-status--error">{voice.error}</div>}
 
           {!isLoading &&
             displayResults.map((product) => (
@@ -239,8 +264,18 @@ export function CommerceAISearch({
               </button>
             ))}
 
-          {!isLoading && !error && displayResults.length === 0 && query && (
-            <div className="cat-status">No products found</div>
+          {!isLoading && !error && displayResults.length === 0 && showEmptyResults && (
+            <div className="cat-status cat-status--empty" role="status" aria-live="polite">
+              <SearchX size={18} aria-hidden="true" />
+              <div className="cat-status__content">
+                <div className="cat-status__title">No products found</div>
+                {meta?.queryInterpretation && (
+                  <div className="cat-status__hint">
+                    Searched for: {meta.queryInterpretation}
+                  </div>
+                )}
+              </div>
+            </div>
           )}
         </div>
       )}

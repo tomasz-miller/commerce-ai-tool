@@ -94,6 +94,16 @@ describe("parseVoiceAudioInterpretation", () => {
       ),
     ).toThrow("missing enhancedQuery");
   });
+
+  it("parses fenced and truncated voice JSON payloads", () => {
+    const result = parseVoiceAudioInterpretation(
+      '```json\n{"transcript":"czerwone buty","enhancedQuery":"czerwone buty","searchTerms":["sko"],"interpretation":"Looking for',
+    );
+
+    expect(result.transcript).toBe("czerwone buty");
+    expect(result.enhancedQuery).toBe("czerwone buty");
+    expect(result.searchTerms).toEqual(["sko"]);
+  });
 });
 
 describe("buildProductSearchBody", () => {

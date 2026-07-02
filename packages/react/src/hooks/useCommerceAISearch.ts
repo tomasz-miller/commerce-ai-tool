@@ -49,6 +49,8 @@ export interface UseCommerceAISearchReturn {
   setMeta: Dispatch<SetStateAction<SearchResult["meta"] | null>>;
   isLoading: boolean;
   setIsLoading: Dispatch<SetStateAction<boolean>>;
+  hasSearched: boolean;
+  setHasSearched: Dispatch<SetStateAction<boolean>>;
   error: string | null;
   setError: Dispatch<SetStateAction<string | null>>;
   search: (query?: string) => Promise<void>;
@@ -68,6 +70,7 @@ export function useCommerceAISearch(
   const [results, setResults] = useState<ProductCard[]>([]);
   const [meta, setMeta] = useState<SearchResult["meta"] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -88,6 +91,7 @@ export function useCommerceAISearch(
     setMeta(null);
     setError(null);
     setIsLoading(false);
+    setHasSearched(false);
   }, []);
 
   const search = useCallback(
@@ -138,6 +142,7 @@ export function useCommerceAISearch(
       } finally {
         if (requestId === requestIdRef.current) {
           setIsLoading(false);
+          setHasSearched(true);
         }
       }
     },
@@ -184,6 +189,7 @@ export function useCommerceAISearch(
         setMeta(null);
       } finally {
         setIsLoading(false);
+        setHasSearched(true);
       }
     },
     [baseUrl, catalogLocale, locale, queryLocale],
@@ -235,6 +241,8 @@ export function useCommerceAISearch(
     setMeta,
     isLoading,
     setIsLoading,
+    hasSearched,
+    setHasSearched,
     error,
     setError,
     search,

@@ -205,6 +205,37 @@
   color: #ef4444;
 }
 
+.cat-status--empty {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  text-align: left;
+  color: var(--cat-text-muted);
+}
+
+.cat-status--empty svg {
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+  color: var(--cat-text-muted);
+}
+
+.cat-status__content {
+  min-width: 0;
+}
+
+.cat-status__title {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--cat-text);
+}
+
+.cat-status__hint {
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--cat-text-muted);
+  line-height: 1.4;
+}
+
 .cat-hidden-input {
   display: none;
 }

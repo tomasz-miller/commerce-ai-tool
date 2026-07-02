@@ -31,6 +31,7 @@
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
+    "test": "vitest run",
     "clean": "rm -rf dist"
   },
   "dependencies": {
@@ -42,12 +43,15 @@
     "react-dom": ">=18"
   },
   "devDependencies": {
+    "@testing-library/react": "^16.2.0",
     "@types/react": "^19.0.12",
     "@types/react-dom": "^19.0.4",
+    "jsdom": "^26.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tsup": "^8.4.0",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.9"
   },
   "publishConfig": {
     "access": "public"

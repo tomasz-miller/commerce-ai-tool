@@ -103,6 +103,7 @@ export class OpenRouterProvider implements AIProvider {
         },
       ],
       response_format: { type: "json_object" },
+      max_tokens: 1024,
     });
 
     const content = this.extractContent(response);

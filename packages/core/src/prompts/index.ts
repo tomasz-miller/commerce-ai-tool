@@ -4,6 +4,7 @@ import type {
   SearchLocaleContext,
   VoiceAudioInterpretation,
 } from "../types/index.js";
+import { parseModelJson } from "../utils/model-json.js";
 
 export const TEXT_QUERY_SYSTEM_PROMPT = `You are a product search assistant for a commercetools storefront.
 Given a natural language query, extract search terms and optional filters.
@@ -63,6 +64,8 @@ Respond with valid JSON only, matching this schema:
   "sort": "relevance" | "price_asc" | "price_desc",
   "interpretation": "brief explanation of how you interpreted the query"
 }
+Escape double quotes inside string values as \\".
+Do not wrap the JSON in markdown fences.
 Use searchTerms for product names, brands, categories, or attributes.
 Keep searchTerms concise and commerce-focused.
 Examples when catalog language is Norwegian (no):
@@ -142,7 +145,7 @@ export function buildProductSearchBody(
 }
 
 export function parseInterpretedQuery(json: string): InterpretedSearchQuery {
-  const parsed = JSON.parse(json) as Partial<InterpretedSearchQuery>;
+  const parsed = parseModelJson<Partial<InterpretedSearchQuery>>(json);
 
   if (!parsed.searchTerms || !Array.isArray(parsed.searchTerms)) {
     throw new Error("Invalid AI response: missing searchTerms array");
@@ -157,7 +160,7 @@ export function parseInterpretedQuery(json: string): InterpretedSearchQuery {
 }
 
 export function parseVoiceAudioInterpretation(json: string): VoiceAudioInterpretation {
-  const parsed = JSON.parse(json) as Partial<VoiceAudioInterpretation>;
+  const parsed = parseModelJson<Partial<VoiceAudioInterpretation>>(json);
 
   if (!parsed.transcript || typeof parsed.transcript !== "string") {
     throw new Error("Invalid AI response: missing transcript string");
