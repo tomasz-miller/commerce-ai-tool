@@ -1,14 +1,25 @@
 import {
+  ChangeDetectorRef,
   Component,
+  ElementRef,
   EventEmitter,
   Input,
   Output,
+  ViewChild,
   ViewEncapsulation,
   inject,
 } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import type { ProductCard, ThemeMode } from "@commerce-ai-tool/core";
 import { CommerceAiApiService } from "./commerce-ai-api.service.js";
+import {
+  buildCameraConstraints,
+  createJpegFileFromVideo,
+  getCameraErrorMessage,
+  prefersNativeCamera,
+  stopMediaStream,
+  type CameraFacingMode,
+} from "./camera.util.js";
 
 type SearchMode = "text" | "image" | "voice" | null;
 
@@ -74,6 +85,28 @@ type SearchMode = "text" | "image" | "voice" | null;
         }
 
         @if (enableImageSearch) {
+          @if (enableCameraSearch) {
+            <button
+              type="button"
+              class="cat-icon-btn"
+              [disabled]="isLoading"
+              aria-label="Search by camera"
+              (click)="openCamera()"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
+                <circle cx="12" cy="13" r="3" />
+              </svg>
+            </button>
+            <input
+              #cameraInput
+              type="file"
+              accept="image/*"
+              [attr.capture]="cameraFacingMode"
+              class="cat-hidden-input"
+              (change)="onCameraFileSelected($event)"
+            />
+          }
           <button
             type="button"
             class="cat-icon-btn"
@@ -110,6 +143,48 @@ type SearchMode = "text" | "image" | "voice" | null;
           </button>
         }
       </form>
+
+      @if (enableCameraSearch && (isCameraOpen || cameraError)) {
+        <div class="cat-camera-overlay" role="dialog" aria-label="Camera capture">
+          <div class="cat-camera-overlay__panel">
+            @if (cameraError) {
+              <div class="cat-camera-overlay__error" role="alert">
+                <p>{{ cameraError }}</p>
+                <button type="button" class="cat-camera-overlay__btn" (click)="clearCameraError()">
+                  Dismiss
+                </button>
+              </div>
+            } @else {
+              <video
+                #cameraVideo
+                class="cat-camera-preview"
+                autoplay
+                playsinline
+                muted
+                aria-label="Camera preview"
+              ></video>
+              <div class="cat-camera-actions">
+                <button
+                  type="button"
+                  class="cat-camera-overlay__btn cat-camera-overlay__btn--secondary"
+                  aria-label="Close camera"
+                  (click)="closeCamera()"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  class="cat-camera-overlay__btn cat-camera-overlay__btn--primary"
+                  aria-label="Capture photo"
+                  (click)="capturePhoto()"
+                >
+                  Capture
+                </button>
+              </div>
+            }
+          </div>
+        </div>
+      }
 
       @if (showResults) {
         <div class="cat-results" role="listbox" aria-label="Search results">
@@ -165,6 +240,7 @@ type SearchMode = "text" | "image" | "voice" | null;
 })
 export class CommerceAiSearchComponent {
   private readonly api = inject(CommerceAiApiService);
+  private readonly cdr = inject(ChangeDetectorRef);
 
   @Input() apiBaseUrl = "/api/commerce-ai";
   @Input() theme: ThemeMode = "auto";
@@ -175,9 +251,14 @@ export class CommerceAiSearchComponent {
   @Input() placeholder = "What are you looking for?";
   @Input() enableVoice = true;
   @Input() enableImageSearch = true;
+  @Input() enableCameraSearch = true;
+  @Input() cameraFacingMode: CameraFacingMode = "environment";
   @Input() enableTts = true;
 
   @Output() productSelect = new EventEmitter<ProductCard>();
+
+  @ViewChild("cameraInput") cameraInputRef?: ElementRef<HTMLInputElement>;
+  @ViewChild("cameraVideo") cameraVideoRef?: ElementRef<HTMLVideoElement>;
 
   query = "";
   results: ProductCard[] = [];
@@ -188,11 +269,14 @@ export class CommerceAiSearchComponent {
   isDragging = false;
   isRecording = false;
   isProcessing = false;
+  isCameraOpen = false;
+  cameraError: string | null = null;
   lastSearchMode: SearchMode = null;
   audioSummary: string | null = null;
 
   private mediaRecorder: MediaRecorder | null = null;
   private audioChunks: Blob[] = [];
+  private cameraStream: MediaStream | null = null;
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
   private searchAbort: AbortController | null = null;
   private searchRequestId = 0;
@@ -299,6 +383,75 @@ export class CommerceAiSearchComponent {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     if (file) void this.searchByImage(file);
+  }
+
+  onCameraFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = "";
+    if (file) void this.searchByImage(file);
+  }
+
+  openCamera(): void {
+    this.cameraError = null;
+
+    if (prefersNativeCamera()) {
+      this.cameraInputRef?.nativeElement.click();
+      return;
+    }
+
+    void this.openCameraOverlay();
+  }
+
+  async openCameraOverlay(): Promise<void> {
+    this.cameraError = null;
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia(
+        buildCameraConstraints(this.cameraFacingMode),
+      );
+      this.cameraStream = stream;
+      this.isCameraOpen = true;
+      this.cdr.detectChanges();
+
+      const video = this.cameraVideoRef?.nativeElement;
+      if (video) {
+        video.srcObject = stream;
+        await video.play();
+      }
+    } catch (err) {
+      this.cameraError = getCameraErrorMessage(err);
+      this.closeCamera();
+    }
+  }
+
+  async capturePhoto(): Promise<void> {
+    const video = this.cameraVideoRef?.nativeElement;
+    if (!video) return;
+
+    try {
+      const file = await createJpegFileFromVideo(video);
+      this.closeCamera();
+      void this.searchByImage(file);
+    } catch (err) {
+      this.closeCamera();
+      this.error = err instanceof Error ? err.message : "Could not capture photo";
+    }
+  }
+
+  closeCamera(): void {
+    stopMediaStream(this.cameraStream);
+    this.cameraStream = null;
+    this.isCameraOpen = false;
+
+    const video = this.cameraVideoRef?.nativeElement;
+    if (video) {
+      video.srcObject = null;
+    }
+  }
+
+  clearCameraError(): void {
+    this.cameraError = null;
   }
 
   onDragOver(event: DragEvent): void {

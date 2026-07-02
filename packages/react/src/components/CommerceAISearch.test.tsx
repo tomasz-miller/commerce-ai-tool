@@ -1,14 +1,17 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CommerceAISearch } from "./CommerceAISearch.js";
 import { useCommerceAISearch } from "../hooks/useCommerceAISearch.js";
+import { useCameraCapture } from "../hooks/useCameraCapture.js";
 import { useVoiceSearch } from "../hooks/useVoiceSearch.js";
 
 vi.mock("../hooks/useCommerceAISearch.js");
 vi.mock("../hooks/useVoiceSearch.js");
+vi.mock("../hooks/useCameraCapture.js");
 
 const mockUseCommerceAISearch = vi.mocked(useCommerceAISearch);
 const mockUseVoiceSearch = vi.mocked(useVoiceSearch);
+const mockUseCameraCapture = vi.mocked(useCameraCapture);
 
 const defaultSearchReturn = {
   query: "",
@@ -40,10 +43,23 @@ const defaultVoiceReturn = {
   stopRecording: vi.fn(),
 };
 
+const defaultCameraReturn = {
+  isOpen: false,
+  stream: null,
+  error: null,
+  facingMode: "environment" as const,
+  open: vi.fn(),
+  openOverlay: vi.fn(),
+  capturePhoto: vi.fn(),
+  close: vi.fn(),
+  clearError: vi.fn(),
+};
+
 describe("CommerceAISearch voice banner", () => {
   beforeEach(() => {
     mockUseCommerceAISearch.mockReturnValue(defaultSearchReturn);
     mockUseVoiceSearch.mockReturnValue(defaultVoiceReturn);
+    mockUseCameraCapture.mockReturnValue(defaultCameraReturn);
   });
 
   it("shows voice banner and active search bar while recording", () => {
@@ -91,5 +107,54 @@ describe("CommerceAISearch voice banner", () => {
     expect(screen.getByRole("listbox")).not.toBeNull();
     expect(screen.getByText("No products found")).not.toBeNull();
     expect(screen.getByText("Searched for: obscure gadget")).not.toBeNull();
+  });
+});
+
+describe("CommerceAISearch camera search", () => {
+  beforeEach(() => {
+    mockUseCommerceAISearch.mockReturnValue(defaultSearchReturn);
+    mockUseVoiceSearch.mockReturnValue(defaultVoiceReturn);
+    mockUseCameraCapture.mockReturnValue(defaultCameraReturn);
+  });
+
+  it("shows camera button when camera search is enabled", () => {
+    render(<CommerceAISearch apiBaseUrl="/api/commerce-ai" />);
+
+    expect(screen.getByRole("button", { name: "Search by camera" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Search by image" })).not.toBeNull();
+  });
+
+  it("hides camera button when camera search is disabled", () => {
+    render(
+      <CommerceAISearch apiBaseUrl="/api/commerce-ai" enableCameraSearch={false} />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Search by camera" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Search by image" })).not.toBeNull();
+  });
+
+  it("opens camera capture when camera button is clicked", () => {
+    const open = vi.fn();
+    mockUseCameraCapture.mockReturnValue({
+      ...defaultCameraReturn,
+      open,
+    });
+
+    render(<CommerceAISearch apiBaseUrl="/api/commerce-ai" />);
+    fireEvent.click(screen.getByRole("button", { name: "Search by camera" }));
+
+    expect(open).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows camera overlay when camera capture is open", () => {
+    mockUseCameraCapture.mockReturnValue({
+      ...defaultCameraReturn,
+      isOpen: true,
+      stream: { getTracks: () => [] } as unknown as MediaStream,
+    });
+
+    render(<CommerceAISearch apiBaseUrl="/api/commerce-ai" />);
+
+    expect(screen.getByRole("dialog", { name: "Camera capture" })).not.toBeNull();
   });
 });

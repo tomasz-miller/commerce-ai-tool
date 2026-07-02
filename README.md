@@ -98,12 +98,15 @@ export function Search() {
       queryLocale="en"
       enableVoice
       enableImageSearch
+      enableCameraSearch
       enableTts
       onProductSelect={(product) => console.log(product)}
     />
   );
 }
 ```
+
+Image search supports file upload, drag-and-drop, and camera capture (`enableCameraSearch`, default `true`). On mobile, the camera button opens the native camera; on desktop, it shows an in-widget preview. Use `cameraFacingMode` (`"environment"` rear or `"user"` front) when needed.
 
 ## Angular
 

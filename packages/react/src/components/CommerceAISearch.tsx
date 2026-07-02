@@ -1,10 +1,13 @@
 import { useCallback, useRef, useState } from "react";
-import { ImageIcon, Mic, Package, Search, SearchX, Square, Volume2 } from "lucide-react";
+import { Camera, ImageIcon, Mic, Package, Search, SearchX, Square, Volume2 } from "lucide-react";
 import type { ProductCard, ThemeMode } from "@commerce-ai-tool/core";
 import { useCommerceAISearch } from "../hooks/useCommerceAISearch.js";
+import { useCameraCapture } from "../hooks/useCameraCapture.js";
 import { useRecordingDuration } from "../hooks/useRecordingDuration.js";
 import { useVoiceSearch } from "../hooks/useVoiceSearch.js";
+import { CameraCaptureOverlay } from "./CameraCaptureOverlay.js";
 import { VoiceStatusBanner } from "./VoiceStatusBanner.js";
+import type { CameraFacingMode } from "../utils/camera.js";
 import "../styles/commerce-ai-search.css";
 
 export type SearchMode = "text" | "image" | "voice" | null;
@@ -21,6 +24,8 @@ export interface CommerceAISearchProps {
   placeholder?: string;
   enableVoice?: boolean;
   enableImageSearch?: boolean;
+  enableCameraSearch?: boolean;
+  cameraFacingMode?: CameraFacingMode;
   enableTts?: boolean;
   className?: string;
   onProductSelect?: (product: ProductCard) => void;
@@ -35,13 +40,18 @@ export function CommerceAISearch({
   placeholder = "What are you looking for?",
   enableVoice = true,
   enableImageSearch = true,
+  enableCameraSearch = true,
+  cameraFacingMode = "environment",
   enableTts = true,
   className,
   onProductSelect,
 }: CommerceAISearchProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [lastSearchMode, setLastSearchMode] = useState<SearchMode>(null);
+
+  const camera = useCameraCapture({ facingMode: cameraFacingMode });
 
   const {
     query,
@@ -123,6 +133,19 @@ export function CommerceAISearch({
     [searchByImage, voice],
   );
 
+  const handleCameraCapture = useCallback(
+    async (video: HTMLVideoElement) => {
+      try {
+        const file = await camera.capturePhoto(video);
+        handleImageSelect(file);
+      } catch (err) {
+        camera.close();
+        setError(err instanceof Error ? err.message : "Could not capture photo");
+      }
+    },
+    [camera, handleImageSelect, setError],
+  );
+
   const handleDrop = useCallback(
     (event: React.DragEvent) => {
       event.preventDefault();
@@ -185,6 +208,31 @@ export function CommerceAISearch({
 
         {enableImageSearch && (
           <>
+            {enableCameraSearch && (
+              <>
+                <button
+                  type="button"
+                  className="cat-icon-btn"
+                  onClick={() => camera.open(cameraInputRef)}
+                  disabled={isLoading}
+                  aria-label="Search by camera"
+                >
+                  <Camera size={16} />
+                </button>
+                <input
+                  ref={cameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture={cameraFacingMode}
+                  className="cat-hidden-input"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (file) handleImageSelect(file);
+                  }}
+                />
+              </>
+            )}
             <button
               type="button"
               className="cat-icon-btn"
@@ -226,6 +274,16 @@ export function CommerceAISearch({
           isLoadingTts={voice.isLoadingTts}
           error={voice.error}
           durationSeconds={recordingDuration}
+        />
+      )}
+
+      {enableCameraSearch && (camera.isOpen || camera.error) && (
+        <CameraCaptureOverlay
+          stream={camera.stream}
+          error={camera.error}
+          onCapture={(video) => void handleCameraCapture(video)}
+          onClose={camera.close}
+          onDismissError={camera.clearError}
         />
       )}
 
