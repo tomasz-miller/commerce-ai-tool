@@ -1,5 +1,5 @@
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
-import type { CommerceAIConfig } from "@commerce-ai-tool/core";
+import type { CommerceAIConfig, VoiceMode } from "@commerce-ai-tool/core";
 import { createSearchOrchestrator } from "@commerce-ai-tool/core";
 import type { SearchOrchestrator } from "@commerce-ai-tool/core";
 
@@ -16,29 +16,15 @@ export interface CommerceAIServerOptions {
 
 export function createCommerceAIServer(options: CommerceAIServerOptions): CommerceAIServer {
   const { config } = options;
+  const voiceMode = resolveVoiceMode(config);
   const elevenlabs = config.elevenlabs ? createElevenLabsClient(config.elevenlabs) : null;
 
   const orchestrator = createSearchOrchestrator({
     config,
-    transcribeAudio: elevenlabs
-      ? async (audio, mimeType) => {
-          const blob = new Blob([audio], { type: mimeType });
-          const result = await elevenlabs.speechToText.convert({
-            file: blob,
-            modelId: getSttModelId(config.elevenlabs?.sttModel),
-          });
-
-          if (typeof result === "string") {
-            return result;
-          }
-
-          if ("text" in result && typeof result.text === "string") {
-            return result.text;
-          }
-
-          throw new Error("Failed to transcribe audio");
-        }
-      : undefined,
+    transcribeAudio:
+      voiceMode === "elevenlabs-stt" && elevenlabs
+        ? async (audio, mimeType) => transcribeWithElevenLabs(elevenlabs, audio, mimeType, config)
+        : undefined,
   });
 
   return {
@@ -47,15 +33,7 @@ export function createCommerceAIServer(options: CommerceAIServerOptions): Commer
       if (!elevenlabs) {
         throw new Error("ElevenLabs is not configured");
       }
-      const blob = new Blob([audio], { type: mimeType });
-      const result = await elevenlabs.speechToText.convert({
-        file: blob,
-        modelId: getSttModelId(config.elevenlabs?.sttModel),
-      });
-
-      if (typeof result === "string") return result;
-      if ("text" in result && typeof result.text === "string") return result.text;
-      throw new Error("Failed to transcribe audio");
+      return transcribeWithElevenLabs(elevenlabs, audio, mimeType, config);
     },
     async synthesizeSpeech(text) {
       if (!elevenlabs) {
@@ -83,12 +61,51 @@ function createElevenLabsClient(config: import("@commerce-ai-tool/core").ElevenL
   return new ElevenLabsClient({ apiKey: config.apiKey });
 }
 
+async function transcribeWithElevenLabs(
+  elevenlabs: ElevenLabsClient,
+  audio: Uint8Array,
+  mimeType: string,
+  config: CommerceAIConfig,
+): Promise<string> {
+  const blob = new Blob([audio], { type: mimeType });
+  const result = await elevenlabs.speechToText.convert({
+    file: blob,
+    modelId: getSttModelId(config.elevenlabs?.sttModel),
+  });
+
+  if (typeof result === "string") {
+    return result;
+  }
+
+  if ("text" in result && typeof result.text === "string") {
+    return result.text;
+  }
+
+  throw new Error("Failed to transcribe audio");
+}
+
+function resolveVoiceMode(config: CommerceAIConfig): VoiceMode {
+  if (config.voiceMode) {
+    return config.voiceMode;
+  }
+
+  if (config.ai.provider === "openrouter") {
+    return "openrouter-audio";
+  }
+
+  return "elevenlabs-stt";
+}
+
 function getSttModelId(model?: string): "scribe_v2" {
   return model === "scribe_v2" ? "scribe_v2" : "scribe_v2";
 }
 
 export function loadConfigFromEnv(): CommerceAIConfig {
   const provider = (process.env.CAT_AI_PROVIDER ?? "openrouter") as "openrouter" | "bedrock";
+  const voiceMode = process.env.CAT_VOICE_MODE as VoiceMode | undefined;
+  const cacheTtlMs = process.env.CAT_CACHE_TTL_MS
+    ? Number(process.env.CAT_CACHE_TTL_MS)
+    : undefined;
 
   return {
     commercetools: {
@@ -105,6 +122,7 @@ export function loadConfigFromEnv(): CommerceAIConfig {
               apiKey: requiredEnv("OPENROUTER_API_KEY"),
               model: process.env.OPENROUTER_MODEL,
               visionModel: process.env.OPENROUTER_VISION_MODEL,
+              voiceModel: process.env.OPENROUTER_VOICE_MODEL,
             }
           : undefined,
       bedrock:
@@ -132,6 +150,17 @@ export function loadConfigFromEnv(): CommerceAIConfig {
       limit: process.env.CAT_DEFAULT_LIMIT ? Number(process.env.CAT_DEFAULT_LIMIT) : 20,
       storeKey: process.env.CAT_STORE_KEY,
     },
+    voiceMode,
+    cache: cacheTtlMs
+      ? {
+          ttlMs: cacheTtlMs,
+          maxEntries: process.env.CAT_CACHE_MAX_ENTRIES
+            ? Number(process.env.CAT_CACHE_MAX_ENTRIES)
+            : undefined,
+        }
+      : process.env.CAT_CACHE_ENABLED === "true"
+        ? {}
+        : undefined,
   };
 }
 

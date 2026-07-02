@@ -1,4 +1,9 @@
-import type { InterpretedSearchQuery, ProductSearchQueryBody, SearchLocaleContext } from "../types/index.js";
+import type {
+  InterpretedSearchQuery,
+  ProductSearchQueryBody,
+  SearchLocaleContext,
+  VoiceAudioInterpretation,
+} from "../types/index.js";
 
 export const TEXT_QUERY_SYSTEM_PROMPT = `You are a product search assistant for a commercetools storefront.
 Given a natural language query, extract search terms and optional filters.
@@ -40,6 +45,31 @@ Given a speech-to-text transcript, return a clean, concise product search query 
 Remove filler words and fix obvious transcription errors.
 Respond with the enhanced query text only, no JSON or quotes.`;
 
+export const VOICE_AUDIO_INTERPRET_SYSTEM_PROMPT = `You are a voice product search assistant for a commercetools storefront.
+Listen to the user's audio recording and:
+1. Transcribe what they said (verbatim, including the spoken language).
+2. Produce an enhancedQuery: a clean product search phrase with filler words removed and obvious speech errors fixed (same language as the transcript).
+3. Extract searchTerms for commercetools full-text search in the product catalog language only.
+The user may speak in any language (speech may differ from the stated query locale).
+searchTerms must ALWAYS be in the product catalog language only — translate product keywords from the speech into that language.
+Never put the user's spoken language into searchTerms when it differs from the catalog language.
+Write interpretation in the user's query language when known; otherwise use the catalog language.
+Respond with valid JSON only, matching this schema:
+{
+  "transcript": "verbatim transcription of the audio",
+  "enhancedQuery": "cleaned search phrase in the transcript language",
+  "searchTerms": ["string"],
+  "filters": { "optionalKey": "optionalValue" },
+  "sort": "relevance" | "price_asc" | "price_desc",
+  "interpretation": "brief explanation of how you interpreted the query"
+}
+Use searchTerms for product names, brands, categories, or attributes.
+Keep searchTerms concise and commerce-focused.
+Examples when catalog language is Norwegian (no):
+- speech "red shoes" → searchTerms: ["røde sko"]
+- speech "nóż do tapet" → searchTerms: ["tapetkniv"]
+- speech "wallpaper knife" → searchTerms: ["tapetkniv"]`;
+
 export function formatLocaleContext(locales: SearchLocaleContext): string {
   return [
     `User query language: ${locales.queryLocale}`,
@@ -60,6 +90,10 @@ export function buildImageQueryUserMessage(locales: SearchLocaleContext): string
 
 export function buildVoiceEnhanceUserMessage(transcript: string, locales: SearchLocaleContext): string {
   return `${formatLocaleContext(locales)}\nTranscript: ${transcript}`;
+}
+
+export function buildVoiceAudioUserMessage(locales: SearchLocaleContext): string {
+  return `${formatLocaleContext(locales)}\nListen to this voice search recording and extract search terms.`;
 }
 
 export function buildProductSearchBody(
@@ -119,5 +153,25 @@ export function parseInterpretedQuery(json: string): InterpretedSearchQuery {
     filters: parsed.filters,
     sort: parsed.sort ?? "relevance",
     interpretation: parsed.interpretation ?? parsed.searchTerms.join(" "),
+  };
+}
+
+export function parseVoiceAudioInterpretation(json: string): VoiceAudioInterpretation {
+  const parsed = JSON.parse(json) as Partial<VoiceAudioInterpretation>;
+
+  if (!parsed.transcript || typeof parsed.transcript !== "string") {
+    throw new Error("Invalid AI response: missing transcript string");
+  }
+
+  if (!parsed.enhancedQuery || typeof parsed.enhancedQuery !== "string") {
+    throw new Error("Invalid AI response: missing enhancedQuery string");
+  }
+
+  const interpreted = parseInterpretedQuery(json);
+
+  return {
+    transcript: parsed.transcript.trim(),
+    enhancedQuery: parsed.enhancedQuery.trim(),
+    ...interpreted,
   };
 }

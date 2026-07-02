@@ -4,6 +4,7 @@ import {
   buildTextQueryUserMessage,
   formatLocaleContext,
   parseInterpretedQuery,
+  parseVoiceAudioInterpretation,
 } from "./index.js";
 
 describe("formatLocaleContext", () => {
@@ -51,6 +52,47 @@ describe("parseInterpretedQuery", () => {
 
   it("throws on invalid response", () => {
     expect(() => parseInterpretedQuery("{}")).toThrow();
+  });
+});
+
+describe("parseVoiceAudioInterpretation", () => {
+  it("parses transcript, enhancedQuery, and search fields", () => {
+    const result = parseVoiceAudioInterpretation(
+      JSON.stringify({
+        transcript: "um, red shoes please",
+        enhancedQuery: "red shoes",
+        searchTerms: ["røde sko"],
+        sort: "relevance",
+        interpretation: "Looking for red shoes",
+      }),
+    );
+
+    expect(result.transcript).toBe("um, red shoes please");
+    expect(result.enhancedQuery).toBe("red shoes");
+    expect(result.searchTerms).toEqual(["røde sko"]);
+    expect(result.interpretation).toBe("Looking for red shoes");
+  });
+
+  it("throws when transcript is missing", () => {
+    expect(() =>
+      parseVoiceAudioInterpretation(
+        JSON.stringify({
+          enhancedQuery: "red shoes",
+          searchTerms: ["røde sko"],
+        }),
+      ),
+    ).toThrow("missing transcript");
+  });
+
+  it("throws when enhancedQuery is missing", () => {
+    expect(() =>
+      parseVoiceAudioInterpretation(
+        JSON.stringify({
+          transcript: "red shoes",
+          searchTerms: ["røde sko"],
+        }),
+      ),
+    ).toThrow("missing enhancedQuery");
   });
 });
 

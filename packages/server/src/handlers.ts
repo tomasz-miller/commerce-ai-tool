@@ -1,5 +1,5 @@
 import type { CommerceAIServer } from "./server.js";
-import { logSearchTrace } from "@commerce-ai-tool/core";
+import { logSearchTrace, SearchTimeoutError } from "@commerce-ai-tool/core";
 import { logServerError, logServerWarning } from "./utils/log-error.js";
 import { parseSearchLocaleOptions } from "./utils/locale.js";
 import { parseMultipart, readJsonBody } from "./utils/multipart.js";
@@ -89,8 +89,9 @@ export function createHandlers(server: CommerceAIServer) {
           },
         );
 
+        const blockingTts = fields.blockingTts === "true";
         let audioSummary: string | undefined;
-        if (result.ttsText && server) {
+        if (blockingTts && result.ttsText) {
           try {
             const audio = await server.synthesizeSpeech(result.ttsText);
             audioSummary = audio.toString("base64");
@@ -108,8 +109,12 @@ export function createHandlers(server: CommerceAIServer) {
           meta: result.meta,
           ttsText: result.ttsText,
           audioSummary,
+          ttsPending: Boolean(result.ttsText && !audioSummary),
         });
       } catch (error) {
+        if (error instanceof SearchTimeoutError) {
+          return errorResponse(error.message, 504);
+        }
         logServerError("searchVoice", error);
         return errorResponse(error instanceof Error ? error.message : "Voice search failed");
       }

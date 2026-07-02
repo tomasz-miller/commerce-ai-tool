@@ -1,5 +1,5 @@
 import type { CommerceAIConfig } from "@commerce-ai-tool/core";
-import { logSearchTrace } from "@commerce-ai-tool/core";
+import { logSearchTrace, SearchTimeoutError } from "@commerce-ai-tool/core";
 import { createHandlers } from "./handlers.js";
 import { createCommerceAIServer } from "./server.js";
 import { logServerError, logServerWarning } from "./utils/log-error.js";
@@ -91,7 +91,8 @@ export function createNextHandlers(config: CommerceAIConfig): NextHandlers {
         );
 
         let audioSummary: string | undefined;
-        if (result.ttsText) {
+        const blockingTts = fields.blockingTts === "true";
+        if (blockingTts && result.ttsText) {
           try {
             const audio = await server.synthesizeSpeech(result.ttsText);
             audioSummary = audio.toString("base64");
@@ -109,8 +110,12 @@ export function createNextHandlers(config: CommerceAIConfig): NextHandlers {
           meta: result.meta,
           ttsText: result.ttsText,
           audioSummary,
+          ttsPending: Boolean(result.ttsText && !audioSummary),
         });
       } catch (error) {
+        if (error instanceof SearchTimeoutError) {
+          return errorJson(error, "Voice search timed out", 504);
+        }
         logServerError("searchVoice", error, {
           queryLocale: fields.queryLocale ?? fields.locale,
           catalogLocale: fields.catalogLocale,
@@ -174,10 +179,10 @@ export function createNextHandlers(config: CommerceAIConfig): NextHandlers {
   };
 }
 
-function errorJson(error: unknown, fallback: string): Response {
+function errorJson(error: unknown, fallback: string, status = 500): Response {
   return Response.json(
     { error: error instanceof Error ? error.message : fallback },
-    { status: 500 },
+    { status },
   );
 }
 

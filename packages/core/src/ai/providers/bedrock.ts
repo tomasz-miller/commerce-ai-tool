@@ -4,7 +4,7 @@ import {
   type ContentBlock,
   type Message,
 } from "@aws-sdk/client-bedrock-runtime";
-import type { BedrockConfig, SearchLocaleContext } from "../../types/index.js";
+import type { BedrockConfig, SearchLocaleContext, VoiceAudioInterpretation } from "../../types/index.js";
 import type { AIProvider } from "../types.js";
 import {
   buildImageQueryUserMessage,
@@ -68,6 +68,16 @@ export class BedrockProvider implements AIProvider {
     ]);
 
     return parseInterpretedQuery(this.extractText(response));
+  }
+
+  async interpretVoiceAudio(
+    _audio: Uint8Array,
+    _mimeType: string,
+    _locales: SearchLocaleContext,
+  ): Promise<VoiceAudioInterpretation> {
+    throw new Error(
+      "Direct voice audio interpretation requires OpenRouter with an audio-capable model (e.g. google/gemini-2.5-flash)",
+    );
   }
 
   async enhanceVoiceTranscript(transcript: string, locales: SearchLocaleContext) {

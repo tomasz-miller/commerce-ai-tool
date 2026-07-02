@@ -347,7 +347,7 @@ export class CommerceAiSearchComponent {
 
         void this.api
           .searchByVoice(this.apiBaseUrl, blob, this.localeFields, this.enableTts)
-          .then((data) => {
+          .then(async (data) => {
             this.lastSearchMode = "voice";
             this.query = data.transcript;
             this.results = data.products;
@@ -357,6 +357,21 @@ export class CommerceAiSearchComponent {
               this.audioSummary = data.audioSummary;
               const audio = new Audio(`data:audio/mpeg;base64,${data.audioSummary}`);
               void audio.play();
+            } else if (this.enableTts && data.ttsText && data.ttsPending) {
+              try {
+                const blob = await this.api.synthesizeSpeech(this.apiBaseUrl, data.ttsText);
+                const buffer = await blob.arrayBuffer();
+                const bytes = new Uint8Array(buffer);
+                let binary = "";
+                for (let i = 0; i < bytes.length; i++) {
+                  binary += String.fromCharCode(bytes[i]!);
+                }
+                this.audioSummary = btoa(binary);
+                const audio = new Audio(`data:audio/mpeg;base64,${this.audioSummary}`);
+                void audio.play();
+              } catch {
+                this.audioSummary = null;
+              }
             }
           })
           .catch((err: Error) => {

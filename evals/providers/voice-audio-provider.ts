@@ -5,21 +5,23 @@ import {
   DEFAULT_CATALOG_LOCALE,
   createOpenRouterProviderOptions,
   loadEvalEnvFile,
+  readAudioFixture,
 } from "./eval-utils.ts";
 
 loadEvalEnvFile();
 
-export default class TextSearchEvalProvider {
+export default class VoiceAudioEvalProvider {
   private readonly providerId: string;
   private readonly ai: AIProvider;
 
   constructor(options: ProviderOptions) {
-    this.providerId = options.id ?? "commerce-text-search";
+    const config = options.config ?? {};
+    this.providerId = options.id ?? "commerce-voice-audio";
     this.ai = createAIProvider({
       provider: "openrouter",
       openrouter: createOpenRouterProviderOptions({
-        model:
-          typeof options.config?.model === "string" ? options.config.model : undefined,
+        voiceModel: typeof config.voiceModel === "string" ? config.voiceModel : undefined,
+        model: typeof config.model === "string" ? config.model : undefined,
       }),
     });
   }
@@ -30,16 +32,17 @@ export default class TextSearchEvalProvider {
 
   async callApi(_prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     const vars = context?.vars ?? {};
-    const query = String(vars.query ?? "");
+    const audioFile = String(vars.audioFile ?? "");
     const catalogLocale = String(vars.catalogLocale ?? DEFAULT_CATALOG_LOCALE);
     const queryLocale = String(vars.queryLocale ?? catalogLocale);
 
-    if (!query) {
-      return { error: "Missing test variable: query" };
+    if (!audioFile) {
+      return { error: "Missing test variable: audioFile" };
     }
 
     try {
-      const result = await this.ai.interpretTextQuery(query, {
+      const { bytes, mimeType } = readAudioFixture(audioFile);
+      const result = await this.ai.interpretVoiceAudio(bytes, mimeType, {
         queryLocale,
         catalogLocale,
       });

@@ -8,6 +8,7 @@ export type { SearchOrchestrator } from "./search/orchestrator.js";
 export {
   buildProductSearchBody,
   parseInterpretedQuery,
+  parseVoiceAudioInterpretation,
 } from "./prompts/index.js";
 export {
   buildTtsSummaryFallback,
@@ -16,3 +17,4 @@ export {
 } from "./search/voice-tts.js";
 export { resolveSearchLocales } from "./locale/resolve.js";
 export { logSearchTrace } from "./utils/dev-trace.js";
+export { SearchTimeoutError } from "./utils/with-timeout.js";

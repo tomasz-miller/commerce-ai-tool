@@ -14,6 +14,28 @@ function playAudioSummary(base64: string): void {
   void audio.play();
 }
 
+async function fetchTtsSummary(baseUrl: string, text: string): Promise<string> {
+  const response = await fetch(`${baseUrl}/tts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+
+  if (!response.ok) {
+    throw new Error("TTS failed");
+  }
+
+  const blob = await response.blob();
+  const buffer = await blob.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]!);
+  }
+
+  return btoa(binary);
+}
+
 export function useVoiceSearch(options: UseVoiceSearchOptions) {
   const {
     apiBaseUrl,
@@ -26,6 +48,7 @@ export function useVoiceSearch(options: UseVoiceSearchOptions) {
   } = options;
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isLoadingTts, setIsLoadingTts] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [audioSummary, setAudioSummary] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -93,6 +116,7 @@ export function useVoiceSearch(options: UseVoiceSearchOptions) {
             meta: SearchResult["meta"];
             ttsText?: string;
             audioSummary?: string;
+            ttsPending?: boolean;
           };
 
           onTranscript?.(data.transcript);
@@ -101,6 +125,17 @@ export function useVoiceSearch(options: UseVoiceSearchOptions) {
           if (data.audioSummary) {
             setAudioSummary(data.audioSummary);
             playAudioSummary(data.audioSummary);
+          } else if (enableTts && data.ttsText && data.ttsPending) {
+            setIsLoadingTts(true);
+            try {
+              const summary = await fetchTtsSummary(baseUrl, data.ttsText);
+              setAudioSummary(summary);
+              playAudioSummary(summary);
+            } catch {
+              setAudioSummary(null);
+            } finally {
+              setIsLoadingTts(false);
+            }
           } else {
             setAudioSummary(null);
           }
@@ -130,6 +165,7 @@ export function useVoiceSearch(options: UseVoiceSearchOptions) {
   return {
     isRecording,
     isProcessing,
+    isLoadingTts,
     error,
     audioSummary,
     clearAudioSummary,

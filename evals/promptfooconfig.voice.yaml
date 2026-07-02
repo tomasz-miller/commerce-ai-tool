@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Commerce AI — voice search evals (audio + baseline transcript providers)
+
+prompts:
+  - "{{transcript}}{{audioFile}}"
+
+providers:
+  - id: file://providers/voice-baseline-provider.ts
+    label: baseline-text-gemini-31-lite
+    config:
+      model: google/gemini-3.1-flash-lite-preview
+      mode: text-only
+
+  - id: file://providers/voice-baseline-provider.ts
+    label: baseline-enhance-gemini-31-lite
+    config:
+      model: google/gemini-3.1-flash-lite-preview
+      mode: enhance-then-interpret
+
+  - id: file://providers/voice-audio-provider.ts
+    label: gemini-25-flash-audio
+    config:
+      voiceModel: google/gemini-2.5-flash
+
+  - id: file://providers/voice-audio-provider.ts
+    label: gemini-31-flash-lite-audio
+    config:
+      voiceModel: google/gemini-3.1-flash-lite-preview
+
+defaultTest:
+  assert:
+    - type: is-json
+    - type: javascript
+      value: |
+        const parsed = JSON.parse(output);
+        return Array.isArray(parsed.searchTerms);
+
+tests:
+  - file://tests/voice-search.yaml

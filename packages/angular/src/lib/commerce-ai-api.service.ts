@@ -81,6 +81,7 @@ export class CommerceAiApiService {
     meta: SearchResult["meta"];
     ttsText?: string;
     audioSummary?: string;
+    ttsPending?: boolean;
   }> {
     const baseUrl = apiBaseUrl.replace(/\/$/, "");
     const formData = new FormData();
@@ -104,6 +105,7 @@ export class CommerceAiApiService {
         meta: SearchResult["meta"];
         ttsText?: string;
         audioSummary?: string;
+        ttsPending?: boolean;
       }>;
     });
   }

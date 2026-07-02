@@ -47,6 +47,36 @@ cp evals/.env.example evals/.env
 pnpm eval:promptfoo
 ```
 
+### Voice search evals (audio + model matrix)
+
+Compare transcript baselines against direct audio interpretation (`interpretVoiceAudio`):
+
+```bash
+pnpm eval:fixtures:audio   # macOS only — regenerate WAV clips
+pnpm eval:promptfoo:voice
+```
+
+Providers in [`promptfooconfig.voice.yaml`](promptfooconfig.voice.yaml):
+
+| Label | Path |
+|-------|------|
+| `baseline-text-gemini-31-lite` | canonical `transcript` → `interpretTextQuery` (`gemini-3.1-flash-lite-preview`) |
+| `baseline-enhance-gemini-31-lite` | `transcript` → enhance → interpret (current production chain) |
+| `gemini-25-flash-audio` | WAV fixture → `google/gemini-2.5-flash` + `input_audio` |
+| `gemini-31-flash-lite-audio` | WAV fixture → `google/gemini-3.1-flash-lite-preview` + `input_audio` |
+
+Use the matrix UI to compare pass rates before switching the production voice path:
+
+```bash
+pnpm eval:promptfoo:view
+```
+
+Force fresh API calls:
+
+```bash
+promptfoo eval -c evals/promptfooconfig.voice.yaml --no-cache
+```
+
 The provider loads `evals/.env` when present. You can also export `OPENROUTER_API_KEY` in your shell.
 
 ### View results in the web UI
@@ -111,12 +141,21 @@ promptfoo eval -c evals/promptfooconfig.yaml --no-cache
 
 ```
 evals/
-  promptfooconfig.yaml       # Main Promptfoo config
+  promptfooconfig.yaml           # Text search evals
+  promptfooconfig.voice.yaml     # Voice audio + baseline matrix
   providers/
-    text-search-provider.ts  # Bridges Promptfoo → @commerce-ai-tool/core
+    eval-utils.ts                # Shared env + fixture helpers
+    text-search-provider.ts      # Bridges Promptfoo → interpretTextQuery
+    voice-baseline-provider.ts   # Transcript baseline providers
+    voice-audio-provider.ts      # Audio fixture → interpretVoiceAudio
   tests/
-    text-search.yaml         # Test cases and assertions
-  .env.example               # Template for OPENROUTER_API_KEY
+    text-search.yaml             # Text search cases
+    voice-search.yaml            # Voice cases (transcript + audioFile)
+  fixtures/
+    audio/                       # WAV clips (see README inside)
+  scripts/
+    generate-audio-fixtures.sh   # macOS TTS fixture generator
+  .env.example                   # Template for OPENROUTER_API_KEY
 ```
 
 ## Troubleshooting
@@ -127,6 +166,7 @@ evals/
 | `Cannot find module '@commerce-ai-tool/core'` | Run `pnpm build` from repo root |
 | Flaky locale assertions | LLM wording varies; use flexible checks (`includes` with alternatives) |
 | All tests cached unexpectedly | Run with `--no-cache` |
+| `Cannot find module ... eval-utils.js` | Eval providers import sibling `.ts` files with a `.ts` extension (Promptfoo loads TS directly) |
 
 ## Learn more
 

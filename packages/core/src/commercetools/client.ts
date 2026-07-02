@@ -17,10 +17,11 @@ import { logSearchTrace } from "../utils/dev-trace.js";
 export interface CommercetoolsClient {
   searchProducts(
     body: ProductSearchQueryBody,
-    options?: { currency?: string },
+    options?: { currency?: string; locale?: string },
   ): Promise<{
     productIds: string[];
     total: number;
+    projections?: ProductCard[];
   }>;
   getProductProjections(
     productIds: string[],
@@ -76,7 +77,12 @@ export function createCommercetoolsClient(config: CommercetoolsConfig): Commerce
           console.warn("[commerce-ai-tool/core] Falling back to productProjections().search()");
         }
 
-        return searchWithProductProjectionSearch(apiRoot, body, options?.currency);
+        return searchWithProductProjectionSearch(
+          apiRoot,
+          body,
+          options?.currency,
+          options?.locale,
+        );
       }
     },
 
@@ -137,7 +143,8 @@ async function searchWithProductSearchApi(
 async function searchWithProductProjectionSearch(
   apiRoot: ReturnType<ReturnType<typeof createApiBuilderFromCtpClient>["withProjectKey"]>,
   body: ProductSearchQueryBody,
-  currency?: string,
+  currency = "EUR",
+  locale = "en",
 ) {
   const queryArgs = buildProjectionSearchQueryArgs(body, currency);
   logSearchTrace("commercetools", { api: "productProjections.search", request: queryArgs });
@@ -152,6 +159,9 @@ async function searchWithProductProjectionSearch(
 
   const results = response.body.results ?? [];
   const productIds = results.map((projection) => projection.id).filter(Boolean);
+  const projections = results.map((projection) =>
+    mapProjectionToCard(projection, locale, currency),
+  );
 
   const total = response.body.total ?? productIds.length;
   logSearchTrace("commercetools", {
@@ -163,6 +173,7 @@ async function searchWithProductProjectionSearch(
   return {
     productIds,
     total,
+    projections,
   };
 }
 

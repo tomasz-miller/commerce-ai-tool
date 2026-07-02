@@ -9,17 +9,21 @@ import {
 
 loadEvalEnvFile();
 
-export default class TextSearchEvalProvider {
+export default class VoiceBaselineEvalProvider {
   private readonly providerId: string;
   private readonly ai: AIProvider;
+  private readonly mode: "text-only" | "enhance-then-interpret";
 
   constructor(options: ProviderOptions) {
-    this.providerId = options.id ?? "commerce-text-search";
+    const config = options.config ?? {};
+    this.providerId = options.id ?? "commerce-voice-baseline";
+    this.mode =
+      config.mode === "enhance-then-interpret" ? "enhance-then-interpret" : "text-only";
+
     this.ai = createAIProvider({
       provider: "openrouter",
       openrouter: createOpenRouterProviderOptions({
-        model:
-          typeof options.config?.model === "string" ? options.config.model : undefined,
+        model: typeof config.model === "string" ? config.model : undefined,
       }),
     });
   }
@@ -30,22 +34,32 @@ export default class TextSearchEvalProvider {
 
   async callApi(_prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     const vars = context?.vars ?? {};
-    const query = String(vars.query ?? "");
+    const transcript = String(vars.transcript ?? "");
     const catalogLocale = String(vars.catalogLocale ?? DEFAULT_CATALOG_LOCALE);
     const queryLocale = String(vars.queryLocale ?? catalogLocale);
 
-    if (!query) {
-      return { error: "Missing test variable: query" };
+    if (!transcript) {
+      return { error: "Missing test variable: transcript" };
     }
 
     try {
-      const result = await this.ai.interpretTextQuery(query, {
-        queryLocale,
-        catalogLocale,
-      });
+      const locales = { queryLocale, catalogLocale };
+      const enhancedQuery =
+        this.mode === "enhance-then-interpret"
+          ? await this.ai.enhanceVoiceTranscript(transcript, locales)
+          : transcript.trim();
+      const interpreted = await this.ai.interpretTextQuery(enhancedQuery, locales);
 
       return {
-        output: JSON.stringify(result, null, 2),
+        output: JSON.stringify(
+          {
+            transcript,
+            enhancedQuery,
+            ...interpreted,
+          },
+          null,
+          2,
+        ),
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

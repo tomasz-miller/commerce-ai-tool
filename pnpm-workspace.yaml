@@ -1,3 +1,11 @@
 packages:
   - "packages/*"
   - "apps/*"
+allowBuilds:
+  '@playwright/browser-chromium': true
+  '@swc/core': true
+  better-sqlite3: true
+  esbuild: true
+  onnxruntime-node: true
+  protobufjs: true
+  sharp: true

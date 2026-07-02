@@ -29,6 +29,14 @@ Local [Promptfoo](https://www.promptfoo.dev/) regression tests for AI prompts. C
 - [x] Scripts: `pnpm eval:promptfoo`, `pnpm eval:promptfoo:view`
 - [x] English docs: [`evals/README.md`](evals/README.md)
 
+### Done (voice evals — phase 0a)
+
+- [x] Voice Promptfoo config: `evals/promptfooconfig.voice.yaml`
+- [x] Providers: transcript baseline + `interpretVoiceAudio` on WAV fixtures
+- [x] Model matrix: `gemini-2.0-flash-001` baseline vs `gemini-2.5-flash` / `gemini-2.0-flash-001` audio
+- [x] Script: `pnpm eval:promptfoo:voice`, `pnpm eval:fixtures:audio`
+- [x] Five committed WAV fixtures under `evals/fixtures/audio/`
+
 ### Later phases
 
 - [ ] Voice enhance + TTS summary evals (`similar` / `llm-rubric` assertions)

@@ -2,6 +2,21 @@ export type ThemeMode = "auto" | "light" | "dark";
 
 export type AIProviderName = "openrouter" | "bedrock";
 
+export type VoiceMode = "openrouter-audio" | "elevenlabs-stt";
+
+export interface SearchCacheConfig {
+  ttlMs?: number;
+  maxEntries?: number;
+}
+
+export interface SearchTimeoutsConfig {
+  aiTextMs?: number;
+  aiVoiceAudioMs?: number;
+  aiImageMs?: number;
+  commercetoolsMs?: number;
+  elevenLabsTtsMs?: number;
+}
+
 export interface CommercetoolsConfig {
   projectKey: string;
   clientId: string;
@@ -14,6 +29,8 @@ export interface OpenRouterConfig {
   apiKey: string;
   model?: string;
   visionModel?: string;
+  /** Audio-capable model for direct voice search (OpenRouter input_audio). */
+  voiceModel?: string;
 }
 
 export interface BedrockConfig {
@@ -50,6 +67,9 @@ export interface CommerceAIConfig {
   ai: AIConfig;
   elevenlabs?: ElevenLabsConfig;
   defaults?: CommerceAIDefaults;
+  voiceMode?: VoiceMode;
+  cache?: SearchCacheConfig;
+  timeouts?: SearchTimeoutsConfig;
 }
 
 export interface ProductCard {
@@ -75,6 +95,10 @@ export interface SearchMeta {
   catalogLocale: string;
   queryLocale: string;
   queryInterpretation?: string;
+  /** Per-step durations in milliseconds (dev / CAT_DEBUG only) */
+  timings?: Record<string, number>;
+  /** Total pipeline duration in milliseconds (dev / CAT_DEBUG only) */
+  totalMs?: number;
 }
 
 export interface SearchResult {
@@ -120,6 +144,11 @@ export interface InterpretedSearchQuery {
   filters?: Record<string, string>;
   sort?: "relevance" | "price_asc" | "price_desc";
   interpretation: string;
+}
+
+export interface VoiceAudioInterpretation extends InterpretedSearchQuery {
+  transcript: string;
+  enhancedQuery: string;
 }
 
 export interface ProductSearchQueryBody {

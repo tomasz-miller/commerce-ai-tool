@@ -1,0 +1,86 @@
+- description: English speech translated to Norwegian catalog (red shoes)
+  vars:
+    transcript: red shoes
+    audioFile: red-shoes-en.wav
+    queryLocale: en
+    catalogLocale: no
+  assert:
+    - type: javascript
+      value: JSON.parse(output).searchTerms.length > 0
+    - type: javascript
+      value: |
+        const terms = JSON.parse(output).searchTerms.join(' ').toLowerCase();
+        return terms.includes('rød') || terms.includes('røde') || terms.includes('sko');
+    - type: javascript
+      value: |
+        const parsed = JSON.parse(output);
+        if (!parsed.transcript) return true;
+        return parsed.transcript.toLowerCase().includes('red');
+
+- description: Polish speech translated to Norwegian catalog (wallpaper knife)
+  vars:
+    transcript: nóż do tapet
+    audioFile: tapetkniv-pl.wav
+    queryLocale: pl
+    catalogLocale: no
+  assert:
+    - type: javascript
+      value: JSON.parse(output).searchTerms.length > 0
+    - type: javascript
+      value: |
+        const terms = JSON.parse(output).searchTerms.join(' ').toLowerCase();
+        return terms.includes('tapetkniv');
+
+- description: Noisy English speech with filler words (red shoes)
+  vars:
+    transcript: um, I want like, red shoes please
+    audioFile: noisy-filler-en.wav
+    queryLocale: en
+    catalogLocale: no
+  assert:
+    - type: javascript
+      value: JSON.parse(output).searchTerms.length > 0
+    - type: javascript
+      value: |
+        const terms = JSON.parse(output).searchTerms.join(' ').toLowerCase();
+        return terms.includes('rød') || terms.includes('røde') || terms.includes('sko');
+    - type: javascript
+      value: |
+        const parsed = JSON.parse(output);
+        const terms = parsed.searchTerms.join(' ').toLowerCase();
+        const termsOk = terms.includes('rød') || terms.includes('røde') || terms.includes('sko');
+        if (!parsed.enhancedQuery) return termsOk;
+        const enhanced = parsed.enhancedQuery.toLowerCase();
+        const enhancedOk =
+          (enhanced.includes('red') && enhanced.includes('shoe')) ||
+          enhanced.includes('rød') || enhanced.includes('røde') || enhanced.includes('sko');
+        return termsOk && enhancedOk;
+
+- description: Price ascending sort intent (cheapest running shoes)
+  vars:
+    transcript: cheapest running shoes
+    audioFile: cheapest-running-shoes-en.wav
+    queryLocale: en
+    catalogLocale: no
+  assert:
+    - type: javascript
+      value: JSON.parse(output).searchTerms.length > 0
+    - type: javascript
+      value: JSON.parse(output).sort === 'price_asc'
+
+- description: Non-commerce speech still returns valid structured output
+  vars:
+    transcript: hello
+    audioFile: hello-en.wav
+    queryLocale: en
+    catalogLocale: no
+  assert:
+    - type: javascript
+      value: |
+        const parsed = JSON.parse(output);
+        return typeof parsed.interpretation === 'string' && parsed.interpretation.length > 0;
+    - type: javascript
+      value: |
+        const parsed = JSON.parse(output);
+        if (!parsed.transcript) return true;
+        return parsed.transcript.toLowerCase().includes('hello');

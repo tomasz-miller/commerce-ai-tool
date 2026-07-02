@@ -1,16 +1,28 @@
 import { createAIProvider } from "../ai/index.js";
+import type { AIProvider } from "../ai/types.js";
+import {
+  SearchCache,
+  buildInterpretedSearchCacheKey,
+  buildTextSearchCacheKey,
+} from "../cache/search-cache.js";
 import { createCommercetoolsClient } from "../commercetools/client.js";
 import { resolveSearchLocales } from "../locale/resolve.js";
 import { buildProductSearchBody } from "../prompts/index.js";
 import { buildTtsSummaryFallback } from "./voice-tts.js";
 import { logSearchTrace } from "../utils/dev-trace.js";
+import { createSearchTimer, shouldIncludeSearchTimings } from "../utils/search-timer.js";
+import { withTimeout } from "../utils/with-timeout.js";
+import { uint8ArrayToBase64 } from "../utils/audio.js";
 import type {
   CommerceAIConfig,
   ImageSearchResult,
+  InterpretedSearchQuery,
   SearchLocaleContext,
   SearchLocaleOptions,
   SearchResult,
   TextSearchRequest,
+  VoiceAudioInterpretation,
+  VoiceMode,
   VoiceSearchResult,
 } from "../types/index.js";
 
@@ -33,10 +45,20 @@ export interface SearchOrchestratorDeps {
   transcribeAudio?: (audio: Uint8Array, mimeType: string) => Promise<string>;
 }
 
+const DEFAULT_TIMEOUTS = {
+  aiTextMs: 15_000,
+  aiVoiceAudioMs: 20_000,
+  aiImageMs: 15_000,
+  commercetoolsMs: 8_000,
+} as const;
+
 export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOrchestrator {
   const { config } = deps;
   const limit = config.defaults?.limit ?? 20;
   const currency = config.defaults?.currency ?? "EUR";
+  const voiceMode = resolveVoiceMode(config);
+  const timeouts = { ...DEFAULT_TIMEOUTS, ...config.timeouts };
+  const resultCache = config.cache ? new SearchCache<SearchResult>(config.cache) : null;
 
   const ai = createAIProvider(config.ai);
   const ct = createCommercetoolsClient(config.commercetools);
@@ -45,12 +67,57 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
     return resolveSearchLocales({ defaults: config.defaults, request });
   }
 
+  function finishTimings(timer: ReturnType<typeof createSearchTimer>) {
+    if (!shouldIncludeSearchTimings()) {
+      return {};
+    }
+
+    const timings = timer.finish();
+    logSearchTrace("timings", {
+      steps: timings.steps,
+      totalMs: timings.totalMs,
+    });
+    return {
+      timings: timings.steps,
+      totalMs: timings.totalMs,
+    };
+  }
+
+  function withTimings<T extends SearchResult>(
+    result: T,
+    timer: ReturnType<typeof createSearchTimer>,
+  ): T {
+    return {
+      ...result,
+      meta: {
+        ...result.meta,
+        ...finishTimings(timer),
+      },
+    };
+  }
+
   async function executeSearch(
-    interpreted: Awaited<ReturnType<typeof ai.interpretTextQuery>>,
+    interpreted: InterpretedSearchQuery,
     locales: SearchLocaleContext,
     searchLimit: number,
     offset = 0,
+    timer?: ReturnType<typeof createSearchTimer>,
   ): Promise<SearchResult> {
+    const interpretedCacheKey = buildInterpretedSearchCacheKey(
+      JSON.stringify({
+        searchTerms: interpreted.searchTerms,
+        sort: interpreted.sort,
+        filters: interpreted.filters,
+      }),
+      locales.catalogLocale,
+      searchLimit,
+    );
+    const cached = resultCache?.get(`${interpretedCacheKey}|${offset}`);
+    if (cached) {
+      timer?.mark("cache_hit");
+      return cached;
+    }
+
     const body = buildProductSearchBody(interpreted, locales.catalogLocale, searchLimit, offset);
 
     logSearchTrace("ai", {
@@ -59,13 +126,27 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
       catalogLocale: locales.catalogLocale,
     });
 
-    const { productIds, total } = await ct.searchProducts(body, { currency });
-    const products = await ct.getProductProjections(productIds, locales.catalogLocale, currency);
+    const searchResult = await withTimeout(
+      ct.searchProducts(body, { currency, locale: locales.catalogLocale }),
+      timeouts.commercetoolsMs,
+      "ct_search",
+    );
+    timer?.mark("ct_search");
 
-    return {
+    let products = searchResult.projections;
+    if (!products) {
+      products = await withTimeout(
+        ct.getProductProjections(productIdsFrom(searchResult), locales.catalogLocale, currency),
+        timeouts.commercetoolsMs,
+        "ct_projections",
+      );
+      timer?.mark("ct_projections");
+    }
+
+    const result: SearchResult = {
       products,
       meta: {
-        total,
+        total: searchResult.total,
         limit: searchLimit,
         offset,
         locale: locales.catalogLocale,
@@ -74,12 +155,82 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
         queryInterpretation: interpreted.interpretation,
       },
     };
+
+    resultCache?.set(`${interpretedCacheKey}|${offset}`, result);
+    return result;
+  }
+
+  async function interpretVoice(
+    audio: Uint8Array,
+    mimeType: string,
+    locales: SearchLocaleContext,
+    timer: ReturnType<typeof createSearchTimer>,
+  ): Promise<VoiceAudioInterpretation> {
+    if (voiceMode === "openrouter-audio") {
+      if (config.ai.provider !== "openrouter") {
+        throw new Error("CAT_VOICE_MODE=openrouter-audio requires CAT_AI_PROVIDER=openrouter");
+      }
+
+      const result = await withTimeout(
+        ai.interpretVoiceAudio(audio, mimeType, locales),
+        timeouts.aiVoiceAudioMs,
+        "ai_voice_audio",
+      );
+      timer.mark("ai_voice_audio");
+      return result;
+    }
+
+    if (!deps.transcribeAudio) {
+      throw new Error(
+        "Voice search requires ElevenLabs STT (CAT_VOICE_MODE=elevenlabs-stt) or OpenRouter audio (CAT_VOICE_MODE=openrouter-audio)",
+      );
+    }
+
+    const transcript = await withTimeout(
+      deps.transcribeAudio(audio, mimeType),
+      timeouts.aiVoiceAudioMs,
+      "stt",
+    );
+    timer.mark("stt");
+
+    const enhancedQuery = await withTimeout(
+      ai.enhanceVoiceTranscript(transcript, locales),
+      timeouts.aiTextMs,
+      "ai_enhance",
+    );
+    timer.mark("ai_enhance");
+
+    const interpreted = await withTimeout(
+      ai.interpretTextQuery(enhancedQuery, locales),
+      timeouts.aiTextMs,
+      "ai_interpret",
+    );
+    timer.mark("ai_interpret");
+
+    return {
+      transcript,
+      enhancedQuery,
+      ...interpreted,
+    };
   }
 
   return {
     async searchByText(request) {
       const locales = resolveLocales(request);
       const searchLimit = request.limit ?? limit;
+      const timer = createSearchTimer();
+
+      const cacheKey = buildTextSearchCacheKey(
+        request.query,
+        locales.queryLocale,
+        locales.catalogLocale,
+        searchLimit,
+      );
+      const cached = resultCache?.get(`${cacheKey}|${request.offset ?? 0}`);
+      if (cached) {
+        timer.mark("cache_hit");
+        return withTimings(cached, timer);
+      }
 
       logSearchTrace("input", {
         query: request.query,
@@ -87,58 +238,71 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
         catalogLocale: locales.catalogLocale,
       });
 
-      const interpreted = await ai.interpretTextQuery(request.query, locales);
-      return executeSearch(interpreted, locales, searchLimit, request.offset ?? 0);
+      const interpreted = await withTimeout(
+        ai.interpretTextQuery(request.query, locales),
+        timeouts.aiTextMs,
+        "ai_interpret",
+      );
+      timer.mark("ai_interpret");
+
+      const result = await executeSearch(
+        interpreted,
+        locales,
+        searchLimit,
+        request.offset ?? 0,
+        timer,
+      );
+      resultCache?.set(`${cacheKey}|${request.offset ?? 0}`, result);
+      return withTimings(result, timer);
     },
 
     async searchByVoice(audio, mimeType, options = {}) {
-      if (!deps.transcribeAudio) {
-        throw new Error("Voice search requires a transcribeAudio implementation");
-      }
-
       const locales = resolveLocales(options);
       const searchLimit = options.limit ?? limit;
+      const timer = createSearchTimer();
 
       logSearchTrace("input", {
         type: "voice",
         mimeType,
+        voiceMode,
         queryLocale: locales.queryLocale,
         catalogLocale: locales.catalogLocale,
       });
 
-      const transcript = await deps.transcribeAudio(audio, mimeType);
-      const enhancedQuery = await ai.enhanceVoiceTranscript(transcript, locales);
-      const interpreted = await ai.interpretTextQuery(enhancedQuery, locales);
-      const result = await executeSearch(interpreted, locales, searchLimit);
-
-      let ttsText: string | undefined;
-      if (options.enableTts !== false) {
-        try {
-          ttsText = await ai.summarizeVoiceResults(
-            result.products.length,
-            result.products[0]?.name,
-            locales,
-          );
-        } catch {
-          ttsText = buildTtsSummaryFallback(
-            result.products.length,
-            result.products[0]?.name,
-            locales.queryLocale,
-          );
-        }
+      const voiceCacheKey = [
+        "voice",
+        voiceMode,
+        uint8ArrayToBase64(audio.slice(0, 256)),
+        String(audio.length),
+        locales.queryLocale,
+        locales.catalogLocale,
+        String(searchLimit),
+      ].join("|");
+      const cachedVoice = resultCache?.get(voiceCacheKey);
+      if (cachedVoice && isVoiceSearchResult(cachedVoice)) {
+        timer.mark("cache_hit");
+        return withTimings(cachedVoice, timer);
       }
 
-      return {
+      const voiceInterpretation = await interpretVoice(audio, mimeType, locales, timer);
+      const { transcript, enhancedQuery, ...interpreted } = voiceInterpretation;
+      const result = await executeSearch(interpreted, locales, searchLimit, 0, timer);
+
+      const voiceResult: VoiceSearchResult & { ttsText?: string } = {
         ...result,
         transcript,
         enhancedQuery,
-        ttsText,
       };
+
+      const withTts = await attachVoiceTts(voiceResult, options, locales, ai, timer, timeouts.aiTextMs);
+      resultCache?.set(voiceCacheKey, withTts);
+      return withTimings(withTts, timer);
     },
 
     async searchByImage(image, mimeType, options = {}) {
       const locales = resolveLocales(options);
       const searchLimit = options.limit ?? limit;
+      const timer = createSearchTimer();
 
       logSearchTrace("input", {
         type: "image",
@@ -148,26 +312,77 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
       });
 
       const base64 = uint8ArrayToBase64(image);
-      const interpreted = await ai.interpretImageQuery(base64, mimeType, locales);
-      const result = await executeSearch(interpreted, locales, searchLimit);
+      const interpreted = await withTimeout(
+        ai.interpretImageQuery(base64, mimeType, locales),
+        timeouts.aiImageMs,
+        "ai_interpret_image",
+      );
+      timer.mark("ai_interpret_image");
 
+      const result = await executeSearch(interpreted, locales, searchLimit, 0, timer);
       return {
-        ...result,
+        ...withTimings(result, timer),
         interpretation: interpreted.interpretation,
       };
     },
   };
 }
 
-function uint8ArrayToBase64(bytes: Uint8Array): string {
-  if (typeof Buffer !== "undefined") {
-    return Buffer.from(bytes).toString("base64");
+function resolveVoiceMode(config: CommerceAIConfig): VoiceMode {
+  if (config.voiceMode) {
+    return config.voiceMode;
   }
 
-  let binary = "";
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]!);
+  if (config.ai.provider === "openrouter") {
+    return "openrouter-audio";
   }
 
-  return btoa(binary);
+  return "elevenlabs-stt";
+}
+
+function productIdsFrom(searchResult: { productIds: string[] }): string[] {
+  return searchResult.productIds;
+}
+
+function isVoiceSearchResult(
+  result: SearchResult,
+): result is VoiceSearchResult & { ttsText?: string } {
+  return "transcript" in result && typeof result.transcript === "string";
+}
+
+async function attachVoiceTts(
+  result: VoiceSearchResult & { ttsText?: string },
+  options: { enableTts?: boolean },
+  locales: SearchLocaleContext,
+  ai: AIProvider,
+  timer: ReturnType<typeof createSearchTimer>,
+  aiTextTimeoutMs: number,
+): Promise<VoiceSearchResult & { ttsText?: string }> {
+  if (options.enableTts === false) {
+    return result;
+  }
+
+  if (result.ttsText) {
+    return result;
+  }
+
+  try {
+    const ttsText = await withTimeout(
+      ai.summarizeVoiceResults(result.products.length, result.products[0]?.name, locales),
+      aiTextTimeoutMs,
+      "ai_tts_summary",
+    );
+    timer.mark("ai_tts_summary");
+    return { ...result, ttsText };
+  } catch {
+    timer.mark("ai_tts_summary_fallback");
+    return {
+      ...result,
+      ttsText: buildTtsSummaryFallback(
+        result.products.length,
+        result.products[0]?.name,
+        locales.queryLocale,
+      ),
+    };
+  }
 }
