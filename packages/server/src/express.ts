@@ -53,9 +53,11 @@ export function mountCommerceAIRoutes(app: Express, options: ExpressRouterOption
   app.use(createExpressRouter(options));
 }
 
+import type { HandlerResponse } from "./handler-response.js";
+
 function sendHandlerResponse(
   res: Response,
-  handlerResponse: { status: number; headers?: Record<string, string>; body: string | Buffer },
+  handlerResponse: HandlerResponse,
 ): void {
   if (handlerResponse.headers) {
     for (const [key, value] of Object.entries(handlerResponse.headers)) {

@@ -1,26 +1,16 @@
+import type { IncomingMessage } from "node:http";
 import type { CommerceAIServer } from "./server.js";
-import { logSearchTrace, SearchTimeoutError } from "@commerce-ai-tool/core";
-import { logServerError, logServerWarning } from "./utils/log-error.js";
-import { parseSearchLocaleOptions } from "./utils/locale.js";
+import { errorResponse, jsonResponse, type HandlerResponse } from "./handler-response.js";
+import {
+  executeSearch,
+  executeSearchImage,
+  executeSearchVoice,
+  executeTts,
+  mapRouteError,
+} from "./route-actions.js";
 import { parseMultipart, readJsonBody } from "./utils/multipart.js";
 
-export interface HandlerResponse {
-  status: number;
-  headers?: Record<string, string>;
-  body: string | Buffer;
-}
-
-function jsonResponse(data: unknown, status = 200): HandlerResponse {
-  return {
-    status,
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  };
-}
-
-function errorResponse(message: string, status = 500): HandlerResponse {
-  return jsonResponse({ error: message }, status);
-}
+export type { HandlerResponse } from "./handler-response.js";
 
 export function createHandlers(server: CommerceAIServer) {
   return {
@@ -28,7 +18,7 @@ export function createHandlers(server: CommerceAIServer) {
       return jsonResponse({ status: "ok" });
     },
 
-    async search(req: import("node:http").IncomingMessage): Promise<HandlerResponse> {
+    async search(req: IncomingMessage): Promise<HandlerResponse> {
       try {
         const body = await readJsonBody<{
           query: string;
@@ -38,129 +28,51 @@ export function createHandlers(server: CommerceAIServer) {
           limit?: number;
         }>(req);
 
-        if (!body.query?.trim()) {
-          return errorResponse("query is required", 400);
-        }
-
-        const localeOptions = parseSearchLocaleOptions(body);
-        logSearchTrace("handler", {
-          type: "text",
-          query: body.query,
-          queryLocale: localeOptions.queryLocale,
-          catalogLocale: localeOptions.catalogLocale,
-        });
-
-        const result = await server.orchestrator.searchByText({
-          query: body.query,
-          ...localeOptions,
-          limit: body.limit,
-        });
-
+        const result = await executeSearch(server, body);
         return jsonResponse(result);
       } catch (error) {
-        logServerError("search", error);
-        return errorResponse(error instanceof Error ? error.message : "Search failed");
+        const mapped = mapRouteError(error, "search", "Search failed");
+        return errorResponse(mapped.message, mapped.status);
       }
     },
 
-    async searchVoice(req: import("node:http").IncomingMessage): Promise<HandlerResponse> {
+    async searchVoice(req: IncomingMessage): Promise<HandlerResponse> {
+      let fields: Record<string, string> = {};
+      let file: Awaited<ReturnType<typeof parseMultipart>>["file"];
+
       try {
-        const { fields, file } = await parseMultipart(req);
+        const parsed = await parseMultipart(req);
+        fields = parsed.fields;
+        file = parsed.file;
 
-        if (!file) {
-          return errorResponse("audio file is required", 400);
-        }
-
-        const localeOptions = parseSearchLocaleOptions(fields);
-        logSearchTrace("handler", {
-          type: "voice",
-          mimeType: file.mimeType,
-          queryLocale: localeOptions.queryLocale,
-          catalogLocale: localeOptions.catalogLocale,
-        });
-
-        const result = await server.orchestrator.searchByVoice(
-          new Uint8Array(file.buffer),
-          file.mimeType,
-          {
-            ...localeOptions,
-            limit: fields.limit ? Number(fields.limit) : undefined,
-            enableTts: fields.enableTts !== "false",
-          },
-        );
-
-        const blockingTts = fields.blockingTts === "true";
-        let audioSummary: string | undefined;
-        if (blockingTts && result.ttsText) {
-          try {
-            const audio = await server.synthesizeSpeech(result.ttsText);
-            audioSummary = audio.toString("base64");
-          } catch (error) {
-            logServerWarning("searchVoice", "TTS summary skipped", {
-              reason: error instanceof Error ? error.message : "unknown",
-            });
-          }
-        }
-
-        return jsonResponse({
-          transcript: result.transcript,
-          enhancedQuery: result.enhancedQuery,
-          products: result.products,
-          meta: result.meta,
-          ttsText: result.ttsText,
-          audioSummary,
-          ttsPending: Boolean(result.ttsText && !audioSummary),
-        });
-      } catch (error) {
-        if (error instanceof SearchTimeoutError) {
-          return errorResponse(error.message, 504);
-        }
-        logServerError("searchVoice", error);
-        return errorResponse(error instanceof Error ? error.message : "Voice search failed");
-      }
-    },
-
-    async searchImage(req: import("node:http").IncomingMessage): Promise<HandlerResponse> {
-      try {
-        const { fields, file } = await parseMultipart(req);
-
-        if (!file) {
-          return errorResponse("image file is required", 400);
-        }
-
-        const localeOptions = parseSearchLocaleOptions(fields);
-        logSearchTrace("handler", {
-          type: "image",
-          mimeType: file.mimeType,
-          queryLocale: localeOptions.queryLocale,
-          catalogLocale: localeOptions.catalogLocale,
-        });
-
-        const result = await server.orchestrator.searchByImage(
-          new Uint8Array(file.buffer),
-          file.mimeType,
-          {
-            ...localeOptions,
-            limit: fields.limit ? Number(fields.limit) : undefined,
-          },
-        );
-
+        const result = await executeSearchVoice(server, fields, file);
         return jsonResponse(result);
       } catch (error) {
-        logServerError("searchImage", error);
-        return errorResponse(error instanceof Error ? error.message : "Image search failed");
+        const mapped = mapRouteError(error, "searchVoice", "Voice search failed", {
+          queryLocale: fields.queryLocale ?? fields.locale,
+          catalogLocale: fields.catalogLocale,
+          mimeType: file?.mimeType,
+          size: file?.buffer.length,
+        });
+        return errorResponse(mapped.message, mapped.status);
       }
     },
 
-    async tts(req: import("node:http").IncomingMessage): Promise<HandlerResponse> {
+    async searchImage(req: IncomingMessage): Promise<HandlerResponse> {
+      try {
+        const { fields, file } = await parseMultipart(req);
+        const result = await executeSearchImage(server, fields, file);
+        return jsonResponse(result);
+      } catch (error) {
+        const mapped = mapRouteError(error, "searchImage", "Image search failed");
+        return errorResponse(mapped.message, mapped.status);
+      }
+    },
+
+    async tts(req: IncomingMessage): Promise<HandlerResponse> {
       try {
         const body = await readJsonBody<{ text: string }>(req);
-
-        if (!body.text?.trim()) {
-          return errorResponse("text is required", 400);
-        }
-
-        const audio = await server.synthesizeSpeech(body.text);
+        const audio = await executeTts(server, body.text);
 
         return {
           status: 200,
@@ -168,8 +80,8 @@ export function createHandlers(server: CommerceAIServer) {
           body: audio,
         };
       } catch (error) {
-        logServerError("tts", error);
-        return errorResponse(error instanceof Error ? error.message : "TTS failed");
+        const mapped = mapRouteError(error, "tts", "TTS failed");
+        return errorResponse(mapped.message, mapped.status);
       }
     },
   };
