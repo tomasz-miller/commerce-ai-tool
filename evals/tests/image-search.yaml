@@ -1,0 +1,36 @@
+- description: Red sports shoes image translated to Norwegian catalog terms
+  vars:
+    imageFile: red-shoes.jpeg
+    queryLocale: en
+    catalogLocale: no
+  assert:
+    - type: javascript
+      value: JSON.parse(output).searchTerms.length > 0
+    - type: javascript
+      value: |
+        const terms = JSON.parse(output).searchTerms.join(' ').toLowerCase();
+        return terms.includes('rød') || terms.includes('røde') || terms.includes('sko');
+
+- description: Wallpaper knife image mapped to Norwegian catalog term
+  vars:
+    imageFile: wallpaper-knife.jpeg
+    queryLocale: en
+    catalogLocale: no
+  assert:
+    - type: javascript
+      value: JSON.parse(output).searchTerms.length > 0
+    - type: javascript
+      value: |
+        const terms = JSON.parse(output).searchTerms.join(' ').toLowerCase();
+        return terms.includes('tapetkniv');
+
+- description: Non-commerce landscape image still returns valid structured output
+  vars:
+    imageFile: sky-above-forest.jpeg
+    queryLocale: en
+    catalogLocale: no
+  assert:
+    - type: javascript
+      value: |
+        const parsed = JSON.parse(output);
+        return typeof parsed.interpretation === 'string' && parsed.interpretation.length > 0;

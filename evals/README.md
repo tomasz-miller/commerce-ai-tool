@@ -77,6 +77,23 @@ Force fresh API calls:
 promptfoo eval -c evals/promptfooconfig.voice.yaml --no-cache
 ```
 
+### Image search evals (vision)
+
+Regression tests for `interpretImageQuery` on compressed JPEG fixtures:
+
+```bash
+pnpm eval:fixtures:images   # resize/compress fixtures (macOS sips or ffmpeg)
+pnpm eval:promptfoo:image
+```
+
+Provider in [`promptfooconfig.image.yaml`](promptfooconfig.image.yaml) uses `OPENROUTER_VISION_MODEL` (default: `google/gemini-3.1-flash-lite-preview`). Fixtures live in [`fixtures/images/`](fixtures/images/) — see README there for scenarios and size targets.
+
+Force fresh API calls:
+
+```bash
+promptfoo eval -c evals/promptfooconfig.image.yaml --no-cache
+```
+
 The provider loads `evals/.env` when present. You can also export `OPENROUTER_API_KEY` in your shell.
 
 ### View results in the web UI
@@ -143,18 +160,24 @@ promptfoo eval -c evals/promptfooconfig.yaml --no-cache
 evals/
   promptfooconfig.yaml           # Text search evals
   promptfooconfig.voice.yaml     # Voice audio + baseline matrix
+  promptfooconfig.image.yaml     # Image search vision evals
   providers/
     eval-utils.ts                # Shared env + fixture helpers
+    eval-utils.test.ts           # Deterministic fixture helper tests
     text-search-provider.ts      # Bridges Promptfoo → interpretTextQuery
+    image-search-provider.ts     # Image fixture → interpretImageQuery
     voice-baseline-provider.ts   # Transcript baseline providers
     voice-audio-provider.ts      # Audio fixture → interpretVoiceAudio
   tests/
     text-search.yaml             # Text search cases
     voice-search.yaml            # Voice cases (transcript + audioFile)
+    image-search.yaml            # Image cases (imageFile)
   fixtures/
     audio/                       # WAV clips (see README inside)
+    images/                      # JPEG clips (see README inside)
   scripts/
     generate-audio-fixtures.sh   # macOS TTS fixture generator
+    compress-image-fixtures.sh   # Resize/compress image fixtures
   .env.example                   # Template for OPENROUTER_API_KEY
 ```
 

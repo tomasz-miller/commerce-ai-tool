@@ -51,9 +51,40 @@ export function readAudioFixture(filename: string): { bytes: Uint8Array; mimeTyp
   return { bytes, mimeType };
 }
 
+export function resolveImageFixturePath(filename: string): string {
+  const evalDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+  return resolve(evalDir, "fixtures", "images", filename);
+}
+
+function imageMimeTypeFromFilename(filename: string): string {
+  const lower = filename.toLowerCase();
+  if (lower.endsWith(".png")) {
+    return "image/png";
+  }
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
+    return "image/jpeg";
+  }
+  throw new Error(`Unsupported image fixture extension: ${filename}`);
+}
+
+export function readImageFixture(filename: string): { bytes: Uint8Array; mimeType: string } {
+  const filePath = resolveImageFixturePath(filename);
+  if (!existsSync(filePath)) {
+    throw new Error(
+      `Missing image fixture: ${filePath}. Run: pnpm eval:fixtures:images`,
+    );
+  }
+
+  const bytes = new Uint8Array(readFileSync(filePath));
+  const mimeType = imageMimeTypeFromFilename(filename);
+
+  return { bytes, mimeType };
+}
+
 export function createOpenRouterProviderOptions(options: {
   id?: string;
   model?: string;
+  visionModel?: string;
   voiceModel?: string;
 }) {
   const apiKey = process.env.OPENROUTER_API_KEY;
@@ -66,6 +97,7 @@ export function createOpenRouterProviderOptions(options: {
   return {
     apiKey,
     model: options.model ?? process.env.OPENROUTER_MODEL,
+    visionModel: options.visionModel ?? process.env.OPENROUTER_VISION_MODEL,
     voiceModel: options.voiceModel ?? process.env.OPENROUTER_VOICE_MODEL,
   };
 }

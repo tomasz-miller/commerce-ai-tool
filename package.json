@@ -16,8 +16,10 @@
     "release": "pnpm build && changeset publish",
     "eval:promptfoo": "pnpm build && promptfoo eval -c evals/promptfooconfig.yaml",
     "eval:promptfoo:voice": "pnpm build && promptfoo eval -c evals/promptfooconfig.voice.yaml",
+    "eval:promptfoo:image": "pnpm build && promptfoo eval -c evals/promptfooconfig.image.yaml",
     "eval:promptfoo:view": "promptfoo view",
-    "eval:fixtures:audio": "bash evals/scripts/generate-audio-fixtures.sh"
+    "eval:fixtures:audio": "bash evals/scripts/generate-audio-fixtures.sh",
+    "eval:fixtures:images": "bash evals/scripts/compress-image-fixtures.sh"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.0",
