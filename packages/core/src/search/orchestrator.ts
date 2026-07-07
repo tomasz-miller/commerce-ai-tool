@@ -7,7 +7,8 @@ import {
 } from "../cache/search-cache.js";
 import { createCommercetoolsClient } from "../commercetools/client.js";
 import { resolveSearchLocales } from "../locale/resolve.js";
-import { buildProductSearchBody } from "../prompts/index.js";
+import { hasSearchableContent } from "../commercetools/query-builder.js";
+import type { ProductSearchBuildInput } from "../commercetools/query-builder.js";
 import { buildTtsSummaryFallback } from "./voice-tts.js";
 import { logSearchTrace } from "../utils/dev-trace.js";
 import { createSearchTimer, shouldIncludeSearchTimings } from "../utils/search-timer.js";
@@ -118,16 +119,42 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
       return cached;
     }
 
-    const body = buildProductSearchBody(interpreted, locales.catalogLocale, searchLimit, offset);
+    if (!hasSearchableContent(interpreted)) {
+      return {
+        products: [],
+        meta: {
+          total: 0,
+          limit: searchLimit,
+          offset,
+          locale: locales.catalogLocale,
+          catalogLocale: locales.catalogLocale,
+          queryLocale: locales.queryLocale,
+          queryInterpretation: interpreted.interpretation,
+        },
+      };
+    }
+
+    const searchInput: ProductSearchBuildInput = {
+      interpreted,
+      catalogLocale: locales.catalogLocale,
+      limit: searchLimit,
+      offset,
+      options: {
+        currency,
+        storeKey: config.defaults?.storeKey,
+        storeScopeEnabled: false,
+      },
+    };
 
     logSearchTrace("ai", {
       searchTerms: interpreted.searchTerms,
+      filters: interpreted.filters,
       interpretation: interpreted.interpretation,
       catalogLocale: locales.catalogLocale,
     });
 
     const searchResult = await withTimeout(
-      ct.searchProducts(body, { currency, locale: locales.catalogLocale }),
+      ct.searchProducts(searchInput, { currency, locale: locales.catalogLocale }),
       timeouts.commercetoolsMs,
       "ct_search",
     );

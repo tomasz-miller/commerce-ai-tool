@@ -48,6 +48,34 @@
     - type: javascript
       value: JSON.parse(output).sort === 'price_asc'
 
+- description: Red shoes with color filter extracted
+  vars:
+    query: red running shoes
+    queryLocale: en
+    catalogLocale: no
+  assert:
+    - type: javascript
+      value: JSON.parse(output).searchTerms.length > 0
+    - type: javascript
+      value: |
+        const parsed = JSON.parse(output);
+        const terms = parsed.searchTerms.join(' ').toLowerCase();
+        const hasColorFilter = parsed.filters && typeof parsed.filters.color === 'string' && parsed.filters.color.length > 0;
+        return (terms.includes('rød') || terms.includes('røde')) && (terms.includes('sko') || terms.includes('løp')) || hasColorFilter;
+
+- description: Price filter intent (shoes under 500 NOK)
+  vars:
+    query: shoes under 500 kr
+    queryLocale: no
+    catalogLocale: no
+  assert:
+    - type: javascript
+      value: JSON.parse(output).searchTerms.length > 0
+    - type: javascript
+      value: |
+        const parsed = JSON.parse(output);
+        return parsed.filters && (parsed.filters.priceMax === '500' || Number(parsed.filters.priceMax) === 500);
+
 - description: Price descending sort intent (most expensive laptop)
   vars:
     query: most expensive laptop

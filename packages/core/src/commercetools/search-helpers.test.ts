@@ -5,6 +5,7 @@ import {
   extractSearchTerms,
   isProductSearchUnavailable,
 } from "./search-helpers.js";
+import { buildProductSearchRequest } from "./query-builder.js";
 
 describe("extractProductSearchIds", () => {
   it("reads id from Product Search API results", () => {
@@ -26,44 +27,45 @@ describe("extractProductSearchIds", () => {
 });
 
 describe("extractSearchTerms", () => {
-  it("extracts a single fullText query", () => {
-    expect(
-      extractSearchTerms({
-        query: {
-          fullText: { field: "name", language: "en", value: "shoes" },
-        },
-      }),
-    ).toEqual({ terms: ["shoes"], locale: "en" });
+  it("extracts phrase from multi-field product search body", () => {
+    const body = buildProductSearchRequest({
+      interpreted: {
+        searchTerms: ["jacket"],
+        interpretation: "jacket",
+      },
+      catalogLocale: "en",
+    });
+
+    expect(extractSearchTerms(body)).toEqual({ terms: ["jacket"], locale: "en" });
   });
 
-  it("extracts OR terms", () => {
-    expect(
-      extractSearchTerms({
-        query: {
-          or: [
-            { fullText: { field: "name", language: "de", value: "schuhe" } },
-            { fullText: { field: "name", language: "de", value: "sneaker" } },
-          ],
-        },
-      }),
-    ).toEqual({ terms: ["schuhe", "sneaker"], locale: "de" });
+  it("joins terms from compound query into a single phrase", () => {
+    const body = buildProductSearchRequest({
+      interpreted: {
+        searchTerms: ["red", "dress"],
+        interpretation: "red dress",
+      },
+      catalogLocale: "de",
+    });
+
+    expect(extractSearchTerms(body)).toEqual({ terms: ["red dress"], locale: "de" });
   });
 });
 
 describe("buildProjectionSearchQueryArgs", () => {
   it("maps text search to projection search query args", () => {
     expect(
-      buildProjectionSearchQueryArgs(
-        {
-          limit: 10,
-          offset: 5,
-          query: {
-            fullText: { field: "name", language: "en", value: "jacket" },
-          },
-          sort: [{ field: "variants.prices.centAmount", order: "asc" }],
+      buildProjectionSearchQueryArgs({
+        interpreted: {
+          searchTerms: ["jacket"],
+          interpretation: "jacket",
+          sort: "price_asc",
         },
-        "EUR",
-      ),
+        catalogLocale: "en",
+        limit: 10,
+        offset: 5,
+        options: { currency: "EUR" },
+      }),
     ).toEqual({
       limit: 10,
       offset: 5,

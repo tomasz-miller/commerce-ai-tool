@@ -2,11 +2,17 @@ export type * from "./types/index.js";
 export { createAIProvider } from "./ai/factory.js";
 export type { AIProvider } from "./ai/types.js";
 export { createCommercetoolsClient } from "./commercetools/client.js";
-export type { CommercetoolsClient } from "./commercetools/client.js";
+export type { CommercetoolsClient, ProductSearchBuildInput, ProductSearchQueryOptions } from "./commercetools/client.js";
+export {
+  buildProductSearchBody,
+  buildProductSearchRequest,
+  buildProjectionSearchQueryArgs,
+  hasSearchableContent,
+  joinSearchTerms,
+} from "./commercetools/query-builder.js";
 export { createSearchOrchestrator } from "./search/orchestrator.js";
 export type { SearchOrchestrator } from "./search/orchestrator.js";
 export {
-  buildProductSearchBody,
   parseInterpretedQuery,
   parseVoiceAudioInterpretation,
 } from "./prompts/index.js";

@@ -5,9 +5,12 @@ import {
 } from "@commercetools/sdk-client-v2";
 import { createApiBuilderFromCtpClient, type ProductSearchRequest } from "@commercetools/platform-sdk";
 import type { CommercetoolsConfig, ProductCard } from "../types/index.js";
-import type { ProductSearchQueryBody } from "../types/index.js";
 import {
+  buildProductSearchRequest,
   buildProjectionSearchQueryArgs,
+  type ProductSearchBuildInput,
+} from "./query-builder.js";
+import {
   extractProductSearchIds,
   isProductSearchUnavailable,
   productSearchUnavailableMessage,
@@ -16,7 +19,7 @@ import { logSearchTrace } from "../utils/dev-trace.js";
 
 export interface CommercetoolsClient {
   searchProducts(
-    body: ProductSearchQueryBody,
+    input: ProductSearchBuildInput,
     options?: { currency?: string; locale?: string },
   ): Promise<{
     productIds: string[];
@@ -29,6 +32,8 @@ export interface CommercetoolsClient {
     currency?: string,
   ): Promise<ProductCard[]>;
 }
+
+export type { ProductSearchBuildInput, ProductSearchQueryOptions } from "./query-builder.js";
 
 export function createCommercetoolsClient(config: CommercetoolsConfig): CommercetoolsClient {
   const scopes = config.scopes ?? [
@@ -64,7 +69,11 @@ export function createCommercetoolsClient(config: CommercetoolsConfig): Commerce
   });
 
   return {
-    async searchProducts(body, options) {
+    async searchProducts(input, options) {
+      const body = buildProductSearchRequest(input);
+      const locale = options?.locale ?? input.catalogLocale;
+      const currency = options?.currency ?? input.options?.currency;
+
       try {
         return await searchWithProductSearchApi(apiRoot, body);
       } catch (error) {
@@ -79,9 +88,9 @@ export function createCommercetoolsClient(config: CommercetoolsConfig): Commerce
 
         return searchWithProductProjectionSearch(
           apiRoot,
-          body,
-          options?.currency,
-          options?.locale,
+          input,
+          currency,
+          locale,
         );
       }
     },
@@ -114,14 +123,14 @@ export function createCommercetoolsClient(config: CommercetoolsConfig): Commerce
 
 async function searchWithProductSearchApi(
   apiRoot: ReturnType<ReturnType<typeof createApiBuilderFromCtpClient>["withProjectKey"]>,
-  body: ProductSearchQueryBody,
+  body: ProductSearchRequest,
 ) {
   logSearchTrace("commercetools", { api: "products.search", request: body });
 
   const response = await apiRoot
     .products()
     .search()
-    .post({ body: body as ProductSearchRequest })
+    .post({ body })
     .execute();
 
   const results = response.body.results ?? [];
@@ -142,11 +151,17 @@ async function searchWithProductSearchApi(
 
 async function searchWithProductProjectionSearch(
   apiRoot: ReturnType<ReturnType<typeof createApiBuilderFromCtpClient>["withProjectKey"]>,
-  body: ProductSearchQueryBody,
+  input: ProductSearchBuildInput,
   currency = "EUR",
   locale = "en",
 ) {
-  const queryArgs = buildProjectionSearchQueryArgs(body, currency);
+  const queryArgs = buildProjectionSearchQueryArgs({
+    ...input,
+    options: {
+      ...input.options,
+      currency: currency ?? input.options?.currency,
+    },
+  });
   logSearchTrace("commercetools", { api: "productProjections.search", request: queryArgs });
 
   const response = await apiRoot

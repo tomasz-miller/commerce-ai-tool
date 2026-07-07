@@ -79,7 +79,10 @@ Server env vars (see `apps/demo-next/.env.example`):
 
 - `CAT_CATALOG_LOCALE` — primary catalog language (e.g. `no` for Norwegian shops)
 - `CAT_DEFAULT_LOCALE` — deprecated alias for `CAT_CATALOG_LOCALE`
+- `CAT_STORE_KEY` — reserved for future store-scoped search (not applied until store scope is enabled in core)
 - `CAT_DEBUG=true` — structured dev tracing for search and commercetools calls
+
+Search queries are built in `@commerce-ai-tool/core` (`commercetools/query-builder.ts`): multi-field full-text (`name`, `searchKeywords`, `description`), optional fuzzy name matching, AI `filters` (color, brand, category, price range), and currency-scoped price sorting. Product Projection Search is used automatically when Product Search API is unavailable.
 
 ### 4. Add the widget
 

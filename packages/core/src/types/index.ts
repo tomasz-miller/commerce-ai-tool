@@ -139,9 +139,19 @@ export interface ImageSearchResult extends SearchResult {
   interpretation: string;
 }
 
+/** Standard filter keys returned by AI interpretation (all optional). */
+export interface InterpretedSearchFilters {
+  color?: string;
+  brand?: string;
+  category?: string;
+  priceMin?: string;
+  priceMax?: string;
+  [key: string]: string | undefined;
+}
+
 export interface InterpretedSearchQuery {
   searchTerms: string[];
-  filters?: Record<string, string>;
+  filters?: InterpretedSearchFilters;
   sort?: "relevance" | "price_asc" | "price_desc";
   interpretation: string;
 }
@@ -151,25 +161,5 @@ export interface VoiceAudioInterpretation extends InterpretedSearchQuery {
   enhancedQuery: string;
 }
 
-export interface ProductSearchQueryBody {
-  query?: {
-    fullText?: {
-      field: string;
-      language: string;
-      value: string;
-    };
-    or?: Array<{
-      fullText?: {
-        field: string;
-        language: string;
-        value: string;
-      };
-    }>;
-  };
-  limit?: number;
-  offset?: number;
-  sort?: Array<{
-    field: string;
-    order: "asc" | "desc";
-  }>;
-}
+/** @deprecated Use ProductSearchRequest from query-builder / platform-sdk */
+export type { ProductSearchRequest as ProductSearchQueryBody } from "@commercetools/platform-sdk";

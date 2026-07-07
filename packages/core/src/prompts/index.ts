@@ -1,10 +1,11 @@
 import type {
   InterpretedSearchQuery,
-  ProductSearchQueryBody,
   SearchLocaleContext,
   VoiceAudioInterpretation,
 } from "../types/index.js";
 import { parseModelJson } from "../utils/model-json.js";
+
+export { buildProductSearchBody, hasSearchableContent } from "../commercetools/query-builder.js";
 
 export const TEXT_QUERY_SYSTEM_PROMPT = `You are a product search assistant for a commercetools storefront.
 Given a natural language query, extract search terms and optional filters.
@@ -14,12 +15,20 @@ Never put the user's query language into searchTerms when it differs from the ca
 Write interpretation in the user's query language when known; otherwise use the catalog language.
 Respond with valid JSON only, matching this schema:
 {
-  "searchTerms": ["string"],
-  "filters": { "optionalKey": "optionalValue" },
+  "searchTerms": ["single short phrase in catalog language"],
+  "filters": {
+    "color": "optional color value",
+    "brand": "optional brand name",
+    "category": "optional category id or key",
+    "priceMin": "optional minimum price as a number string",
+    "priceMax": "optional maximum price as a number string"
+  },
   "sort": "relevance" | "price_asc" | "price_desc",
   "interpretation": "brief explanation of how you interpreted the query"
 }
 Use searchTerms for product names, brands, categories, or attributes.
+Return exactly one short primary search phrase in searchTerms (one array element).
+Put structured constraints (color, brand, category, price) in filters when the user mentions them.
 Keep searchTerms concise and commerce-focused.
 Examples when catalog language is Norwegian (no):
 - query "red shoes" → searchTerms: ["røde sko"]
@@ -33,8 +42,14 @@ Never use a language other than the catalog language in searchTerms.
 Write interpretation in the user's query language when provided.
 Respond with valid JSON only, matching this schema:
 {
-  "searchTerms": ["string"],
-  "filters": { "optionalKey": "optionalValue" },
+  "searchTerms": ["single short phrase in catalog language"],
+  "filters": {
+    "color": "optional color value",
+    "brand": "optional brand name",
+    "category": "optional category id or key",
+    "priceMin": "optional minimum price as a number string",
+    "priceMax": "optional maximum price as a number string"
+  },
   "sort": "relevance" | "price_asc" | "price_desc",
   "interpretation": "brief description of the product visible in the image"
 }
@@ -59,14 +74,22 @@ Respond with valid JSON only, matching this schema:
 {
   "transcript": "verbatim transcription of the audio",
   "enhancedQuery": "cleaned search phrase in the transcript language",
-  "searchTerms": ["string"],
-  "filters": { "optionalKey": "optionalValue" },
+  "searchTerms": ["single short phrase in catalog language"],
+  "filters": {
+    "color": "optional color value",
+    "brand": "optional brand name",
+    "category": "optional category id or key",
+    "priceMin": "optional minimum price as a number string",
+    "priceMax": "optional maximum price as a number string"
+  },
   "sort": "relevance" | "price_asc" | "price_desc",
   "interpretation": "brief explanation of how you interpreted the query"
 }
 Escape double quotes inside string values as \\".
 Do not wrap the JSON in markdown fences.
 Use searchTerms for product names, brands, categories, or attributes.
+Return exactly one short primary search phrase in searchTerms (one array element).
+Put structured constraints (color, brand, category, price) in filters when the user mentions them.
 Keep searchTerms concise and commerce-focused.
 Examples when catalog language is Norwegian (no):
 - speech "red shoes" → searchTerms: ["røde sko"]
@@ -97,51 +120,6 @@ export function buildVoiceEnhanceUserMessage(transcript: string, locales: Search
 
 export function buildVoiceAudioUserMessage(locales: SearchLocaleContext): string {
   return `${formatLocaleContext(locales)}\nListen to this voice search recording and extract search terms.`;
-}
-
-export function buildProductSearchBody(
-  interpreted: InterpretedSearchQuery,
-  catalogLocale: string,
-  limit = 20,
-  offset = 0,
-): ProductSearchQueryBody {
-  const terms = interpreted.searchTerms.filter(Boolean);
-  const primaryTerm = terms.join(" ");
-
-  const body: ProductSearchQueryBody = {
-    limit,
-    offset,
-  };
-
-  if (primaryTerm) {
-    if (terms.length === 1) {
-      body.query = {
-        fullText: {
-          field: "name",
-          language: catalogLocale,
-          value: primaryTerm,
-        },
-      };
-    } else {
-      body.query = {
-        or: terms.map((term) => ({
-          fullText: {
-            field: "name",
-            language: catalogLocale,
-            value: term,
-          },
-        })),
-      };
-    }
-  }
-
-  if (interpreted.sort === "price_asc") {
-    body.sort = [{ field: "variants.prices.centAmount", order: "asc" }];
-  } else if (interpreted.sort === "price_desc") {
-    body.sort = [{ field: "variants.prices.centAmount", order: "desc" }];
-  }
-
-  return body;
 }
 
 export function parseInterpretedQuery(json: string): InterpretedSearchQuery {

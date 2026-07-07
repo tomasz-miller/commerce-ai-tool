@@ -50,6 +50,18 @@ describe("parseInterpretedQuery", () => {
     expect(result.interpretation).toBe("Looking for Dell laptops");
   });
 
+  it("parses standardized filters", () => {
+    const result = parseInterpretedQuery(
+      JSON.stringify({
+        searchTerms: ["sko"],
+        filters: { color: "red", priceMax: "200" },
+        interpretation: "red shoes under 200",
+      }),
+    );
+
+    expect(result.filters).toEqual({ color: "red", priceMax: "200" });
+  });
+
   it("throws on invalid response", () => {
     expect(() => parseInterpretedQuery("{}")).toThrow();
   });
@@ -107,7 +119,7 @@ describe("parseVoiceAudioInterpretation", () => {
 });
 
 describe("buildProductSearchBody", () => {
-  it("builds fullText query for single term", () => {
+  it("builds multi-field fullText query for a single phrase", () => {
     const body = buildProductSearchBody(
       {
         searchTerms: ["shoes"],
@@ -118,12 +130,21 @@ describe("buildProductSearchBody", () => {
       10,
     );
 
-    expect(body.query?.fullText?.value).toBe("shoes");
-    expect(body.query?.fullText?.language).toBe("no");
     expect(body.limit).toBe(10);
+    expect(body.query).toMatchObject({
+      or: expect.arrayContaining([
+        expect.objectContaining({
+          fullText: expect.objectContaining({
+            value: "shoes",
+            language: "no",
+            mustMatch: "all",
+          }),
+        }),
+      ]),
+    });
   });
 
-  it("builds or query for multiple terms", () => {
+  it("joins multiple terms into one phrase", () => {
     const body = buildProductSearchBody(
       {
         searchTerms: ["red", "dress"],
@@ -133,6 +154,27 @@ describe("buildProductSearchBody", () => {
       "en",
     );
 
-    expect(body.query?.or).toHaveLength(2);
+    const orClause = (body.query as {
+      or?: Array<{ fullText?: { value?: string }; fuzzy?: { value?: string } }>;
+    }).or;
+    const values = orClause?.map((clause) => clause.fullText?.value ?? clause.fuzzy?.value);
+    expect(values?.every((value) => value === "red dress")).toBe(true);
+  });
+
+  it("includes filter expressions in the query", () => {
+    const body = buildProductSearchBody(
+      {
+        searchTerms: ["sko"],
+        filters: { color: "red" },
+        interpretation: "red shoes",
+        sort: "relevance",
+      },
+      "no",
+      10,
+      0,
+      { currency: "NOK" },
+    );
+
+    expect(JSON.stringify(body.query)).toContain("variants.attributes.color.key");
   });
 });

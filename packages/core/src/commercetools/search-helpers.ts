@@ -1,59 +1,65 @@
-import type { ProductSearchQueryBody } from "../types/index.js";
+import type { ProductSearchRequest } from "@commercetools/platform-sdk";
 
 export interface ExtractedSearchTerms {
   terms: string[];
   locale: string;
 }
 
-export function extractSearchTerms(body: ProductSearchQueryBody): ExtractedSearchTerms {
-  if (body.query?.fullText) {
-    return {
-      terms: [body.query.fullText.value],
-      locale: body.query.fullText.language,
-    };
-  }
+export function extractSearchTerms(body: ProductSearchRequest): ExtractedSearchTerms {
+  const terms: string[] = [];
+  let locale = "en";
 
-  if (body.query?.or) {
-    const terms = body.query.or
-      .map((clause) => clause.fullText?.value)
-      .filter((term): term is string => Boolean(term));
-    const locale = body.query.or[0]?.fullText?.language ?? "en";
+  walkQueryNode(body.query, terms, (foundLocale) => {
+    locale = foundLocale;
+  });
 
-    return { terms, locale };
-  }
+  const uniquePhrases = [...new Set(terms.map((term) => term.trim()).filter(Boolean))];
 
-  return { terms: [], locale: "en" };
-}
-
-export function buildProjectionSearchQueryArgs(
-  body: ProductSearchQueryBody,
-  currency?: string,
-): Record<string, string | number | boolean | string[]> {
-  const { terms, locale } = extractSearchTerms(body);
-  const textKey = `text.${locale}`;
-
-  const queryArgs: Record<string, string | number | boolean | string[]> = {
-    limit: body.limit ?? 20,
-    offset: body.offset ?? 0,
-    localeProjection: locale,
-    fuzzy: true,
+  return {
+    terms: uniquePhrases.length > 0 ? [uniquePhrases[0]!] : [],
+    locale,
   };
-
-  if (terms.length > 0) {
-    queryArgs[textKey] = terms.length === 1 ? terms[0]! : terms;
-  }
-
-  if (currency) {
-    queryArgs.priceCurrency = currency;
-  }
-
-  const sort = body.sort?.[0];
-  if (sort?.field === "variants.prices.centAmount") {
-    queryArgs.sort = sort.order === "asc" ? "price asc" : "price desc";
-  }
-
-  return queryArgs;
 }
+
+function walkQueryNode(
+  node: unknown,
+  terms: string[],
+  setLocale: (locale: string) => void,
+): void {
+  if (!node || typeof node !== "object") {
+    return;
+  }
+
+  const obj = node as Record<string, unknown>;
+
+  for (const key of ["fullText", "fuzzy"] as const) {
+    const expression = obj[key];
+    if (!expression || typeof expression !== "object") {
+      continue;
+    }
+
+    const typed = expression as { value?: string; language?: string };
+    if (typed.value) {
+      terms.push(typed.value);
+    }
+    if (typed.language) {
+      setLocale(typed.language);
+    }
+  }
+
+  for (const key of ["or", "and"] as const) {
+    const children = obj[key];
+    if (!Array.isArray(children)) {
+      continue;
+    }
+
+    for (const child of children) {
+      walkQueryNode(child, terms, setLocale);
+    }
+  }
+}
+
+export { buildProjectionSearchQueryArgs } from "./query-builder.js";
 
 export function extractProductSearchIds(
   results: Array<{ id?: string; productProjection?: { id?: string } }>,
