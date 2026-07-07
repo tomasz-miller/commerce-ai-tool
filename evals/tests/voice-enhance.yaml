@@ -1,0 +1,89 @@
+- description: Noisy English transcript with filler words (red shoes)
+  vars:
+    transcript: um, I want like, red shoes please
+    queryLocale: en
+    catalogLocale: no
+    expectedEnhanced: red shoes
+  assert:
+    - type: javascript
+      value: |
+        const text = output.trim();
+        if (!text) return false;
+        const lower = text.toLowerCase();
+        return !/\bum\b/.test(lower) && !/\blike\b/.test(lower);
+    - type: similar
+      value: "{{expectedEnhanced}}"
+      threshold: 0.8
+
+- description: Clean English product query (red shoes)
+  vars:
+    transcript: red shoes
+    queryLocale: en
+    catalogLocale: no
+    expectedEnhanced: red shoes
+  assert:
+    - type: javascript
+      value: output.trim().length > 0
+    - type: similar
+      value: "{{expectedEnhanced}}"
+      threshold: 0.85
+
+- description: Polish wallpaper knife transcript
+  vars:
+    transcript: nóż do tapet
+    queryLocale: pl
+    catalogLocale: no
+    expectedEnhanced: nóż do tapet
+  assert:
+    - type: javascript
+      value: output.trim().length > 0
+    - type: similar
+      value: "{{expectedEnhanced}}"
+      threshold: 0.8
+
+- description: Noisy Polish transcript with filler (wallpaper knife)
+  vars:
+    transcript: eee chciałbym nóż do tapet proszę
+    queryLocale: pl
+    catalogLocale: no
+    expectedEnhanced: nóż do tapet
+  assert:
+    - type: javascript
+      value: |
+        const text = output.trim();
+        if (!text) return false;
+        const lower = text.toLowerCase();
+        return lower.includes('nóż') || lower.includes('noz');
+    - type: similar
+      value: "{{expectedEnhanced}}"
+      threshold: 0.75
+
+- description: English price-focused query (cheapest running shoes)
+  vars:
+    transcript: um cheapest running shoes
+    queryLocale: en
+    catalogLocale: no
+    expectedEnhanced: cheapest running shoes
+  assert:
+    - type: javascript
+      value: |
+        const text = output.trim();
+        if (!text) return false;
+        const lower = text.toLowerCase();
+        return !/\bum\b/.test(lower);
+    - type: similar
+      value: "{{expectedEnhanced}}"
+      threshold: 0.8
+
+- description: Short non-commerce English greeting
+  vars:
+    transcript: hello
+    queryLocale: en
+    catalogLocale: no
+    expectedEnhanced: hello
+  assert:
+    - type: javascript
+      value: output.trim().length > 0
+    - type: similar
+      value: "{{expectedEnhanced}}"
+      threshold: 0.75

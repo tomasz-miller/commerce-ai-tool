@@ -1,0 +1,119 @@
+- description: Zero results in Polish
+  vars:
+    resultCount: 0
+    queryLocale: pl
+    catalogLocale: no
+    expectedSummary: Nie znaleziono produktów
+  assert:
+    - type: javascript
+      value: |
+        const lower = output.toLowerCase();
+        return /\b0\b/.test(output) || lower.includes('zero') || lower.includes('nie znaleziono') || lower.includes('brak');
+    - type: similar
+      value: "{{expectedSummary}}"
+      threshold: 0.7
+    - type: llm-rubric
+      value: |
+        The summary is one short spoken sentence in Polish (pl).
+        It must state that no products were found (0 results).
+        It must not mention a top product name.
+
+- description: One result in Polish with top product name
+  vars:
+    resultCount: 1
+    topProductName: Tapetkniv
+    queryLocale: pl
+    catalogLocale: no
+    expectedSummary: Znaleziono 1 produkt
+  assert:
+    - type: javascript
+      value: |
+        const lower = output.toLowerCase();
+        return /\b1\b/.test(output) || lower.includes('jeden') || lower.includes('znaleziono 1');
+    - type: similar
+      value: "{{expectedSummary}}"
+      threshold: 0.65
+    - type: llm-rubric
+      value: |
+        The summary is one short spoken sentence in Polish (pl).
+        It must mention exactly 1 result and reference the top product "Tapetkniv".
+
+- description: Five results in Polish with top product name
+  vars:
+    resultCount: 5
+    topProductName: Nóż
+    queryLocale: pl
+    catalogLocale: no
+    expectedSummary: Znaleziono 5 produktów
+  assert:
+    - type: javascript
+      value: |
+        const lower = output.toLowerCase();
+        return /\b5\b/.test(output) || lower.includes('pięć') || lower.includes('piec') || lower.includes('5 produkt');
+    - type: similar
+      value: "{{expectedSummary}}"
+      threshold: 0.65
+    - type: llm-rubric
+      value: |
+        The summary is one short spoken sentence in Polish (pl).
+        It must mention 5 results and reference the top product.
+
+- description: Two results in English (unsupported locale falls back to English)
+  vars:
+    resultCount: 2
+    queryLocale: fr
+    catalogLocale: no
+  assert:
+    - type: javascript
+      value: |
+        const lower = output.toLowerCase();
+        return /\b2\b/.test(output) || lower.includes('two') || lower.includes('deux');
+    - type: llm-rubric
+      value: |
+        The summary is one short spoken sentence in English.
+        It must mention 2 results.
+
+- description: One result in English with product name
+  vars:
+    resultCount: 1
+    topProductName: Red shoes
+    queryLocale: en
+    catalogLocale: no
+  assert:
+    - type: javascript
+      value: |
+        return /\b1\b/.test(output) || output.toLowerCase().includes('one');
+    - type: llm-rubric
+      value: |
+        The summary is one short spoken sentence in English.
+        It must mention 1 result and reference "Red shoes".
+
+- description: Zero results in English
+  vars:
+    resultCount: 0
+    queryLocale: en
+    catalogLocale: no
+  assert:
+    - type: javascript
+      value: |
+        const lower = output.toLowerCase();
+        return /\b0\b/.test(output) || lower.includes('no products') || lower.includes('found 0');
+    - type: llm-rubric
+      value: |
+        The summary is one short spoken sentence in English.
+        It must state that no products were found.
+
+- description: Three results in Polish without top product name
+  vars:
+    resultCount: 3
+    queryLocale: pl
+    catalogLocale: no
+  assert:
+    - type: javascript
+      value: |
+        const lower = output.toLowerCase();
+        return /\b3\b/.test(output) || lower.includes('trzy') || lower.includes('3 produkt');
+    - type: llm-rubric
+      value: |
+        The summary is one short spoken sentence in Polish (pl).
+        It must mention 3 results and must not invent a specific product name.

@@ -1,17 +1,17 @@
-import { createAIProvider } from "@commerce-ai-tool/core";
-import type { AIProvider } from "@commerce-ai-tool/core";
 import type { CallApiContextParams, ProviderOptions, ProviderResponse } from "promptfoo";
 import {
   DEFAULT_CATALOG_LOCALE,
-  createOpenRouterProviderOptions,
+  createEvalAIProvider,
+  createSkippedProviderResponse,
   loadEvalEnvFile,
+  readProviderConfig,
 } from "./eval-utils.ts";
 
 loadEvalEnvFile();
 
 export default class VoiceBaselineEvalProvider {
   private readonly providerId: string;
-  private readonly ai: AIProvider;
+  private readonly evalProvider;
   private readonly mode: "text-only" | "enhance-then-interpret";
 
   constructor(options: ProviderOptions) {
@@ -19,13 +19,7 @@ export default class VoiceBaselineEvalProvider {
     this.providerId = options.id ?? "commerce-voice-baseline";
     this.mode =
       config.mode === "enhance-then-interpret" ? "enhance-then-interpret" : "text-only";
-
-    this.ai = createAIProvider({
-      provider: "openrouter",
-      openrouter: createOpenRouterProviderOptions({
-        model: typeof config.model === "string" ? config.model : undefined,
-      }),
-    });
+    this.evalProvider = createEvalAIProvider(readProviderConfig(options));
   }
 
   id(): string {
@@ -33,6 +27,10 @@ export default class VoiceBaselineEvalProvider {
   }
 
   async callApi(_prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    if (this.evalProvider.skipped) {
+      return createSkippedProviderResponse(this.evalProvider.skipReason ?? "Provider unavailable");
+    }
+
     const vars = context?.vars ?? {};
     const transcript = String(vars.transcript ?? "");
     const catalogLocale = String(vars.catalogLocale ?? DEFAULT_CATALOG_LOCALE);
@@ -44,11 +42,12 @@ export default class VoiceBaselineEvalProvider {
 
     try {
       const locales = { queryLocale, catalogLocale };
+      const ai = this.evalProvider.ai!;
       const enhancedQuery =
         this.mode === "enhance-then-interpret"
-          ? await this.ai.enhanceVoiceTranscript(transcript, locales)
+          ? await ai.enhanceVoiceTranscript(transcript, locales)
           : transcript.trim();
-      const interpreted = await this.ai.interpretTextQuery(enhancedQuery, locales);
+      const interpreted = await ai.interpretTextQuery(enhancedQuery, locales);
 
       return {
         output: JSON.stringify(

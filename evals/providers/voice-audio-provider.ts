@@ -1,29 +1,30 @@
-import { createAIProvider } from "@commerce-ai-tool/core";
-import type { AIProvider } from "@commerce-ai-tool/core";
 import type { CallApiContextParams, ProviderOptions, ProviderResponse } from "promptfoo";
 import {
   DEFAULT_CATALOG_LOCALE,
-  createOpenRouterProviderOptions,
+  createEvalAIProvider,
+  createSkippedProviderResponse,
   loadEvalEnvFile,
   readAudioFixture,
+  readProviderConfig,
 } from "./eval-utils.ts";
 
 loadEvalEnvFile();
 
 export default class VoiceAudioEvalProvider {
   private readonly providerId: string;
-  private readonly ai: AIProvider;
+  private readonly evalProvider;
 
   constructor(options: ProviderOptions) {
     const config = options.config ?? {};
     this.providerId = options.id ?? "commerce-voice-audio";
-    this.ai = createAIProvider({
-      provider: "openrouter",
-      openrouter: createOpenRouterProviderOptions({
-        voiceModel: typeof config.voiceModel === "string" ? config.voiceModel : undefined,
-        model: typeof config.model === "string" ? config.model : undefined,
+    this.evalProvider = createEvalAIProvider(
+      readProviderConfig({
+        config: {
+          ...config,
+          provider: "openrouter",
+        },
       }),
-    });
+    );
   }
 
   id(): string {
@@ -31,6 +32,10 @@ export default class VoiceAudioEvalProvider {
   }
 
   async callApi(_prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    if (this.evalProvider.skipped) {
+      return createSkippedProviderResponse(this.evalProvider.skipReason ?? "Provider unavailable");
+    }
+
     const vars = context?.vars ?? {};
     const audioFile = String(vars.audioFile ?? "");
     const catalogLocale = String(vars.catalogLocale ?? DEFAULT_CATALOG_LOCALE);
@@ -42,7 +47,7 @@ export default class VoiceAudioEvalProvider {
 
     try {
       const { bytes, mimeType } = readAudioFixture(audioFile);
-      const result = await this.ai.interpretVoiceAudio(bytes, mimeType, {
+      const result = await this.evalProvider.ai!.interpretVoiceAudio(bytes, mimeType, {
         queryLocale,
         catalogLocale,
       });

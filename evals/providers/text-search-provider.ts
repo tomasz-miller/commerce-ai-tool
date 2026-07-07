@@ -1,27 +1,21 @@
-import { createAIProvider } from "@commerce-ai-tool/core";
-import type { AIProvider } from "@commerce-ai-tool/core";
 import type { CallApiContextParams, ProviderOptions, ProviderResponse } from "promptfoo";
 import {
   DEFAULT_CATALOG_LOCALE,
-  createOpenRouterProviderOptions,
+  createEvalAIProvider,
+  createSkippedProviderResponse,
   loadEvalEnvFile,
+  readProviderConfig,
 } from "./eval-utils.ts";
 
 loadEvalEnvFile();
 
 export default class TextSearchEvalProvider {
   private readonly providerId: string;
-  private readonly ai: AIProvider;
+  private readonly evalProvider;
 
   constructor(options: ProviderOptions) {
     this.providerId = options.id ?? "commerce-text-search";
-    this.ai = createAIProvider({
-      provider: "openrouter",
-      openrouter: createOpenRouterProviderOptions({
-        model:
-          typeof options.config?.model === "string" ? options.config.model : undefined,
-      }),
-    });
+    this.evalProvider = createEvalAIProvider(readProviderConfig(options));
   }
 
   id(): string {
@@ -29,6 +23,10 @@ export default class TextSearchEvalProvider {
   }
 
   async callApi(_prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    if (this.evalProvider.skipped) {
+      return createSkippedProviderResponse(this.evalProvider.skipReason ?? "Provider unavailable");
+    }
+
     const vars = context?.vars ?? {};
     const query = String(vars.query ?? "");
     const catalogLocale = String(vars.catalogLocale ?? DEFAULT_CATALOG_LOCALE);
@@ -39,7 +37,7 @@ export default class TextSearchEvalProvider {
     }
 
     try {
-      const result = await this.ai.interpretTextQuery(query, {
+      const result = await this.evalProvider.ai!.interpretTextQuery(query, {
         queryLocale,
         catalogLocale,
       });
