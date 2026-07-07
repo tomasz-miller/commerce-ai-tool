@@ -4,27 +4,18 @@ import {
   createEvalAIProvider,
   createSkippedProviderResponse,
   loadEvalEnvFile,
-  readAudioFixture,
   readProviderConfig,
 } from "./eval-utils.ts";
 
 loadEvalEnvFile();
 
-export default class VoiceAudioEvalProvider {
+export default class VoiceTtsEvalProvider {
   private readonly providerId: string;
   private readonly evalProvider;
 
   constructor(options: ProviderOptions) {
-    const config = options.config ?? {};
-    this.providerId = options.id ?? "commerce-voice-audio";
-    this.evalProvider = createEvalAIProvider(
-      readProviderConfig({
-        config: {
-          ...config,
-          provider: "openrouter",
-        },
-      }),
-    );
+    this.providerId = options.id ?? "commerce-voice-tts";
+    this.evalProvider = createEvalAIProvider(readProviderConfig(options));
   }
 
   id(): string {
@@ -37,24 +28,26 @@ export default class VoiceAudioEvalProvider {
     }
 
     const vars = context?.vars ?? {};
-    const audioFile = String(vars.audioFile ?? "");
+    const rawCount = vars.resultCount ?? vars.count;
+    const resultCount = Number(rawCount ?? 0);
+    const topProductName =
+      vars.topProductName === undefined || vars.topProductName === null || vars.topProductName === ""
+        ? undefined
+        : String(vars.topProductName);
     const catalogLocale = String(vars.catalogLocale ?? DEFAULT_CATALOG_LOCALE);
     const queryLocale = String(vars.queryLocale ?? catalogLocale);
 
-    if (!audioFile) {
-      return { error: "Missing test variable: audioFile" };
+    if (rawCount === undefined || rawCount === null || rawCount === "" || Number.isNaN(resultCount)) {
+      return { error: "Missing or invalid test variable: resultCount" };
     }
 
     try {
-      const { bytes, mimeType } = readAudioFixture(audioFile);
-      const result = await this.evalProvider.ai!.interpretVoiceAudio(bytes, mimeType, {
+      const summary = await this.evalProvider.ai!.summarizeVoiceResults(resultCount, topProductName, {
         queryLocale,
         catalogLocale,
       });
 
-      return {
-        output: JSON.stringify(result, null, 2),
-      };
+      return { output: summary };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return { error: message };

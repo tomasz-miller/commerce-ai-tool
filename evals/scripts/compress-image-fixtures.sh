@@ -8,26 +8,42 @@ JPEG_QUALITY=80
 
 mkdir -p "$IMG_DIR"
 
-if ! command -v sips >/dev/null 2>&1; then
-  echo "Error: macOS 'sips' is required to compress image fixtures." >&2
+if command -v sips >/dev/null 2>&1; then
+  compress_jpeg() {
+    local file="$1"
+    echo "Compressing JPEG: $file"
+    sips -Z "$MAX_EDGE" "$file" --out "$file" >/dev/null
+    sips -s format jpeg -s formatOptions "$JPEG_QUALITY" "$file" --out "$file" >/dev/null
+  }
+
+  convert_png_to_jpeg() {
+    local png="$1"
+    local jpeg="${png%.png}.jpeg"
+    echo "Converting PNG to JPEG: $png -> $jpeg"
+    sips -Z "$MAX_EDGE" "$png" --out "$jpeg" >/dev/null
+    sips -s format jpeg -s formatOptions "$JPEG_QUALITY" "$jpeg" --out "$jpeg" >/dev/null
+    rm -f "$png"
+  }
+elif command -v ffmpeg >/dev/null 2>&1; then
+  compress_jpeg() {
+    local file="$1"
+    local tmp="${file}.tmp.jpg"
+    echo "Compressing JPEG (ffmpeg): $file"
+    ffmpeg -y -i "$file" -vf "scale='min($MAX_EDGE,iw)':'min($MAX_EDGE,ih)':force_original_aspect_ratio=decrease" -q:v "$JPEG_QUALITY" "$tmp" >/dev/null 2>&1
+    mv "$tmp" "$file"
+  }
+
+  convert_png_to_jpeg() {
+    local png="$1"
+    local jpeg="${png%.png}.jpeg"
+    echo "Converting PNG to JPEG (ffmpeg): $png -> $jpeg"
+    ffmpeg -y -i "$png" -vf "scale='min($MAX_EDGE,iw)':'min($MAX_EDGE,ih)':force_original_aspect_ratio=decrease" -q:v "$JPEG_QUALITY" "$jpeg" >/dev/null 2>&1
+    rm -f "$png"
+  }
+else
+  echo "Error: 'sips' (macOS) or 'ffmpeg' is required to compress image fixtures." >&2
   exit 1
 fi
-
-compress_jpeg() {
-  local file="$1"
-  echo "Compressing JPEG: $file"
-  sips -Z "$MAX_EDGE" "$file" --out "$file" >/dev/null
-  sips -s format jpeg -s formatOptions "$JPEG_QUALITY" "$file" --out "$file" >/dev/null
-}
-
-convert_png_to_jpeg() {
-  local png="$1"
-  local jpeg="${png%.png}.jpeg"
-  echo "Converting PNG to JPEG: $png -> $jpeg"
-  sips -Z "$MAX_EDGE" "$png" --out "$jpeg" >/dev/null
-  sips -s format jpeg -s formatOptions "$JPEG_QUALITY" "$jpeg" --out "$jpeg" >/dev/null
-  rm -f "$png"
-}
 
 for file in "$IMG_DIR"/*.jpeg "$IMG_DIR"/*.jpg; do
   if [[ -f "$file" ]]; then

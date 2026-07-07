@@ -1,0 +1,90 @@
+name: Promptfoo evals
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: Eval suite to run (OpenRouter only; incurs API cost)
+        type: choice
+        options:
+          - text
+          - voice
+          - image
+          - voice-enhance
+          - voice-tts
+          - redteam
+          - all
+        default: text
+      no_cache:
+        description: Disable Promptfoo response cache
+        type: boolean
+        default: false
+
+jobs:
+  promptfoo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Run Promptfoo evals
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_MODEL: google/gemini-3.1-flash-lite-preview
+          OPENROUTER_VISION_MODEL: google/gemini-3.1-flash-lite-preview
+          OPENROUTER_VOICE_MODEL: google/gemini-2.5-flash
+          REDTEAM_PROVIDER_API_KEY: ${{ secrets.REDTEAM_PROVIDER_API_KEY }}
+        run: |
+          set -euo pipefail
+          CACHE_FLAG=""
+          if [ "${{ inputs.no_cache }}" = "true" ]; then
+            CACHE_FLAG="--no-cache"
+          fi
+
+          run_eval() {
+            local config="$1"
+            echo "Running: $config"
+            promptfoo eval -c "$config" $CACHE_FLAG
+          }
+
+          run_redteam() {
+            echo "Running redteam suite (higher API cost)"
+            promptfoo redteam run -c evals/promptfooconfig.redteam.yaml $CACHE_FLAG
+          }
+
+          case "${{ inputs.suite }}" in
+            text) run_eval evals/promptfooconfig.ts ;;
+            voice) run_eval evals/promptfooconfig.voice.ts ;;
+            image) run_eval evals/promptfooconfig.image.ts ;;
+            voice-enhance) run_eval evals/promptfooconfig.voice-enhance.yaml ;;
+            voice-tts) run_eval evals/promptfooconfig.voice-tts.yaml ;;
+            redteam) run_redteam ;;
+            all)
+              run_eval evals/promptfooconfig.ts
+              run_eval evals/promptfooconfig.voice.ts
+              run_eval evals/promptfooconfig.image.ts
+              run_eval evals/promptfooconfig.voice-enhance.yaml
+              run_eval evals/promptfooconfig.voice-tts.yaml
+              run_redteam
+              ;;
+          esac
+
+      - name: Upload Promptfoo results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: promptfoo-results-${{ inputs.suite }}
+          path: .promptfoo/
+          if-no-files-found: ignore

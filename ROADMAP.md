@@ -31,19 +31,38 @@ Local [Promptfoo](https://www.promptfoo.dev/) regression tests for AI prompts. C
 
 ### Done (voice evals — phase 0a)
 
-- [x] Voice Promptfoo config: `evals/promptfooconfig.voice.yaml`
+- [x] Voice Promptfoo config: `evals/promptfooconfig.voice.ts`
 - [x] Providers: transcript baseline + `interpretVoiceAudio` on WAV fixtures
 - [x] Model matrix: `gemini-2.0-flash-001` baseline vs `gemini-2.5-flash` / `gemini-2.0-flash-001` audio
 - [x] Script: `pnpm eval:promptfoo:voice`, `pnpm eval:fixtures:audio`
 - [x] Five committed WAV fixtures under `evals/fixtures/audio/`
 
-### Later phases
+### Done (voice enhance + TTS — phase 1)
 
-- [ ] Voice enhance + TTS summary evals (`similar` / `llm-rubric` assertions)
-- [ ] Red teaming (`promptfoo redteam`: prompt injection, jailbreak)
-- [ ] Image search evals (fixture images + `interpretImageQuery` provider)
-- [ ] Compare OpenRouter vs Bedrock models side-by-side in eval matrix
-- [ ] Optional CI workflow (manual dispatch; API cost + secrets)
+- [x] Voice enhance evals: `evals/promptfooconfig.voice-enhance.yaml` → `enhanceVoiceTranscript` only
+- [x] Voice TTS summary evals: `evals/promptfooconfig.voice-tts.yaml` → `summarizeVoiceResults` only
+- [x] Assertions: `similar` + `javascript` (enhance); `llm-rubric` + `javascript` (TTS)
+- [x] Scripts: `pnpm eval:promptfoo:voice-enhance`, `pnpm eval:promptfoo:voice-tts`
+
+### Done (image search — phase 2)
+
+- [x] Compressed JPEG fixtures under `evals/fixtures/images/` (`pnpm eval:fixtures:images`)
+- [x] Image search evals: `evals/promptfooconfig.image.yaml` → `interpretImageQuery`
+- [x] Script: `pnpm eval:promptfoo:image`
+
+### Done (OpenRouter vs Bedrock matrix — phase 3)
+
+- [x] Shared `createEvalAIProvider()` in `evals/providers/eval-utils.ts` with `skipIfUnavailable`
+- [x] Bedrock columns in text, image, and voice baseline configs
+
+### Done (red teaming — phase 4)
+
+- [x] `evals/promptfooconfig.redteam.yaml` with prompt-injection + jailbreak strategies
+- [x] Scripts: `pnpm eval:promptfoo:redteam`, `pnpm eval:promptfoo:redteam:generate`
+
+### Done (optional CI — phase 5)
+
+- [x] Manual GitHub Actions workflow: `.github/workflows/evals-promptfoo.yml` (OpenRouter only)
 
 ## v1.2 — Langfuse (AI observability)
 

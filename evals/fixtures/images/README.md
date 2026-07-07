@@ -5,7 +5,7 @@ Small JPEG images used by `pnpm eval:promptfoo:image`. Each file is compressed t
 | File | Scenario | Expected catalog terms (`no`) |
 |------|----------|-------------------------------|
 | `red-shoes.jpeg` | Red sports shoes | `rød`/`røde` + `sko` |
-| `wallpaper-knife.jpeg` | Wallpaper knife product | `tapetkniv` |
+| `wallpaper-knife.jpeg` | Person holding a snap-off knife at a construction site | `tapetkniv` (ideal) or `universalkniv` (acceptable for this lifestyle shot) |
 | `sky-above-forest.jpeg` | Non-commerce landscape | Valid JSON + `interpretation` (no product terms required) |
 
 ## Regenerate / compress
@@ -21,3 +21,5 @@ Uses macOS `sips` when available; falls back to `ffmpeg` on Linux. Parameters: m
 ## Source
 
 Fixture images are sample photos for local Promptfoo regression tests only. Replace with your own licensed assets if redistributing the repository.
+
+**Product clarity:** Prefer isolated product shots (knife/shoes on a neutral background). Lifestyle photos with people and job-site context are harder for vision models — they may return a generic term (e.g. `universalkniv` instead of `tapetkniv`) even at 512 px JPEG quality. Compression is not the usual bottleneck; scene ambiguity is.

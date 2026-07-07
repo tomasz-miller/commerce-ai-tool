@@ -1,30 +1,22 @@
-import { createAIProvider } from "@commerce-ai-tool/core";
-import type { AIProvider } from "@commerce-ai-tool/core";
 import type { CallApiContextParams, ProviderOptions, ProviderResponse } from "promptfoo";
 import {
   DEFAULT_CATALOG_LOCALE,
-  createOpenRouterProviderOptions,
+  createEvalAIProvider,
+  createSkippedProviderResponse,
   loadEvalEnvFile,
   readImageFixture,
+  readProviderConfig,
 } from "./eval-utils.ts";
 
 loadEvalEnvFile();
 
 export default class ImageSearchEvalProvider {
   private readonly providerId: string;
-  private readonly ai: AIProvider;
+  private readonly evalProvider;
 
   constructor(options: ProviderOptions) {
-    const config = options.config ?? {};
     this.providerId = options.id ?? "commerce-image-search";
-    this.ai = createAIProvider({
-      provider: "openrouter",
-      openrouter: createOpenRouterProviderOptions({
-        visionModel:
-          typeof config.visionModel === "string" ? config.visionModel : undefined,
-        model: typeof config.model === "string" ? config.model : undefined,
-      }),
-    });
+    this.evalProvider = createEvalAIProvider(readProviderConfig(options));
   }
 
   id(): string {
@@ -32,6 +24,10 @@ export default class ImageSearchEvalProvider {
   }
 
   async callApi(_prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    if (this.evalProvider.skipped) {
+      return createSkippedProviderResponse(this.evalProvider.skipReason ?? "Provider unavailable");
+    }
+
     const vars = context?.vars ?? {};
     const imageFile = String(vars.imageFile ?? "");
     const catalogLocale = String(vars.catalogLocale ?? DEFAULT_CATALOG_LOCALE);
@@ -42,9 +38,8 @@ export default class ImageSearchEvalProvider {
     }
 
     try {
-      const { bytes, mimeType } = readImageFixture(imageFile);
-      const base64 = Buffer.from(bytes).toString("base64");
-      const result = await this.ai.interpretImageQuery(base64, mimeType, {
+      const { base64, mimeType } = readImageFixture(imageFile);
+      const result = await this.evalProvider.ai!.interpretImageQuery(base64, mimeType, {
         queryLocale,
         catalogLocale,
       });

@@ -1,74 +1,127 @@
-import { existsSync, unlinkSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  SKIPPED_OUTPUT_PREFIX,
+  createEvalAIProvider,
+  createSkippedProviderResponse,
+  isBedrockAvailable,
+  isSkippedEvalOutput,
+  loadEvalEnvFile,
   readImageFixture,
-  resolveImageFixturePath,
+  readProviderConfig,
 } from "./eval-utils.ts";
 
-const evalDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const imagesDir = resolve(evalDir, "fixtures", "images");
+describe("readImageFixture", () => {
+  it("reads compressed red-shoes fixture with jpeg mime type", () => {
+    const { bytes, mimeType } = readImageFixture("red-shoes.jpeg");
+    expect(mimeType).toBe("image/jpeg");
+    expect(bytes.length).toBeGreaterThan(100);
+  });
 
-const createdFixtures: string[] = [];
-
-afterEach(() => {
-  for (const filePath of createdFixtures.splice(0)) {
-    if (existsSync(filePath)) {
-      unlinkSync(filePath);
-    }
-  }
+  it("throws when image fixture is missing", () => {
+    expect(() => readImageFixture("missing-image.jpeg")).toThrow(/Missing image fixture/);
+  });
 });
 
-describe("readImageFixture", () => {
-  it("reads red-shoes.jpeg with image/jpeg mime type", () => {
-    const fixturePath = resolve(imagesDir, "red-shoes.jpeg");
-    if (!existsSync(fixturePath)) {
-      return;
-    }
+describe("createEvalAIProvider", () => {
+  const envSnapshot = { ...process.env };
 
-    const { bytes, mimeType } = readImageFixture("red-shoes.jpeg");
-
-    expect(bytes.length).toBeGreaterThan(0);
-    expect(mimeType).toBe("image/jpeg");
-    expect(bytes[0]).toBe(0xff);
-    expect(bytes[1]).toBe(0xd8);
+  afterEach(() => {
+    process.env = { ...envSnapshot };
   });
 
-  it("resolves .jpg extension to image/jpeg", () => {
-    const filename = "test-fixture.jpg";
-    const filePath = resolveImageFixturePath(filename);
-    writeFileSync(filePath, Buffer.from([0xff, 0xd8, 0xff, 0x00]));
-    createdFixtures.push(filePath);
-
-    const { mimeType } = readImageFixture(filename);
-
-    expect(mimeType).toBe("image/jpeg");
+  it("creates OpenRouter provider when API key is set", () => {
+    process.env.OPENROUTER_API_KEY = "test-key";
+    const result = createEvalAIProvider({ provider: "openrouter" });
+    expect(result.skipped).toBe(false);
+    expect(result.ai).not.toBeNull();
   });
 
-  it("resolves .png extension to image/png", () => {
-    const filename = "test-fixture.png";
-    const filePath = resolveImageFixturePath(filename);
-    writeFileSync(filePath, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
-    createdFixtures.push(filePath);
-
-    const { mimeType } = readImageFixture(filename);
-
-    expect(mimeType).toBe("image/png");
-  });
-
-  it("throws for missing fixture with helpful message", () => {
-    expect(() => readImageFixture("does-not-exist.jpeg")).toThrow(
-      /Missing image fixture.*pnpm eval:fixtures:images/,
+  it("throws when OpenRouter key is missing and skip is disabled", () => {
+    delete process.env.OPENROUTER_API_KEY;
+    expect(() => createEvalAIProvider({ provider: "openrouter" })).toThrow(
+      /OPENROUTER_API_KEY is required/,
     );
   });
 
-  it("throws for unsupported extension", () => {
-    const filename = "test-fixture.gif";
-    const filePath = resolveImageFixturePath(filename);
-    writeFileSync(filePath, Buffer.from("GIF89a"));
-    createdFixtures.push(filePath);
+  it("skips OpenRouter provider when key is missing and skipIfUnavailable is true", () => {
+    delete process.env.OPENROUTER_API_KEY;
+    const result = createEvalAIProvider({
+      provider: "openrouter",
+      skipIfUnavailable: true,
+    });
+    expect(result.skipped).toBe(true);
+    expect(result.ai).toBeNull();
+    expect(result.skipReason).toContain("OPENROUTER_API_KEY");
+  });
 
-    expect(() => readImageFixture(filename)).toThrow(/Unsupported image fixture extension/);
+  it("skips Bedrock provider when AWS_REGION is missing and skipIfUnavailable is true", () => {
+    delete process.env.AWS_REGION;
+    const result = createEvalAIProvider({
+      provider: "bedrock",
+      skipIfUnavailable: true,
+    });
+    expect(result.skipped).toBe(true);
+    expect(result.skipReason).toContain("AWS_REGION");
+  });
+
+  it("creates Bedrock provider when AWS_REGION is set", () => {
+    process.env.AWS_REGION = "eu-west-1";
+    const result = createEvalAIProvider({ provider: "bedrock" });
+    expect(result.skipped).toBe(false);
+    expect(result.ai).not.toBeNull();
+  });
+});
+
+describe("isBedrockAvailable", () => {
+  const envSnapshot = { ...process.env };
+
+  afterEach(() => {
+    process.env = { ...envSnapshot };
+  });
+
+  it("returns false when AWS_REGION is unset", () => {
+    delete process.env.AWS_REGION;
+    expect(isBedrockAvailable()).toBe(false);
+  });
+
+  it("returns true when AWS_REGION is set", () => {
+    process.env.AWS_REGION = "eu-west-1";
+    expect(isBedrockAvailable()).toBe(true);
+  });
+});
+
+describe("skip helpers", () => {
+  it("marks skipped provider responses", () => {
+    const response = createSkippedProviderResponse("AWS_REGION not configured");
+    expect(response.output).toContain(SKIPPED_OUTPUT_PREFIX);
+    expect(isSkippedEvalOutput(String(response.output))).toBe(true);
+  });
+});
+
+describe("readProviderConfig", () => {
+  it("maps promptfoo provider config fields", () => {
+    expect(
+      readProviderConfig({
+        config: {
+          provider: "bedrock",
+          model: "anthropic.claude-3-5-sonnet-20241022-v2:0",
+          visionModel: "vision-model",
+          voiceModel: "voice-model",
+          skipIfUnavailable: true,
+        },
+      }),
+    ).toEqual({
+      provider: "bedrock",
+      model: "anthropic.claude-3-5-sonnet-20241022-v2:0",
+      visionModel: "vision-model",
+      voiceModel: "voice-model",
+      skipIfUnavailable: true,
+    });
+  });
+});
+
+describe("loadEvalEnvFile", () => {
+  it("does not throw when called", () => {
+    expect(() => loadEvalEnvFile()).not.toThrow();
   });
 });

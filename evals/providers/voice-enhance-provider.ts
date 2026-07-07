@@ -4,27 +4,18 @@ import {
   createEvalAIProvider,
   createSkippedProviderResponse,
   loadEvalEnvFile,
-  readAudioFixture,
   readProviderConfig,
 } from "./eval-utils.ts";
 
 loadEvalEnvFile();
 
-export default class VoiceAudioEvalProvider {
+export default class VoiceEnhanceEvalProvider {
   private readonly providerId: string;
   private readonly evalProvider;
 
   constructor(options: ProviderOptions) {
-    const config = options.config ?? {};
-    this.providerId = options.id ?? "commerce-voice-audio";
-    this.evalProvider = createEvalAIProvider(
-      readProviderConfig({
-        config: {
-          ...config,
-          provider: "openrouter",
-        },
-      }),
-    );
+    this.providerId = options.id ?? "commerce-voice-enhance";
+    this.evalProvider = createEvalAIProvider(readProviderConfig(options));
   }
 
   id(): string {
@@ -37,24 +28,21 @@ export default class VoiceAudioEvalProvider {
     }
 
     const vars = context?.vars ?? {};
-    const audioFile = String(vars.audioFile ?? "");
+    const transcript = String(vars.transcript ?? "");
     const catalogLocale = String(vars.catalogLocale ?? DEFAULT_CATALOG_LOCALE);
     const queryLocale = String(vars.queryLocale ?? catalogLocale);
 
-    if (!audioFile) {
-      return { error: "Missing test variable: audioFile" };
+    if (!transcript) {
+      return { error: "Missing test variable: transcript" };
     }
 
     try {
-      const { bytes, mimeType } = readAudioFixture(audioFile);
-      const result = await this.evalProvider.ai!.interpretVoiceAudio(bytes, mimeType, {
+      const enhanced = await this.evalProvider.ai!.enhanceVoiceTranscript(transcript, {
         queryLocale,
         catalogLocale,
       });
 
-      return {
-        output: JSON.stringify(result, null, 2),
-      };
+      return { output: enhanced };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return { error: message };

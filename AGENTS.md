@@ -61,19 +61,28 @@ pnpm lint                 # ESLint
 pnpm typecheck            # tsc --noEmit
 pnpm test                 # Vitest
 pnpm eval:promptfoo       # LLM prompt evals (local, requires OPENROUTER_API_KEY)
+pnpm eval:promptfoo:voice
+pnpm eval:promptfoo:image
+pnpm eval:promptfoo:voice-enhance
+pnpm eval:promptfoo:voice-tts
+pnpm eval:promptfoo:redteam
+pnpm eval:promptfoo:redteam:generate
 pnpm eval:promptfoo:view  # Promptfoo results web UI
+pnpm eval:fixtures:audio
+pnpm eval:fixtures:images
 ```
 
 Before finishing a feature, run **all of the above** (same order as CI), except prompt evals which are optional and local-only.
 
 ## Prompt evaluations (Promptfoo)
 
-Local LLM regression tests live in [`evals/`](evals/). They call the same `createAIProvider` → `interpretTextQuery` path as production.
+Local LLM regression tests live in [`evals/`](evals/). They call the same `createAIProvider` paths as production (text, image, voice enhance/TTS, redteam).
 
 - **Setup:** `cp evals/.env.example evals/.env` and set `OPENROUTER_API_KEY`
-- **Run:** `pnpm eval:promptfoo` (builds core first)
-- **Docs:** [`evals/README.md`](evals/README.md)
-- **Not in CI** — requires API key and incurs OpenRouter cost
+- **Run:** `pnpm eval:promptfoo` and suite-specific `pnpm eval:promptfoo:*` scripts (see [`evals/README.md`](evals/README.md))
+- **Bedrock matrix:** text, image, and voice baseline configs include optional Bedrock columns (`skipIfUnavailable: true` — skipped when `AWS_REGION` is unset)
+- **Optional CI:** GitHub Actions workflow `evals-promptfoo.yml` (manual dispatch; secrets: `OPENROUTER_API_KEY`, optional `REDTEAM_PROVIDER_API_KEY`)
+- **Not in default CI** — requires API key and incurs LLM cost
 
 Vitest (`pnpm test`) remains mandatory in CI for deterministic parser/builder logic.
 

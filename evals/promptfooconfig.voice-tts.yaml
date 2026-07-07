@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Commerce AI — voice TTS result summary evals
+
+prompts:
+  - "{{resultCount}}"
+
+providers:
+  - id: file://providers/voice-tts-provider.ts
+    label: openrouter-gemini-31-lite
+    config:
+      provider: openrouter
+      model: google/gemini-3.1-flash-lite-preview
+
+defaultTest:
+  assert:
+    - type: javascript
+      value: |
+        return output.trim().length > 0;
+
+tests:
+  - file://tests/voice-tts.yaml

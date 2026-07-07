@@ -13,23 +13,22 @@ Promptfoo helps you practice **test-driven prompt engineering**:
 
 This complements Vitest unit tests in `packages/core`: Vitest tests parsers and builders **without** calling an LLM. Promptfoo tests **interpretation quality** (e.g. whether `"red shoes"` with a Norwegian catalog yields Norwegian `searchTerms`).
 
-Promptfoo also supports **red teaming** (prompt injection, jailbreak probes). That is not set up yet; see the project ROADMAP for future phases.
-
 ## How this repo uses it
 
 ```
-evals/tests/*.yaml  →  custom provider  →  createAIProvider (core)  →  OpenRouter
+evals/tests/*.yaml  →  custom provider  →  createEvalAIProvider  →  OpenRouter / Bedrock
                               ↓
-                        assertions on JSON output
+                        assertions on output
 ```
 
-The custom provider in `providers/text-search-provider.ts` calls the same `interpretTextQuery` path as production — no duplicated prompts.
+Custom providers call the same `createAIProvider` paths as production — no duplicated prompts.
 
 ## Prerequisites
 
 - Node.js ≥ 24, pnpm 9.15.9
-- OpenRouter API key
-- Built `@commerce-ai-tool/core` (`pnpm build` — the `eval:promptfoo` script runs this automatically)
+- OpenRouter API key (required for all suites)
+- Optional: AWS credentials + `AWS_REGION` for Bedrock matrix columns (omitted from the eval matrix when unset)
+- Built `@commerce-ai-tool/core` (`pnpm build` — eval scripts run this automatically)
 
 ## One-time setup
 
@@ -41,144 +40,154 @@ cp evals/.env.example evals/.env
 # Edit evals/.env and set OPENROUTER_API_KEY
 ```
 
+Optional Bedrock comparison (local):
+
+```bash
+# In evals/.env
+AWS_REGION=eu-west-1
+BEDROCK_MODEL_ID=anthropic.claude-3-5-sonnet-20241022-v2:0
+BEDROCK_VISION_MODEL_ID=anthropic.claude-3-5-sonnet-20241022-v2:0
+```
+
 ## Run evaluations
 
+| Command | Config | What it tests |
+|---------|--------|---------------|
+| `pnpm eval:promptfoo` | `promptfooconfig.ts` | Text search (`interpretTextQuery`) — OpenRouter + Bedrock when `AWS_REGION` is set |
+| `pnpm eval:promptfoo:voice` | `promptfooconfig.voice.ts` | Voice baselines + audio models + Bedrock enhance baseline when AWS is configured |
+| `pnpm eval:promptfoo:image` | `promptfooconfig.image.ts` | Image search (`interpretImageQuery`) — OpenRouter + Bedrock when `AWS_REGION` is set |
+| `pnpm eval:promptfoo:voice-enhance` | `promptfooconfig.voice-enhance.yaml` | Transcript cleanup (`enhanceVoiceTranscript`) |
+| `pnpm eval:promptfoo:voice-tts` | `promptfooconfig.voice-tts.yaml` | Result summaries (`summarizeVoiceResults`) |
+| `pnpm eval:promptfoo:redteam` | `promptfooconfig.redteam.yaml` | Prompt injection + jailbreak probes on text search |
+| `pnpm eval:promptfoo:view` | — | Web UI matrix |
+
+Fixture regeneration:
+
 ```bash
-pnpm eval:promptfoo
+pnpm eval:fixtures:audio    # macOS only — WAV voice clips
+pnpm eval:fixtures:images   # Resize/compress JPEG vision fixtures
 ```
 
-### Voice search evals (audio + model matrix)
+### OpenRouter vs Bedrock matrix
 
-Compare transcript baselines against direct audio interpretation (`interpretVoiceAudio`):
+Text and image configs include side-by-side columns:
 
-```bash
-pnpm eval:fixtures:audio   # macOS only — regenerate WAV clips
-pnpm eval:promptfoo:voice
-```
+| Label | Backend | Notes |
+|-------|---------|-------|
+| `openrouter-gemini-31-lite` | OpenRouter | Always included |
+| `bedrock-claude-35-sonnet` | AWS Bedrock | Included only when `AWS_REGION` is set — no Bedrock cells run otherwise |
 
-Providers in [`promptfooconfig.voice.yaml`](promptfooconfig.voice.yaml):
+Voice config adds `baseline-enhance-bedrock` (enhance → interpret on transcript) under the same rule. Audio columns remain OpenRouter-only (`interpretVoiceAudio` is not supported on Bedrock).
 
-| Label | Path |
-|-------|------|
-| `baseline-text-gemini-31-lite` | canonical `transcript` → `interpretTextQuery` (`gemini-3.1-flash-lite-preview`) |
-| `baseline-enhance-gemini-31-lite` | `transcript` → enhance → interpret (current production chain) |
-| `gemini-25-flash-audio` | WAV fixture → `google/gemini-2.5-flash` + `input_audio` |
-| `gemini-31-flash-lite-audio` | WAV fixture → `google/gemini-3.1-flash-lite-preview` + `input_audio` |
+Configs are TypeScript (`promptfooconfig.ts`, `.image.ts`, `.voice.ts`) so Bedrock provider columns are omitted at load time when AWS is unavailable — not skipped at runtime.
 
-Use the matrix UI to compare pass rates before switching the production voice path:
+Compare pass rates in the matrix UI:
 
 ```bash
 pnpm eval:promptfoo:view
 ```
 
-Force fresh API calls:
+### Voice enhance + TTS evals
 
 ```bash
-promptfoo eval -c evals/promptfooconfig.voice.yaml --no-cache
+pnpm eval:promptfoo:voice-enhance
+pnpm eval:promptfoo:voice-tts
 ```
 
-### Image search evals (vision)
+- **Enhance** uses `similar` + `javascript` (filler-word removal, semantic match).
+- **TTS** uses `llm-rubric` + `javascript` (result count, locale, top product name).
 
-Regression tests for `interpretImageQuery` on compressed JPEG fixtures:
+### Image search evals
 
 ```bash
-pnpm eval:fixtures:images   # resize/compress fixtures (macOS sips or ffmpeg)
+pnpm eval:fixtures:images
 pnpm eval:promptfoo:image
 ```
 
-Provider in [`promptfooconfig.image.yaml`](promptfooconfig.image.yaml) uses `OPENROUTER_VISION_MODEL` (default: `google/gemini-3.1-flash-lite-preview`). Fixtures live in [`fixtures/images/`](fixtures/images/) — see README there for scenarios and size targets.
+Uses `OPENROUTER_VISION_MODEL` (default: `google/gemini-3.1-flash-lite-preview`). Fixtures: [`fixtures/images/`](fixtures/images/).
 
-Force fresh API calls:
-
-```bash
-promptfoo eval -c evals/promptfooconfig.image.yaml --no-cache
-```
-
-The provider loads `evals/.env` when present. You can also export `OPENROUTER_API_KEY` in your shell.
-
-### View results in the web UI
+### Red teaming
 
 ```bash
-pnpm eval:promptfoo:view
+pnpm eval:promptfoo:redteam
+pnpm eval:promptfoo:redteam:generate   # regenerate attack probes (less frequent)
 ```
 
-Opens a matrix: rows are test cases, columns are providers. Click a failed cell to compare model output with assertions.
+Targets `text-search-provider` with built-in plugins `hijacking` and `system-prompt-override`, plus `jailbreak` strategy. Promptfoo may ask for **email verification** on first run (remote attack generation). Optional `REDTEAM_PROVIDER_API_KEY` in `evals/.env` (see `.env.example`).
 
-## Add a test case
+## GitHub Actions (manual)
 
-Edit `tests/text-search.yaml`. Example:
+Workflow [`.github/workflows/evals-promptfoo.yml`](../.github/workflows/evals-promptfoo.yml) runs on **workflow_dispatch** only (not on every PR).
 
-```yaml
-- description: English query translated to Norwegian catalog (blue jacket)
-  vars:
-    query: blue jacket
-    queryLocale: en
-    catalogLocale: no
-  assert:
-    - type: javascript
-      value: |
-        const terms = JSON.parse(output).searchTerms.join(' ').toLowerCase();
-        return terms.includes('jakke') || terms.includes('blå');
-```
+1. Add repository secret **`OPENROUTER_API_KEY`** (Settings → Secrets and variables → Actions).
+2. Optional: **`REDTEAM_PROVIDER_API_KEY`** for redteam attack generation.
+3. Actions → **Promptfoo evals** → choose suite (`text` default; `all` and `redteam` cost more).
 
-Re-run `pnpm eval:promptfoo`.
+Bedrock is **not** used in CI (no AWS secrets). Uploads `.promptfoo/` as an artifact.
 
-### Assertion types used here
+## Assertion types
 
 | Type | Purpose |
 |------|---------|
-| `is-json` | Output is valid JSON (in `defaultTest`) |
-| `javascript` | Custom checks — parse output and validate `searchTerms`, `sort`, etc. |
-
-Later phases may add `similar` (semantic match) or `llm-rubric` (grade with another model) for voice summaries.
+| `javascript` | Custom checks — JSON shape, locale terms |
+| `similar` | Semantic match for plain-text enhance output |
+| `llm-rubric` | Grade TTS summaries and redteam responses with another model |
 
 ## Change a prompt and catch regressions
 
-1. Edit `packages/core/src/prompts/index.ts`.
-2. Run `pnpm eval:promptfoo`.
+1. Edit prompts in `packages/core/src/prompts/` or voice helpers in `packages/core/src/search/`.
+2. Run the relevant `pnpm eval:promptfoo:*` command.
 3. Fix failures or update test expectations if behavior changed intentionally.
 
 ## Cache
 
-Promptfoo caches LLM responses on disk (`.promptfoo/`). Re-running evals while tuning assertions is faster and cheaper.
-
-Force fresh API calls:
+Promptfoo caches LLM responses on disk (`.promptfoo/`). Force fresh API calls:
 
 ```bash
-promptfoo eval -c evals/promptfooconfig.yaml --no-cache
+promptfoo eval -c evals/promptfooconfig.ts --no-cache
 ```
 
-## Cost and CI
+## Cost
 
-- Each test case triggers one OpenRouter request (~6 cases in the default suite).
-- Evals are **local only** — they are not part of CI (API cost + API key required).
-- CI still runs `pnpm test` (Vitest) for deterministic logic.
+- Each test case × provider column triggers LLM calls (OpenRouter; Bedrock when configured).
+- Redteam and `all` suites are the most expensive.
+- Main CI (`ci.yml`) does **not** run Promptfoo — only Vitest + build.
 
 ## File layout
 
 ```
 evals/
-  promptfooconfig.yaml           # Text search evals
-  promptfooconfig.voice.yaml     # Voice audio + baseline matrix
-  promptfooconfig.image.yaml     # Image search vision evals
+  promptfooconfig.ts                # Text search (OR + Bedrock when AWS configured)
+  promptfooconfig.voice.ts          # Voice baselines + audio
+  promptfooconfig.image.ts          # Image search (OR + Bedrock when AWS configured)
+  config/                           # TS config builders + Bedrock gating
+  promptfooconfig.voice-enhance.yaml
+  promptfooconfig.voice-tts.yaml
+  promptfooconfig.redteam.yaml
   providers/
-    eval-utils.ts                # Shared env + fixture helpers
-    eval-utils.test.ts           # Deterministic fixture helper tests
-    text-search-provider.ts      # Bridges Promptfoo → interpretTextQuery
-    image-search-provider.ts     # Image fixture → interpretImageQuery
-    voice-baseline-provider.ts   # Transcript baseline providers
-    voice-audio-provider.ts      # Audio fixture → interpretVoiceAudio
+    eval-utils.ts                   # createEvalAIProvider, fixtures, skip helpers
+    eval-utils.test.ts
+    text-search-provider.ts
+    image-search-provider.ts
+    voice-baseline-provider.ts
+    voice-audio-provider.ts
+    voice-enhance-provider.ts
+    voice-tts-provider.ts
   tests/
-    text-search.yaml             # Text search cases
-    voice-search.yaml            # Voice cases (transcript + audioFile)
-    image-search.yaml            # Image cases (imageFile)
+    text-search.yaml
+    voice-search.yaml
+    image-search.yaml
+    voice-enhance.yaml
+    voice-tts.yaml
   fixtures/
-    audio/                       # WAV clips (see README inside)
-    images/                      # JPEG clips (see README inside)
+    audio/
+    images/
   scripts/
-    generate-audio-fixtures.sh   # macOS TTS fixture generator
-    compress-image-fixtures.sh   # Resize/compress image fixtures
-  .env.example                   # Template for OPENROUTER_API_KEY
+    generate-audio-fixtures.sh
+    compress-image-fixtures.sh
+  redteam/
+    purpose.txt
+  .env.example
 ```
 
 ## Troubleshooting
@@ -186,13 +195,14 @@ evals/
 | Problem | Fix |
 |---------|-----|
 | `OPENROUTER_API_KEY is required` | Create `evals/.env` from `.env.example` |
+| No Bedrock column in matrix | Expected without `AWS_REGION`; set it in `evals/.env` to compare Bedrock |
 | `Cannot find module '@commerce-ai-tool/core'` | Run `pnpm build` from repo root |
-| Flaky locale assertions | LLM wording varies; use flexible checks (`includes` with alternatives) |
+| Flaky locale assertions | LLM wording varies; use flexible `includes` checks |
 | All tests cached unexpectedly | Run with `--no-cache` |
-| `Cannot find module ... eval-utils.js` | Eval providers import sibling `.ts` files with a `.ts` extension (Promptfoo loads TS directly) |
+| Missing image fixture | Run `pnpm eval:fixtures:images` |
 
 ## Learn more
 
 - [Promptfoo docs](https://www.promptfoo.dev/docs/intro/)
-- [Configuration guide](https://www.promptfoo.dev/docs/configuration/guide/)
+- [Red teaming](https://www.promptfoo.dev/docs/red-team/)
 - [Custom JavaScript providers](https://www.promptfoo.dev/docs/providers/custom-api/)
