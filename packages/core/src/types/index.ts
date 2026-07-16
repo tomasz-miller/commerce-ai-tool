@@ -9,6 +9,14 @@ export interface SearchCacheConfig {
   maxEntries?: number;
 }
 
+export interface FacetConfig {
+  enabled?: boolean;
+  schemaTtlMs?: number;
+  include?: string[];
+  exclude?: string[];
+  maxAttributes?: number;
+}
+
 export interface SearchTimeoutsConfig {
   aiTextMs?: number;
   aiVoiceAudioMs?: number;
@@ -75,6 +83,7 @@ export interface CommerceAIConfig {
   voiceMode?: VoiceMode;
   cache?: SearchCacheConfig;
   timeouts?: SearchTimeoutsConfig;
+  facets?: FacetConfig;
 }
 
 export interface ProductCard {
@@ -100,6 +109,10 @@ export interface SearchMeta {
   catalogLocale: string;
   queryLocale: string;
   queryInterpretation?: string;
+  searchTerms?: string[];
+  appliedFilters?: InterpretedSearchFilters;
+  sort?: "relevance" | "price_asc" | "price_desc";
+  schemaEtag?: string;
   /** Per-step durations in milliseconds (dev / CAT_DEBUG only) */
   timings?: Record<string, number>;
   /** Total pipeline duration in milliseconds (dev / CAT_DEBUG only) */
@@ -109,6 +122,9 @@ export interface SearchMeta {
 export interface SearchResult {
   products: ProductCard[];
   meta: SearchMeta;
+  facets?: SearchFacetGroup[];
+  suggestedFacets?: SuggestedFacet[];
+  facetSchema?: FacetAttributeDefinition[];
 }
 
 export interface SuggestionsRequest extends SearchLocaleOptions {
@@ -130,6 +146,13 @@ export interface TextSearchRequest {
   locale?: string;
   limit?: number;
   offset?: number;
+  filters?: InterpretedSearchFilters;
+  searchTerms?: string[];
+  sort?: "relevance" | "price_asc" | "price_desc";
+  refineQuery?: string;
+  includeFacets?: boolean;
+  /** AI-suggested facets from the active search session (chip refine). */
+  suggestedFacets?: SuggestedFacet[];
 }
 
 export interface SearchLocaleOptions {
@@ -166,8 +189,55 @@ export interface InterpretedSearchFilters {
 export interface InterpretedSearchQuery {
   searchTerms: string[];
   filters?: InterpretedSearchFilters;
+  suggestedFacets?: SuggestedFacet[];
   sort?: "relevance" | "price_asc" | "price_desc";
   interpretation: string;
+}
+
+export type FacetAttributeType = "enum" | "lenum" | "boolean" | "text" | "number";
+
+export interface FacetAttributeDefinition {
+  name: string;
+  label: string;
+  kind: "distinct" | "range";
+  attributeType: FacetAttributeType;
+  field: string;
+  fieldType?: string;
+}
+
+export interface ResolvedFacetSchema {
+  attributes: FacetAttributeDefinition[];
+  systemFacets: Array<"categories" | "price">;
+  etag: string;
+  resolvedAt: string;
+}
+
+export interface SuggestedFacet {
+  name: string;
+  reason?: string;
+}
+
+export interface SearchFacetBucket {
+  key: string;
+  label: string;
+  count: number;
+}
+
+export interface SearchFacetGroup {
+  id: string;
+  label: string;
+  type: "distinct" | "range";
+  buckets: SearchFacetBucket[];
+  selectedKey?: string;
+}
+
+export interface SearchSessionState {
+  query: string;
+  searchTerms: string[];
+  appliedFilters: InterpretedSearchFilters;
+  suggestedFacets: SuggestedFacet[];
+  facetSchema?: FacetAttributeDefinition[];
+  schemaEtag?: string;
 }
 
 export interface VoiceAudioInterpretation extends InterpretedSearchQuery {

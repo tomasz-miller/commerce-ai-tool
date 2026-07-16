@@ -34,6 +34,7 @@ function createMockCommercetoolsClient(
       total: 0,
       projections: [],
     }),
+    listProductTypes: vi.fn().mockResolvedValue([]),
     getProductProjections: vi.fn().mockResolvedValue([]),
     suggestSearchTerms: vi.fn().mockResolvedValue(["Red Shoes", "Running Shoes"]),
     ...overrides,
@@ -96,5 +97,86 @@ describe("createSearchOrchestrator.suggestByText", () => {
     await orchestrator.suggestByText({ query: "red", limit: 0 });
 
     expect(ct.suggestSearchTerms).toHaveBeenCalledWith("red", "en", 1);
+  });
+});
+
+describe("createSearchOrchestrator.searchByText facets", () => {
+  function createMockAi() {
+    return {
+      interpretTextQuery: vi.fn().mockResolvedValue({
+        searchTerms: ["glasses"],
+        interpretation: "glasses",
+        filters: {},
+        suggestedFacets: [{ name: "color" }],
+      }),
+      interpretRefineQuery: vi.fn(),
+      interpretImageQuery: vi.fn(),
+      interpretVoiceAudio: vi.fn(),
+      enhanceVoiceTranscript: vi.fn(),
+      summarizeForTts: vi.fn(),
+    };
+  }
+
+  it("passes suggestedFacets on chip refine and skips AI", async () => {
+    const ct = createMockCommercetoolsClient({
+      listProductTypes: vi.fn().mockResolvedValue([
+        {
+          version: 1,
+          attributes: [
+            {
+              name: "color",
+              label: { en: "Color" },
+              isSearchable: true,
+              type: { name: "enum" },
+            },
+          ],
+        },
+      ]),
+      searchProducts: vi.fn().mockResolvedValue({
+        productIds: ["p1"],
+        total: 1,
+        projections: [{ id: "p1", name: "Red Glass" }],
+        facets: [{ name: "color", buckets: [{ key: "red", count: 1 }] }],
+      }),
+    });
+    const ai = createMockAi();
+    const orchestrator = createSearchOrchestrator({
+      config: { ...baseConfig, facets: { enabled: true } },
+      commercetoolsClient: ct,
+      aiProvider: ai as never,
+    });
+
+    const result = await orchestrator.searchByText({
+      query: "glasses",
+      searchTerms: ["glasses"],
+      filters: { color: "red" },
+      suggestedFacets: [{ name: "color" }],
+      includeFacets: true,
+    });
+
+    expect(ai.interpretTextQuery).not.toHaveBeenCalled();
+    expect(ai.interpretRefineQuery).not.toHaveBeenCalled();
+    expect(result.suggestedFacets).toEqual([{ name: "color" }]);
+    expect(result.facets?.[0]?.buckets).toEqual([{ key: "red", label: "red", count: 1 }]);
+  });
+
+  it("does not reuse a non-facet cache entry for a facet-enabled request", async () => {
+    const searchProducts = vi.fn().mockResolvedValue({
+      productIds: [],
+      total: 0,
+      projections: [],
+    });
+    const ct = createMockCommercetoolsClient({ searchProducts });
+    const ai = createMockAi();
+    const orchestrator = createSearchOrchestrator({
+      config: baseConfig,
+      commercetoolsClient: ct,
+      aiProvider: ai as never,
+    });
+
+    await orchestrator.searchByText({ query: "glasses", includeFacets: false });
+    await orchestrator.searchByText({ query: "glasses", includeFacets: true });
+
+    expect(searchProducts).toHaveBeenCalledTimes(2);
   });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildProductSearchBody,
+  buildRefineQueryUserMessage,
   buildTextQueryUserMessage,
   formatLocaleContext,
   parseInterpretedQuery,
@@ -62,8 +63,47 @@ describe("parseInterpretedQuery", () => {
     expect(result.filters).toEqual({ color: "red", priceMax: "200" });
   });
 
+  it("parses schema-aware suggested facets", () => {
+    const result = parseInterpretedQuery(
+      JSON.stringify({
+        searchTerms: ["glasses"],
+        filters: { heightMin: "10" },
+        suggestedFacets: [{ name: "height", reason: "Useful dimension" }],
+      }),
+    );
+
+    expect(result.suggestedFacets).toEqual([{ name: "height", reason: "Useful dimension" }]);
+    expect(result.filters).toEqual({ heightMin: "10" });
+  });
+
   it("throws on invalid response", () => {
     expect(() => parseInterpretedQuery("{}")).toThrow();
+  });
+});
+
+describe("buildRefineQueryUserMessage", () => {
+  it("includes the search context and attribute catalog", () => {
+    const message = buildRefineQueryUserMessage(
+      "above 10 cm",
+      { queryLocale: "en", catalogLocale: "en" },
+      {
+        searchTerms: ["glasses"],
+        filters: {},
+        attributeCatalog: [
+          {
+            name: "height",
+            label: "Height",
+            kind: "range",
+            attributeType: "number",
+            field: "variants.attributes.height",
+            fieldType: "number",
+          },
+        ],
+      },
+    );
+
+    expect(message).toContain("above 10 cm");
+    expect(message).toContain("height");
   });
 });
 

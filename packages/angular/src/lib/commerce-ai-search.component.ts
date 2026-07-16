@@ -12,10 +12,13 @@ import {
 import { FormsModule } from "@angular/forms";
 import type {
   CommerceAISearchMessages,
+  InterpretedSearchFilters,
   ProductCard,
+  SearchFacetGroup,
+  SuggestedFacet,
   ThemeMode,
 } from "@commerce-ai-tool/core";
-import { resolveCommerceAISearchMessages } from "@commerce-ai-tool/core";
+import { resolveCommerceAISearchMessages, isFacetFilterSelected, toggleFacetFilter } from "@commerce-ai-tool/core";
 import { CommerceAiApiService } from "./commerce-ai-api.service.js";
 import {
   buildCameraConstraints,
@@ -243,6 +246,42 @@ type SearchMode = "text" | "image" | "voice" | null;
         </div>
       }
 
+      @if (enableFacets && lastSearchMode === "text" && hasSearched && facets.length) {
+        <section class="cat-facets" [attr.aria-label]="resolvedMessages.filtersAriaLabel">
+          <div class="cat-facets__header">
+            <span>{{ resolvedMessages.narrowResults }}</span>
+            <div class="cat-facets__actions">
+              @if (hasAppliedFilters) {
+                <button type="button" class="cat-facets__clear" (click)="clearFacetFilters()">
+                  {{ resolvedMessages.clearFilters }}
+                </button>
+              }
+              <button type="button" class="cat-facets__clear" (click)="startNewSearch()">
+                {{ resolvedMessages.newSearch }}
+              </button>
+            </div>
+          </div>
+          @for (facet of facets; track facet.id) {
+            <div class="cat-facet-group" role="group" [attr.aria-label]="facet.label">
+              <span class="cat-facet-group__label">{{ facet.label }}</span>
+              <div class="cat-facet-group__options">
+                @for (bucket of facet.buckets; track bucket.key) {
+                  <button
+                    type="button"
+                    class="cat-facet-chip"
+                    [class.cat-facet-chip--selected]="isFacetSelected(facet.id, bucket.key)"
+                    [attr.aria-pressed]="isFacetSelected(facet.id, bucket.key)"
+                    (click)="toggleFacet(facet.id, bucket.key)"
+                  >
+                    {{ bucket.label }} {{ bucket.count }}
+                  </button>
+                }
+              </div>
+            </div>
+          }
+        </section>
+      }
+
       @if (showResults) {
         <div class="cat-results" role="listbox" [attr.aria-label]="resolvedMessages.searchResultsAriaLabel">
           @if (isLoading) {
@@ -310,6 +349,7 @@ export class CommerceAiSearchComponent {
   @Input() placeholder = "What are you looking for?";
   @Input() messages?: Partial<CommerceAISearchMessages>;
   @Input() enableAutocomplete = false;
+  @Input() enableFacets = false;
   @Input() enableVoice = true;
   @Input() enableImageSearch = true;
   @Input() enableCameraSearch = true;
@@ -329,7 +369,13 @@ export class CommerceAiSearchComponent {
   suggestionsReady = false;
   suggestionsDismissed = false;
   results: ProductCard[] = [];
-  meta: { queryInterpretation?: string } | null = null;
+  meta: {
+    queryInterpretation?: string;
+    searchTerms?: string[];
+    appliedFilters?: InterpretedSearchFilters;
+  } | null = null;
+  facets: SearchFacetGroup[] = [];
+  suggestedFacets: SuggestedFacet[] = [];
   isLoading = false;
   hasSearched = false;
   error: string | null = null;
@@ -537,6 +583,107 @@ export class CommerceAiSearchComponent {
     };
   }
 
+  isFacetSelected(facetId: string, key: string): boolean {
+    return isFacetFilterSelected(this.meta?.appliedFilters ?? {}, facetId, key);
+  }
+
+  get hasAppliedFilters(): boolean {
+    return Object.keys(this.meta?.appliedFilters ?? {}).length > 0;
+  }
+
+  toggleFacet(facetId: string, key: string): void {
+    if (!this.meta?.searchTerms) return;
+    const filters = toggleFacetFilter(this.meta.appliedFilters ?? {}, facetId, key);
+    this.searchWithFacets(filters);
+  }
+
+  clearFacetFilters(): void {
+    if (!this.meta?.searchTerms) return;
+    this.searchWithFacets({});
+  }
+
+  startNewSearch(): void {
+    const q = this.query.trim();
+    if (!q) return;
+    this.suggestedFacets = [];
+    this.meta = this.meta
+      ? { ...this.meta, searchTerms: undefined, appliedFilters: undefined }
+      : null;
+    this.lastSearchMode = "text";
+    this.clearVoiceAudio();
+    this.suggestions = [];
+    this.activeSuggestionIndex = -1;
+
+    this.searchAbort?.abort();
+    const controller = new AbortController();
+    this.searchAbort = controller;
+    const requestId = ++this.searchRequestId;
+
+    this.isLoading = true;
+    this.error = null;
+    this.results = [];
+
+    void this.api
+      .search(this.apiBaseUrl, q, this.localeFields, controller.signal, {
+        includeFacets: this.enableFacets,
+      })
+      .then((data) => {
+        if (requestId !== this.searchRequestId) return;
+        this.results = data.products;
+        this.meta = data.meta;
+        this.facets = data.facets ?? [];
+        this.suggestedFacets = data.suggestedFacets ?? [];
+        this.isLoading = false;
+        this.hasSearched = true;
+        this.cdr.detectChanges();
+      })
+      .catch((err: Error) => {
+        if (err.name === "AbortError") return;
+        if (requestId !== this.searchRequestId) return;
+        this.error = err.message;
+        this.results = [];
+        this.meta = null;
+        this.isLoading = false;
+        this.hasSearched = true;
+        this.cdr.detectChanges();
+      });
+  }
+
+  private searchWithFacets(filters: InterpretedSearchFilters, refineQuery?: string): void {
+    if (!this.meta?.searchTerms) return;
+    this.isLoading = true;
+    this.error = null;
+    const controller = new AbortController();
+    this.searchAbort?.abort();
+    this.searchAbort = controller;
+    const requestId = ++this.searchRequestId;
+
+    void this.api
+      .search(this.apiBaseUrl, this.meta.queryInterpretation ?? this.query, this.localeFields, controller.signal, {
+        filters,
+        searchTerms: this.meta.searchTerms,
+        refineQuery,
+        suggestedFacets: this.suggestedFacets,
+        includeFacets: true,
+      })
+      .then((data) => {
+        if (requestId !== this.searchRequestId) return;
+        this.results = data.products;
+        this.meta = data.meta;
+        this.facets = data.facets ?? [];
+        this.suggestedFacets = data.suggestedFacets ?? [];
+        this.isLoading = false;
+        this.hasSearched = true;
+        this.cdr.detectChanges();
+      })
+      .catch((error: Error) => {
+        if (requestId !== this.searchRequestId || error.name === "AbortError") return;
+        this.error = error.message;
+        this.isLoading = false;
+        this.cdr.detectChanges();
+      });
+  }
+
   onSubmit(): void {
     const q = this.query.trim();
     if (!q) return;
@@ -563,13 +710,31 @@ export class CommerceAiSearchComponent {
     this.isLoading = true;
     this.error = null;
     this.results = [];
+    const previousMeta = this.meta;
     this.meta = null;
 
-    void this.api.search(this.apiBaseUrl, q, this.localeFields, controller.signal).then(
+    const isRefinement = this.enableFacets && Boolean(previousMeta?.searchTerms);
+    void this.api.search(
+      this.apiBaseUrl,
+      isRefinement ? previousMeta?.queryInterpretation ?? q : q,
+      this.localeFields,
+      controller.signal,
+      isRefinement
+        ? {
+            searchTerms: previousMeta?.searchTerms,
+            filters: previousMeta?.appliedFilters,
+            refineQuery: q,
+            suggestedFacets: this.suggestedFacets,
+            includeFacets: true,
+          }
+        : { includeFacets: this.enableFacets },
+    ).then(
       (data) => {
         if (requestId !== this.searchRequestId) return;
         this.results = data.products;
         this.meta = data.meta;
+        this.facets = data.facets ?? [];
+        this.suggestedFacets = data.suggestedFacets ?? [];
         this.isLoading = false;
         this.hasSearched = true;
       },

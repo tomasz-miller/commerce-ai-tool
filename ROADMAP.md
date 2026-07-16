@@ -14,7 +14,7 @@
 ## v1.1
 
 - [x] AI query suggestions and autocomplete (commercetools Search Term Suggestions API)
-- [ ] Faceted search filters in UI
+- [x] AI-suggested faceted search filters in UI
 - [x] Internationalization (i18n) for widget labels (runtime `messages` overrides)
 - [x] Short-lived response cache on server (opt-in via `CAT_CACHE_*`)
 

@@ -186,6 +186,99 @@ describe("buildProductSearchRequest", () => {
     });
   });
 
+  it("uses schema attribute fields for color when a facet schema is present", () => {
+    const body = buildProductSearchRequest({
+      interpreted: {
+        ...baseInterpreted,
+        filters: { color: "red" },
+        suggestedFacets: [{ name: "color" }],
+      },
+      catalogLocale: "en",
+      facetSchema: {
+        attributes: [
+          {
+            name: "color",
+            label: "Color",
+            kind: "distinct",
+            attributeType: "text",
+            field: "variants.attributes.color",
+            fieldType: "text",
+          },
+        ],
+        systemFacets: ["categories", "price"],
+        etag: "e1",
+        resolvedAt: "2026-01-01T00:00:00.000Z",
+      },
+    });
+
+    expect(JSON.stringify(body.query)).toContain("variants.attributes.color");
+    expect(JSON.stringify(body.query)).not.toContain("variants.attributes.color.key");
+  });
+
+  it("skips color filters excluded from the facet schema", () => {
+    const body = buildProductSearchRequest({
+      interpreted: {
+        ...baseInterpreted,
+        filters: { color: "red" },
+      },
+      catalogLocale: "en",
+      facetSchema: {
+        attributes: [
+          {
+            name: "size",
+            label: "Size",
+            kind: "distinct",
+            attributeType: "enum",
+            field: "variants.attributes.size.key",
+            fieldType: "enum",
+          },
+        ],
+        systemFacets: ["categories", "price"],
+        etag: "e2",
+        resolvedAt: "2026-01-01T00:00:00.000Z",
+      },
+    });
+
+    expect(JSON.stringify(body.query)).not.toContain("color");
+  });
+
+  it("combines number Min/Max filters into a single range", () => {
+    const body = buildProductSearchRequest({
+      interpreted: {
+        ...baseInterpreted,
+        filters: { heightMin: "10", heightMax: "20" },
+      },
+      catalogLocale: "en",
+      facetSchema: {
+        attributes: [
+          {
+            name: "height",
+            label: "Height",
+            kind: "range",
+            attributeType: "number",
+            field: "variants.attributes.height",
+            fieldType: "number",
+          },
+        ],
+        systemFacets: ["categories", "price"],
+        etag: "e3",
+        resolvedAt: "2026-01-01T00:00:00.000Z",
+      },
+    });
+
+    expect(body.query).toMatchObject({
+      and: expect.arrayContaining([
+        expect.objectContaining({
+          range: {
+            field: "variants.attributes.height",
+            fieldType: "number",
+            ranges: [{ from: 10, to: 20 }],
+          },
+        }),
+      ]),
+    });
+  });
+
   it("does not apply store scope unless enabled", () => {
     const body = buildProductSearchRequest({
       interpreted: baseInterpreted,
@@ -261,5 +354,35 @@ describe("buildProjectionSearchQueryArgs", () => {
     });
 
     expect(args.filter).toContain('stores.key:"main-store"');
+  });
+
+  it("requests facet aggregations when a facet schema is present", () => {
+    const args = buildProjectionSearchQueryArgs({
+      interpreted: {
+        ...baseInterpreted,
+        suggestedFacets: [{ name: "color" }, { name: "price" }],
+      },
+      catalogLocale: "en",
+      facetSchema: {
+        attributes: [
+          {
+            name: "color",
+            label: "Color",
+            kind: "distinct",
+            attributeType: "enum",
+            field: "variants.attributes.color.key",
+            fieldType: "enum",
+          },
+        ],
+        systemFacets: ["categories", "price"],
+        etag: "e4",
+        resolvedAt: "2026-01-01T00:00:00.000Z",
+      },
+    });
+
+    expect(args.facet).toEqual([
+      "variants.attributes.color.key as color",
+      "variants.prices.centAmount:range (* to 5000), (5000 to 10000), (10000 to *) as price",
+    ]);
   });
 });

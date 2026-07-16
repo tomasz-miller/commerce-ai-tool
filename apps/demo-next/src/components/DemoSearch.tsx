@@ -11,6 +11,7 @@ export function DemoSearch() {
       catalogLocale={demoCatalogLocale}
       queryLocale={demoQueryLocale}
       enableAutocomplete
+      enableFacets
       enableVoice
       enableImageSearch
       enableTts

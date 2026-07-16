@@ -1,11 +1,25 @@
 import { Injectable } from "@angular/core";
-import type { ProductCard, SearchResult, SuggestionsResult } from "@commerce-ai-tool/core";
+import type {
+  InterpretedSearchFilters,
+  ProductCard,
+  SearchResult,
+  SuggestedFacet,
+  SuggestionsResult,
+} from "@commerce-ai-tool/core";
 
 export interface SearchLocaleFields {
   queryLocale?: string;
   catalogLocale?: string;
   /** @deprecated Use queryLocale */
   locale?: string;
+}
+
+export interface SearchRequestOptions {
+  filters?: InterpretedSearchFilters;
+  searchTerms?: string[];
+  refineQuery?: string;
+  includeFacets?: boolean;
+  suggestedFacets?: SuggestedFacet[];
 }
 
 function buildLocalePayload(options: SearchLocaleFields): Record<string, string> {
@@ -30,12 +44,13 @@ export class CommerceAiApiService {
     query: string,
     locales: SearchLocaleFields = {},
     signal?: AbortSignal,
+    options: SearchRequestOptions = {},
   ): Promise<SearchResult> {
     const baseUrl = apiBaseUrl.replace(/\/$/, "");
     return fetch(`${baseUrl}/search`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query, ...buildLocalePayload(locales) }),
+      body: JSON.stringify({ query, ...options, ...buildLocalePayload(locales) }),
       signal,
     }).then(async (response) => {
       if (!response.ok) {

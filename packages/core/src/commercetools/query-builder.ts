@@ -1,5 +1,14 @@
 import type { ProductSearchRequest, SearchSorting } from "@commercetools/platform-sdk";
-import type { InterpretedSearchQuery, InterpretedSearchFilters } from "../types/index.js";
+import type {
+  InterpretedSearchFilters,
+  InterpretedSearchQuery,
+  ResolvedFacetSchema,
+} from "../types/index.js";
+import {
+  buildProductSearchFacets,
+  buildProjectionFacetParams,
+  getFacetAttribute,
+} from "./facets.js";
 
 export interface ProductSearchQueryOptions {
   currency?: string;
@@ -20,6 +29,7 @@ export interface ProductSearchBuildInput {
   limit?: number;
   offset?: number;
   options?: ProductSearchQueryOptions;
+  facetSchema?: ResolvedFacetSchema;
 }
 
 type SearchExpression = Record<string, unknown>;
@@ -30,7 +40,7 @@ const TEXT_FIELD_BOOSTS = [
   { field: "description", boost: 1 },
 ] as const;
 
-const KNOWN_FILTER_KEYS = new Set(["color", "brand", "category", "priceMin", "priceMax"]);
+const SYSTEM_FILTER_KEYS = new Set(["category", "priceMin", "priceMax"]);
 
 export function hasSearchableContent(interpreted: InterpretedSearchQuery): boolean {
   const phrase = joinSearchTerms(interpreted.searchTerms);
@@ -65,7 +75,7 @@ export function buildProductSearchRequest(input: ProductSearchBuildInput): Produ
   const enableFuzzy = options?.enableFuzzyName !== false;
 
   const textQuery = buildTextQuery(phrase, catalogLocale, enableFuzzy);
-  const filterQuery = buildFilterExpressions(filters, options?.currency);
+  const filterQuery = buildFilterExpressions(filters, options?.currency, input.facetSchema);
   const storeQuery = buildStoreScopeExpression(options);
 
   const queryParts = [textQuery, filterQuery, storeQuery].filter(Boolean) as SearchExpression[];
@@ -78,12 +88,19 @@ export function buildProductSearchRequest(input: ProductSearchBuildInput): Produ
 
   const sortEntry = buildPriceSort(interpreted.sort, options?.currency);
 
-  return {
+  const request = {
     limit,
     offset,
     ...(query ? { query } : {}),
     ...(sortEntry ? { sort: [sortEntry] } : {}),
   };
+  if (input.facetSchema) {
+    return {
+      ...request,
+      facets: buildProductSearchFacets(input.facetSchema, interpreted.suggestedFacets),
+    } as ProductSearchRequest;
+  }
+  return request;
 }
 
 export function buildProjectionSearchQueryArgs(
@@ -109,9 +126,16 @@ export function buildProjectionSearchQueryArgs(
     queryArgs.priceCurrency = options.currency;
   }
 
-  const projectionFilters = buildProjectionFilterParams(filters, options);
+  const projectionFilters = buildProjectionFilterParams(filters, options, input.facetSchema);
   if (projectionFilters.length > 0) {
     queryArgs.filter = projectionFilters;
+  }
+
+  if (input.facetSchema) {
+    const facetParams = buildProjectionFacetParams(input.facetSchema, interpreted.suggestedFacets);
+    if (facetParams.length > 0) {
+      queryArgs.facet = facetParams;
+    }
   }
 
   const sort = interpreted.sort;
@@ -176,30 +200,18 @@ function normalizeFilters(filters?: InterpretedSearchFilters): InterpretedSearch
 function buildFilterExpressions(
   filters: InterpretedSearchFilters,
   currency?: string,
+  schema?: ResolvedFacetSchema,
 ): SearchExpression | undefined {
   const parts: SearchExpression[] = [];
 
-  if (filters.color) {
-    parts.push({
-      exact: {
-        field: "variants.attributes.color.key",
-        fieldType: "enum",
-        value: filters.color,
-        caseInsensitive: true,
-      },
-    });
-  }
-
-  if (filters.brand) {
-    parts.push({
-      exact: {
-        field: "variants.attributes.brand",
-        fieldType: "text",
-        value: filters.brand,
-        caseInsensitive: true,
-      },
-    });
-  }
+  pushAttributeExact(parts, filters, "color", schema, {
+    field: "variants.attributes.color.key",
+    fieldType: "enum",
+  });
+  pushAttributeExact(parts, filters, "brand", schema, {
+    field: "variants.attributes.brand",
+    fieldType: "text",
+  });
 
   if (filters.category) {
     parts.push({
@@ -238,14 +250,32 @@ function buildFilterExpressions(
     });
   }
 
+  const numberRanges = collectNumberRanges(filters, schema);
+  for (const range of numberRanges) {
+    parts.push({
+      range: {
+        field: range.field,
+        fieldType: "number",
+        ranges: [range.bounds],
+      },
+    });
+  }
+
   for (const [key, value] of Object.entries(filters)) {
-    if (KNOWN_FILTER_KEYS.has(key)) {
+    if (!value || SYSTEM_FILTER_KEYS.has(key) || key === "color" || key === "brand") {
+      continue;
+    }
+    if (key.endsWith("Min") || key.endsWith("Max")) {
+      continue;
+    }
+    const attribute = getFacetAttribute(schema ?? emptySchema, key);
+    if (!attribute) {
       continue;
     }
     parts.push({
       exact: {
-        field: `variants.attributes.${key}`,
-        fieldType: "text",
+        field: attribute.field,
+        fieldType: attribute.fieldType,
         value,
         caseInsensitive: true,
       },
@@ -276,6 +306,7 @@ function buildStoreScopeExpression(options?: ProductSearchQueryOptions): SearchE
 function buildProjectionFilterParams(
   filters: InterpretedSearchFilters,
   options?: ProductSearchQueryOptions,
+  schema?: ResolvedFacetSchema,
 ): string[] {
   const expressions: string[] = [];
 
@@ -283,15 +314,8 @@ function buildProjectionFilterParams(
     expressions.push(`stores.key:"${escapeFilterValue(options.storeKey)}"`);
   }
 
-  if (filters.color) {
-    expressions.push(
-      `variants.attributes.color.key:"${escapeFilterValue(filters.color)}"`,
-    );
-  }
-
-  if (filters.brand) {
-    expressions.push(`variants.attributes.brand:"${escapeFilterValue(filters.brand)}"`);
-  }
+  pushProjectionAttributeExact(expressions, filters, "color", schema, "variants.attributes.color.key");
+  pushProjectionAttributeExact(expressions, filters, "brand", schema, "variants.attributes.brand");
 
   if (filters.category) {
     expressions.push(`categories.id:"${escapeFilterValue(filters.category)}"`);
@@ -309,15 +333,136 @@ function buildProjectionFilterParams(
     expressions.push(`variants.prices.currencyCode:"${escapeFilterValue(options.currency)}"`);
   }
 
+  const numberRanges = collectNumberRanges(filters, schema);
+  for (const range of numberRanges) {
+    const from = range.bounds.from ?? "*";
+    const to = range.bounds.to ?? "*";
+    expressions.push(`${range.field}:range (${from} to ${to})`);
+  }
+
   for (const [key, value] of Object.entries(filters)) {
-    if (KNOWN_FILTER_KEYS.has(key) || !value) {
+    if (!value || SYSTEM_FILTER_KEYS.has(key) || key === "color" || key === "brand") {
       continue;
     }
-    expressions.push(`variants.attributes.${key}:"${escapeFilterValue(value)}"`);
+    if (key.endsWith("Min") || key.endsWith("Max")) {
+      continue;
+    }
+    const attribute = getFacetAttribute(schema ?? emptySchema, key);
+    if (attribute) {
+      expressions.push(`${attribute.field}:"${escapeFilterValue(value)}"`);
+    }
   }
 
   return expressions;
 }
+
+function pushAttributeExact(
+  parts: SearchExpression[],
+  filters: InterpretedSearchFilters,
+  name: "color" | "brand",
+  schema: ResolvedFacetSchema | undefined,
+  legacy: { field: string; fieldType: string },
+): void {
+  const value = filters[name];
+  if (!value) {
+    return;
+  }
+
+  if (schema) {
+    const attribute = getFacetAttribute(schema, name);
+    if (!attribute) {
+      return;
+    }
+    parts.push({
+      exact: {
+        field: attribute.field,
+        fieldType: attribute.fieldType,
+        value,
+        caseInsensitive: true,
+      },
+    });
+    return;
+  }
+
+  parts.push({
+    exact: {
+      field: legacy.field,
+      fieldType: legacy.fieldType,
+      value,
+      caseInsensitive: true,
+    },
+  });
+}
+
+function pushProjectionAttributeExact(
+  expressions: string[],
+  filters: InterpretedSearchFilters,
+  name: "color" | "brand",
+  schema: ResolvedFacetSchema | undefined,
+  legacyField: string,
+): void {
+  const value = filters[name];
+  if (!value) {
+    return;
+  }
+
+  if (schema) {
+    const attribute = getFacetAttribute(schema, name);
+    if (!attribute) {
+      return;
+    }
+    expressions.push(`${attribute.field}:"${escapeFilterValue(value)}"`);
+    return;
+  }
+
+  expressions.push(`${legacyField}:"${escapeFilterValue(value)}"`);
+}
+
+function collectNumberRanges(
+  filters: InterpretedSearchFilters,
+  schema?: ResolvedFacetSchema,
+): Array<{ field: string; bounds: { from?: number; to?: number } }> {
+  if (!schema) {
+    return [];
+  }
+
+  const byName = new Map<string, { field: string; bounds: { from?: number; to?: number } }>();
+
+  for (const [key, value] of Object.entries(filters)) {
+    if (!value) {
+      continue;
+    }
+    const rangeMatch = key.match(/^(.+)(Min|Max)$/);
+    if (!rangeMatch) {
+      continue;
+    }
+    const attributeName = rangeMatch[1]!;
+    const attribute = getFacetAttribute(schema, attributeName);
+    if (attribute?.attributeType !== "number") {
+      continue;
+    }
+    const valueAsNumber = Number(value);
+    if (!Number.isFinite(valueAsNumber)) {
+      continue;
+    }
+    const existing = byName.get(attributeName) ?? { field: attribute.field, bounds: {} };
+    if (rangeMatch[2] === "Min") {
+      existing.bounds.from = valueAsNumber;
+    } else {
+      existing.bounds.to = valueAsNumber;
+    }
+    byName.set(attributeName, existing);
+  }
+
+  return [...byName.values()];
+}
+
+const emptySchema: ResolvedFacetSchema = {
+  attributes: [],
+  systemFacets: [],
+  etag: "",
+  resolvedAt: "",
+};
 
 function buildPriceSort(
   sort: InterpretedSearchQuery["sort"],

@@ -1,8 +1,9 @@
 import { OpenRouter } from "@openrouter/sdk";
-import type { OpenRouterConfig } from "../../types/index.js";
+import type { FacetAttributeDefinition, OpenRouterConfig, SearchLocaleContext } from "../../types/index.js";
 import type { AIProvider } from "../types.js";
-import type { SearchLocaleContext } from "../../types/index.js";
 import {
+  buildRefineQueryUserMessage,
+  buildSchemaAwareTextQueryUserMessage,
   buildImageQueryUserMessage,
   buildTextQueryUserMessage,
   buildVoiceAudioUserMessage,
@@ -39,14 +40,20 @@ export class OpenRouterProvider implements AIProvider {
     this.voiceModel = config.voiceModel ?? DEFAULT_VOICE_MODEL;
   }
 
-  async interpretTextQuery(text: string, locales: SearchLocaleContext) {
+  async interpretTextQuery(
+    text: string,
+    locales: SearchLocaleContext,
+    attributeCatalog: FacetAttributeDefinition[] = [],
+  ) {
     const response = await this.client.chat.send({
       model: this.model,
       messages: [
         { role: "system", content: TEXT_QUERY_SYSTEM_PROMPT },
         {
           role: "user",
-          content: buildTextQueryUserMessage(text, locales),
+          content: attributeCatalog.length
+            ? buildSchemaAwareTextQueryUserMessage(text, locales, attributeCatalog)
+            : buildTextQueryUserMessage(text, locales),
         },
       ],
       responseFormat: { type: "json_object" },
@@ -54,6 +61,23 @@ export class OpenRouterProvider implements AIProvider {
 
     const content = this.extractContent(response);
     return parseInterpretedQuery(content);
+  }
+
+  async interpretRefineQuery(
+    text: string,
+    context: Parameters<AIProvider["interpretRefineQuery"]>[1],
+    locales: SearchLocaleContext,
+  ) {
+    const response = await this.client.chat.send({
+      model: this.model,
+      messages: [
+        { role: "system", content: TEXT_QUERY_SYSTEM_PROMPT },
+        { role: "user", content: buildRefineQueryUserMessage(text, locales, context) },
+      ],
+      responseFormat: { type: "json_object" },
+    });
+
+    return parseInterpretedQuery(this.extractContent(response));
   }
 
   async interpretImageQuery(imageBase64: string, mimeType: string, locales: SearchLocaleContext) {

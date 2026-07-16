@@ -4,9 +4,16 @@ import {
   type ContentBlock,
   type Message,
 } from "@aws-sdk/client-bedrock-runtime";
-import type { BedrockConfig, SearchLocaleContext, VoiceAudioInterpretation } from "../../types/index.js";
+import type {
+  BedrockConfig,
+  FacetAttributeDefinition,
+  SearchLocaleContext,
+  VoiceAudioInterpretation,
+} from "../../types/index.js";
 import type { AIProvider } from "../types.js";
 import {
+  buildRefineQueryUserMessage,
+  buildSchemaAwareTextQueryUserMessage,
   buildImageQueryUserMessage,
   buildTextQueryUserMessage,
   buildVoiceEnhanceUserMessage,
@@ -33,13 +40,44 @@ export class BedrockProvider implements AIProvider {
     this.visionModelId = config.visionModelId ?? config.modelId ?? DEFAULT_MODEL_ID;
   }
 
-  async interpretTextQuery(text: string, locales: SearchLocaleContext) {
+  async interpretTextQuery(
+    text: string,
+    locales: SearchLocaleContext,
+    attributeCatalog: FacetAttributeDefinition[] = [],
+  ) {
     const response = await this.converse(this.modelId, [
       {
         role: "user",
         content: [
           {
-            text: `${TEXT_QUERY_SYSTEM_PROMPT}\n\n${buildTextQueryUserMessage(text, locales)}`,
+            text: `${TEXT_QUERY_SYSTEM_PROMPT}\n\n${
+              attributeCatalog.length
+                ? buildSchemaAwareTextQueryUserMessage(text, locales, attributeCatalog)
+                : buildTextQueryUserMessage(text, locales)
+            }`,
+          },
+        ],
+      },
+    ]);
+
+    return parseInterpretedQuery(this.extractText(response));
+  }
+
+  async interpretRefineQuery(
+    text: string,
+    context: Parameters<AIProvider["interpretRefineQuery"]>[1],
+    locales: SearchLocaleContext,
+  ) {
+    const response = await this.converse(this.modelId, [
+      {
+        role: "user",
+        content: [
+          {
+            text: `${TEXT_QUERY_SYSTEM_PROMPT}\n\n${buildRefineQueryUserMessage(
+              text,
+              locales,
+              context,
+            )}`,
           },
         ],
       },
