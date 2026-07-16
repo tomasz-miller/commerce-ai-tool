@@ -10,6 +10,7 @@ export function DemoSearch() {
       theme="auto"
       catalogLocale={demoCatalogLocale}
       queryLocale={demoQueryLocale}
+      enableAutocomplete
       enableVoice
       enableImageSearch
       enableTts

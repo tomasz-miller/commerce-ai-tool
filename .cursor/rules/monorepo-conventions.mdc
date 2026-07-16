@@ -16,11 +16,12 @@ All files under `packages/` and `apps/` must be in **English** (see `english-onl
 - Workspace: `"workspace:*"` for internal packages
 - Peer deps: React, Angular, Next, Express — in UI/server packages
 
-## Build (tsup)
+## Build (tsup + TypeScript 7 declarations)
 
 - Entry in `tsup.config.ts`, output in `dist/` (gitignored)
 - `clean: !process.argv.includes("--watch")` — watch must not wipe dist (avoids monorepo races)
-- `dts: true` — types required by dependent packages
+- `dts: false` in tsup — bundle JS only; emit `.d.ts` with `scripts/emit-package-dts.mjs` (native `tsc`, TypeScript 7)
+- Library packages declare `@typescript/native` only; `typescript` (Compiler API alias) stays on root and `demo-next` until TS 7.1 tooling support
 
 ## Turbo
 

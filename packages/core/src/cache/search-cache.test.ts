@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   SearchCache,
+  buildImageSearchCacheKey,
+  buildSuggestionsCacheKey,
   buildTextSearchCacheKey,
+  buildVoiceSearchCacheKey,
   normalizeCacheKeyPart,
 } from "./search-cache.js";
 
@@ -34,6 +37,31 @@ describe("buildTextSearchCacheKey", () => {
   it("includes query locales and limit", () => {
     expect(buildTextSearchCacheKey("Red Shoes", "en", "no", 20)).toBe(
       "text|red shoes|en|no|20",
+    );
+  });
+});
+
+describe("buildSuggestionsCacheKey", () => {
+  it("includes prefix, locale, and limit", () => {
+    expect(buildSuggestionsCacheKey("Red", "en", 8)).toBe("suggest|red|en|8");
+  });
+});
+
+describe("buildImageSearchCacheKey", () => {
+  it("includes image hash and locales", () => {
+    expect(buildImageSearchCacheKey("abc123", "image/jpeg", "en", "no", 20)).toBe(
+      "image|abc123|image/jpeg|en|no|20",
+    );
+  });
+});
+
+describe("buildVoiceSearchCacheKey", () => {
+  it("includes audio hash and voice mode", () => {
+    expect(buildVoiceSearchCacheKey("hash", "audio/webm", "openrouter-audio", "en", "no", 20, true)).toBe(
+      "voice|openrouter-audio|tts|hash|audio/webm|en|no|20",
+    );
+    expect(buildVoiceSearchCacheKey("hash", "audio/webm", "openrouter-audio", "en", "no", 20, false)).toBe(
+      "voice|openrouter-audio|no-tts|hash|audio/webm|en|no|20",
     );
   });
 });

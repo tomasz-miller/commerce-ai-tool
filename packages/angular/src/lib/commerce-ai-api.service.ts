@@ -1,5 +1,5 @@
 import { Injectable } from "@angular/core";
-import type { ProductCard, SearchResult } from "@commerce-ai-tool/core";
+import type { ProductCard, SearchResult, SuggestionsResult } from "@commerce-ai-tool/core";
 
 export interface SearchLocaleFields {
   queryLocale?: string;
@@ -43,6 +43,27 @@ export class CommerceAiApiService {
         throw new Error(data.error ?? "Search failed");
       }
       return response.json() as Promise<SearchResult>;
+    });
+  }
+
+  suggest(
+    apiBaseUrl: string,
+    query: string,
+    locales: SearchLocaleFields = {},
+    signal?: AbortSignal,
+  ): Promise<SuggestionsResult> {
+    const baseUrl = apiBaseUrl.replace(/\/$/, "");
+    return fetch(`${baseUrl}/search/suggestions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query, ...buildLocalePayload(locales) }),
+      signal,
+    }).then(async (response) => {
+      if (!response.ok) {
+        const data = (await response.json()) as { error?: string };
+        throw new Error(data.error ?? "Suggestions failed");
+      }
+      return response.json() as Promise<SuggestionsResult>;
     });
   }
 

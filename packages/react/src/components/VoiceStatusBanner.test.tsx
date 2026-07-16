@@ -1,6 +1,9 @@
+import { DEFAULT_COMMERCE_AI_SEARCH_MESSAGES } from "@commerce-ai-tool/core";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { VoiceStatusBanner } from "./VoiceStatusBanner.js";
+
+const messages = DEFAULT_COMMERCE_AI_SEARCH_MESSAGES;
 
 describe("VoiceStatusBanner", () => {
   it("shows listening state with waveform and timer", () => {
@@ -11,6 +14,7 @@ describe("VoiceStatusBanner", () => {
         isLoadingTts={false}
         error={null}
         durationSeconds={8}
+        messages={messages}
       />,
     );
 
@@ -29,6 +33,7 @@ describe("VoiceStatusBanner", () => {
         isLoadingTts={false}
         error={null}
         durationSeconds={0}
+        messages={messages}
       />,
     );
 
@@ -44,6 +49,7 @@ describe("VoiceStatusBanner", () => {
         isLoadingTts
         error={null}
         durationSeconds={0}
+        messages={messages}
       />,
     );
 
@@ -58,6 +64,7 @@ describe("VoiceStatusBanner", () => {
         isLoadingTts={false}
         error="Microphone access denied"
         durationSeconds={0}
+        messages={messages}
       />,
     );
 

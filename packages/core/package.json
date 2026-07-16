@@ -24,7 +24,7 @@
   ],
   "sideEffects": false,
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && node ../../scripts/emit-package-dts.mjs dist/index.d.ts",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
@@ -40,7 +40,7 @@
   "devDependencies": {
     "@types/node": "^24.0.0",
     "tsup": "^8.4.0",
-    "typescript": "^5.8.2",
+    "@typescript/native": "catalog:",
     "vitest": "^3.0.9"
   },
   "publishConfig": {

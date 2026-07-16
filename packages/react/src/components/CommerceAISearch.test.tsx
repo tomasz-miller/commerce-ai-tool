@@ -16,6 +16,11 @@ const mockUseCameraCapture = vi.mocked(useCameraCapture);
 const defaultSearchReturn = {
   query: "",
   setQuery: vi.fn(),
+  suggestions: [],
+  isLoadingSuggestions: false,
+  suggestionsError: null,
+  suggestionsReady: false,
+  selectSuggestion: vi.fn(),
   results: [],
   meta: null,
   setMeta: vi.fn(),
@@ -107,6 +112,39 @@ describe("CommerceAISearch voice banner", () => {
     expect(screen.getByRole("listbox")).not.toBeNull();
     expect(screen.getByText("No products found")).not.toBeNull();
     expect(screen.getByText("Searched for: obscure gadget")).not.toBeNull();
+  });
+});
+
+describe("CommerceAISearch autocomplete", () => {
+  beforeEach(() => {
+    mockUseCommerceAISearch.mockReturnValue(defaultSearchReturn);
+    mockUseVoiceSearch.mockReturnValue(defaultVoiceReturn);
+    mockUseCameraCapture.mockReturnValue(defaultCameraReturn);
+  });
+
+  it("shows suggestion errors in the suggestions panel", () => {
+    mockUseCommerceAISearch.mockReturnValue({
+      ...defaultSearchReturn,
+      query: "red",
+      suggestionsError: "Suggestions unavailable",
+      suggestionsReady: true,
+    });
+
+    render(<CommerceAISearch apiBaseUrl="/api/commerce-ai" enableAutocomplete />);
+
+    expect(screen.getByRole("alert").textContent).toContain("Suggestions unavailable");
+  });
+
+  it("shows empty suggestions message after a ready fetch", () => {
+    mockUseCommerceAISearch.mockReturnValue({
+      ...defaultSearchReturn,
+      query: "zz",
+      suggestionsReady: true,
+    });
+
+    render(<CommerceAISearch apiBaseUrl="/api/commerce-ai" enableAutocomplete />);
+
+    expect(screen.getByText("No suggestions")).not.toBeNull();
   });
 });
 

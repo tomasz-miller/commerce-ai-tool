@@ -5,6 +5,7 @@ import { createCommerceAIServer } from "./server.js";
 import {
   executeSearch,
   executeSearchImage,
+  executeSearchSuggestions,
   executeSearchVoice,
   executeTts,
   mapRouteError,
@@ -14,6 +15,7 @@ import { parseMultipartRequest } from "./utils/multipart.js";
 export interface NextHandlers {
   health: () => Promise<Response>;
   search: (req: Request) => Promise<Response>;
+  searchSuggestions: (req: Request) => Promise<Response>;
   searchVoice: (req: Request) => Promise<Response>;
   searchImage: (req: Request) => Promise<Response>;
   tts: (req: Request) => Promise<Response>;
@@ -40,6 +42,24 @@ export function createNextHandlers(config: CommerceAIConfig): NextHandlers {
         return Response.json(result);
       } catch (error) {
         const mapped = mapRouteError(error, "search", "Search failed");
+        return toWebErrorResponse(mapped.message, mapped.status);
+      }
+    },
+
+    searchSuggestions: async (req: Request) => {
+      try {
+        const body = (await req.json()) as {
+          query: string;
+          queryLocale?: string;
+          catalogLocale?: string;
+          locale?: string;
+          limit?: number;
+        };
+
+        const result = await executeSearchSuggestions(server, body);
+        return Response.json(result);
+      } catch (error) {
+        const mapped = mapRouteError(error, "searchSuggestions", "Suggestions failed");
         return toWebErrorResponse(mapped.message, mapped.status);
       }
     },

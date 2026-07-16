@@ -38,7 +38,7 @@ Package dependencies: `server`, `react`, `angular` → `core`.
 
 | Layer | Libraries |
 |-------|-----------|
-| Language / build | TypeScript 5.8 (strict), tsup 8, ESM + CJS |
+| Language / build | TypeScript 7.0 (`tsc`), `@typescript/typescript6` for legacy Compiler API consumers, tsup 8, ESM + CJS |
 | Monorepo | pnpm workspaces, Turborepo |
 | Unit tests | Vitest 3 (`packages/**/*.test.ts`) |
 | Lint | ESLint 9 + typescript-eslint |
@@ -50,6 +50,36 @@ Package dependencies: `server`, `react`, `angular` → `core`.
 | Demo | Next.js 15, React 19 |
 
 Add new dependencies in the **specific package** `package.json`, not root (except shared dev tools).
+
+## TypeScript 7
+
+TypeScript 7 ships a native `tsc` (Go) without the JavaScript Compiler API. The monorepo uses a **side-by-side** setup via pnpm catalog entries in `pnpm-workspace.yaml`:
+
+| Catalog key | Package | Used for |
+|-------------|---------|----------|
+| `typescript-native` | `typescript@^7.0.2` (as `@typescript/native`, catalog) | `tsc --noEmit`, `tsc --emitDeclarationOnly`, library builds |
+| `typescript-api` | `@typescript/typescript6@^6.0.2` (npm alias `typescript`, catalog) | `typescript-eslint`, Next.js (`demo-next` only) |
+
+**Where to declare dependencies**
+
+- **Library packages** (`core`, `server`, `react`, `angular`): `@typescript/native` only.
+- **Root** and **`demo-next`**: both `@typescript/native` and `typescript` (API alias).
+
+**Declaration emit** — do not use `tsup` `dts: true` (relies on deprecated Compiler API and injects `baseUrl`). Instead:
+
+```bash
+tsup && node ../../scripts/emit-package-dts.mjs dist/index.d.ts [more entries...]
+```
+
+Each library has `tsconfig.build.json` (excludes `*.test.ts`) for emit.
+
+**TS 7 config defaults** — set explicit `"types": ["node"]` in tsconfigs that use Node globals; add `declare module "*.css"` for side-effect CSS imports.
+
+**Future cleanup (when TypeScript 7.1+ ships a programmatic API and tooling adopts it)**
+
+1. Remove `typescript-api` / `@typescript/typescript6` from root and `demo-next`.
+2. Point `typescript-eslint` and Next.js at the new API (or drop the alias once peers allow TS 7).
+3. Re-evaluate whether `emit-package-dts.mjs` can be replaced by a single native emit step.
 
 ## Commands
 
@@ -147,6 +177,7 @@ Release (`.github/workflows/release.yml`) is disabled (`workflow_dispatch` only)
 |------|------|
 | `turbo.json` | Monorepo task dependencies |
 | `tsconfig.base.json` | Shared TypeScript options |
+| `scripts/emit-package-dts.mjs` | Native `tsc` declaration emit + `.d.cts` copy for libraries |
 | `eslint.config.mjs` | Root ESLint flat config |
 | `vitest.config.ts` | `packages/**/*.test.ts` pattern |
 | `apps/demo-next/.env.example` | Required environment variables |

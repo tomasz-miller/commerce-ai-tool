@@ -1,5 +1,9 @@
 import { logSearchTrace, SearchTimeoutError } from "@commerce-ai-tool/core";
 import type { VoiceSearchResult } from "@commerce-ai-tool/core";
+import {
+  clampSuggestionsLimit,
+  normalizeSuggestionsPrefix,
+} from "@commerce-ai-tool/core";
 import type { CommerceAIServer } from "./server.js";
 import { logServerError, logServerWarning } from "./utils/log-error.js";
 import { parseSearchLocaleOptions } from "./utils/locale.js";
@@ -13,6 +17,14 @@ export class ValidationError extends Error {
 }
 
 export interface SearchRequestBody {
+  query: string;
+  queryLocale?: string;
+  catalogLocale?: string;
+  locale?: string;
+  limit?: number;
+}
+
+export interface SuggestionsRequestBody {
   query: string;
   queryLocale?: string;
   catalogLocale?: string;
@@ -67,6 +79,30 @@ export async function executeSearch(
     query: body.query,
     ...localeOptions,
     limit: body.limit,
+  });
+}
+
+export async function executeSearchSuggestions(
+  server: CommerceAIServer,
+  body: SuggestionsRequestBody,
+): Promise<unknown> {
+  const normalizedQuery = normalizeSuggestionsPrefix(body.query ?? "");
+  if (!normalizedQuery) {
+    throw new ValidationError("query must be at least 2 characters");
+  }
+
+  const localeOptions = parseSearchLocaleOptions(body);
+  logSearchTrace("handler", {
+    type: "suggest",
+    query: normalizedQuery,
+    queryLocale: localeOptions.queryLocale,
+    catalogLocale: localeOptions.catalogLocale,
+  });
+
+  return server.orchestrator.suggestByText({
+    query: normalizedQuery,
+    ...localeOptions,
+    limit: clampSuggestionsLimit(body.limit),
   });
 }
 

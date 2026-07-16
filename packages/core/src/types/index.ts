@@ -14,8 +14,13 @@ export interface SearchTimeoutsConfig {
   aiVoiceAudioMs?: number;
   aiImageMs?: number;
   commercetoolsMs?: number;
+  commercetoolsSuggestMs?: number;
   elevenLabsTtsMs?: number;
 }
+
+export const SUGGESTIONS_MIN_PREFIX_LENGTH = 2;
+export const SUGGESTIONS_DEFAULT_LIMIT = 8;
+export const SUGGESTIONS_MAX_LIMIT = 20;
 
 export interface CommercetoolsConfig {
   projectKey: string;
@@ -104,6 +109,15 @@ export interface SearchMeta {
 export interface SearchResult {
   products: ProductCard[];
   meta: SearchMeta;
+}
+
+export interface SuggestionsRequest extends SearchLocaleOptions {
+  query: string;
+  limit?: number;
+}
+
+export interface SuggestionsResult {
+  suggestions: string[];
 }
 
 export interface TextSearchRequest {

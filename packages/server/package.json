@@ -43,7 +43,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && node ../../scripts/emit-package-dts.mjs dist/index.d.ts dist/next.d.ts dist/express.d.ts",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
@@ -78,7 +78,7 @@
     "next": "^15.2.3",
     "supertest": "^7.1.0",
     "tsup": "^8.4.0",
-    "typescript": "^5.8.2",
+    "@typescript/native": "catalog:",
     "vitest": "^3.0.9"
   },
   "publishConfig": {

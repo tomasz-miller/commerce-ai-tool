@@ -2,15 +2,20 @@ import { createAIProvider } from "../ai/index.js";
 import type { AIProvider } from "../ai/types.js";
 import {
   SearchCache,
+  buildImageSearchCacheKey,
   buildInterpretedSearchCacheKey,
+  buildSuggestionsCacheKey,
   buildTextSearchCacheKey,
+  buildVoiceSearchCacheKey,
 } from "../cache/search-cache.js";
 import { createCommercetoolsClient } from "../commercetools/client.js";
+import type { CommercetoolsClient } from "../commercetools/client.js";
 import { resolveSearchLocales } from "../locale/resolve.js";
 import { hasSearchableContent } from "../commercetools/query-builder.js";
 import type { ProductSearchBuildInput } from "../commercetools/query-builder.js";
 import { buildTtsSummaryFallback } from "./voice-tts.js";
 import { logSearchTrace } from "../utils/dev-trace.js";
+import { hashUint8Array } from "../utils/hash.js";
 import { createSearchTimer, shouldIncludeSearchTimings } from "../utils/search-timer.js";
 import { withTimeout } from "../utils/with-timeout.js";
 import { uint8ArrayToBase64 } from "../utils/audio.js";
@@ -21,11 +26,18 @@ import type {
   SearchLocaleContext,
   SearchLocaleOptions,
   SearchResult,
+  SuggestionsRequest,
+  SuggestionsResult,
   TextSearchRequest,
   VoiceAudioInterpretation,
   VoiceMode,
   VoiceSearchResult,
 } from "../types/index.js";
+import {
+  clampSuggestionsLimit,
+  normalizeSuggestionsPrefix,
+  resolveSuggestLocale,
+} from "./suggestions-input.js";
 
 export interface SearchOrchestrator {
   searchByText(request: TextSearchRequest): Promise<SearchResult>;
@@ -39,11 +51,14 @@ export interface SearchOrchestrator {
     mimeType: string,
     options?: SearchLocaleOptions & { limit?: number },
   ): Promise<ImageSearchResult>;
+  suggestByText(request: SuggestionsRequest): Promise<SuggestionsResult>;
 }
 
 export interface SearchOrchestratorDeps {
   config: CommerceAIConfig;
   transcribeAudio?: (audio: Uint8Array, mimeType: string) => Promise<string>;
+  aiProvider?: AIProvider;
+  commercetoolsClient?: CommercetoolsClient;
 }
 
 const DEFAULT_TIMEOUTS = {
@@ -51,6 +66,7 @@ const DEFAULT_TIMEOUTS = {
   aiVoiceAudioMs: 20_000,
   aiImageMs: 15_000,
   commercetoolsMs: 8_000,
+  commercetoolsSuggestMs: 3_000,
 } as const;
 
 export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOrchestrator {
@@ -60,9 +76,14 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
   const voiceMode = resolveVoiceMode(config);
   const timeouts = { ...DEFAULT_TIMEOUTS, ...config.timeouts };
   const resultCache = config.cache ? new SearchCache<SearchResult>(config.cache) : null;
+  const suggestionCache = config.cache ? new SearchCache<SuggestionsResult>(config.cache) : null;
+  const voiceResultCache = config.cache
+    ? new SearchCache<VoiceSearchResult & { ttsText?: string }>(config.cache)
+    : null;
+  const imageResultCache = config.cache ? new SearchCache<ImageSearchResult>(config.cache) : null;
 
-  const ai = createAIProvider(config.ai);
-  const ct = createCommercetoolsClient(config.commercetools);
+  const ai = deps.aiProvider ?? createAIProvider(config.ai);
+  const ct = deps.commercetoolsClient ?? createCommercetoolsClient(config.commercetools);
 
   function resolveLocales(request?: SearchLocaleOptions): SearchLocaleContext {
     return resolveSearchLocales({ defaults: config.defaults, request });
@@ -296,17 +317,18 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
         catalogLocale: locales.catalogLocale,
       });
 
-      const voiceCacheKey = [
-        "voice",
+      const enableTts = options.enableTts !== false;
+      const voiceCacheKey = buildVoiceSearchCacheKey(
+        hashUint8Array(audio),
+        mimeType,
         voiceMode,
-        uint8ArrayToBase64(audio.slice(0, 256)),
-        String(audio.length),
         locales.queryLocale,
         locales.catalogLocale,
-        String(searchLimit),
-      ].join("|");
-      const cachedVoice = resultCache?.get(voiceCacheKey);
-      if (cachedVoice && isVoiceSearchResult(cachedVoice)) {
+        searchLimit,
+        enableTts,
+      );
+      const cachedVoice = voiceResultCache?.get(voiceCacheKey);
+      if (cachedVoice) {
         timer.mark("cache_hit");
         return withTimings(cachedVoice, timer);
       }
@@ -322,7 +344,7 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
       };
 
       const withTts = await attachVoiceTts(voiceResult, options, locales, ai, timer, timeouts.aiTextMs);
-      resultCache?.set(voiceCacheKey, withTts);
+      voiceResultCache?.set(voiceCacheKey, withTts);
       return withTimings(withTts, timer);
     },
 
@@ -338,6 +360,19 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
         catalogLocale: locales.catalogLocale,
       });
 
+      const imageCacheKey = buildImageSearchCacheKey(
+        hashUint8Array(image),
+        mimeType,
+        locales.queryLocale,
+        locales.catalogLocale,
+        searchLimit,
+      );
+      const cachedImage = imageResultCache?.get(imageCacheKey);
+      if (cachedImage) {
+        timer.mark("cache_hit");
+        return withTimings(cachedImage, timer);
+      }
+
       const base64 = uint8ArrayToBase64(image);
       const interpreted = await withTimeout(
         ai.interpretImageQuery(base64, mimeType, locales),
@@ -347,10 +382,47 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
       timer.mark("ai_interpret_image");
 
       const result = await executeSearch(interpreted, locales, searchLimit, 0, timer);
-      return {
+      const imageResult: ImageSearchResult = {
         ...withTimings(result, timer),
         interpretation: interpreted.interpretation,
       };
+      imageResultCache?.set(imageCacheKey, imageResult);
+      return imageResult;
+    },
+
+    async suggestByText(request) {
+      const locales = resolveLocales(request);
+      const trimmed = normalizeSuggestionsPrefix(request.query);
+      const suggestLimit = clampSuggestionsLimit(request.limit);
+
+      if (!trimmed) {
+        return { suggestions: [] };
+      }
+
+      const suggestLocale = resolveSuggestLocale(locales.queryLocale, locales.catalogLocale);
+      const cacheKey = buildSuggestionsCacheKey(trimmed, suggestLocale, suggestLimit);
+      const cached = suggestionCache?.get(cacheKey);
+      if (cached) {
+        return cached;
+      }
+
+      logSearchTrace("input", {
+        type: "suggest",
+        query: trimmed,
+        queryLocale: locales.queryLocale,
+        catalogLocale: locales.catalogLocale,
+        suggestLocale,
+      });
+
+      const suggestions = await withTimeout(
+        ct.suggestSearchTerms(trimmed, suggestLocale, suggestLimit),
+        timeouts.commercetoolsSuggestMs,
+        "ct_suggest",
+      );
+
+      const result: SuggestionsResult = { suggestions };
+      suggestionCache?.set(cacheKey, result);
+      return result;
     },
   };
 }
@@ -369,12 +441,6 @@ function resolveVoiceMode(config: CommerceAIConfig): VoiceMode {
 
 function productIdsFrom(searchResult: { productIds: string[] }): string[] {
   return searchResult.productIds;
-}
-
-function isVoiceSearchResult(
-  result: SearchResult,
-): result is VoiceSearchResult & { ttsText?: string } {
-  return "transcript" in result && typeof result.transcript === "string";
 }
 
 async function attachVoiceTts(

@@ -9,6 +9,7 @@ import { createHandlers } from "./handlers.js";
 import type { CommerceAIServer } from "./server.js";
 import {
   executeSearch,
+  executeSearchSuggestions,
   executeSearchVoice,
   executeTts,
   mapRouteError,
@@ -32,6 +33,9 @@ function createMockServer(overrides: Partial<CommerceAIServer> = {}): CommerceAI
       interpretation: "sneakers",
       products: [],
       meta: { total: 0 },
+    }),
+    suggestByText: vi.fn().mockResolvedValue({
+      suggestions: ["Red Shoes", "Running Shoes"],
     }),
   } satisfies Partial<SearchOrchestrator>;
 
@@ -63,6 +67,17 @@ function createTestApp(handlers: ReturnType<typeof createHandlers>) {
 
   app.post("/search", async (req, res) => {
     const response = await handlers.search(req);
+    res.status(response.status);
+    if (response.headers) {
+      for (const [key, value] of Object.entries(response.headers)) {
+        res.setHeader(key, value);
+      }
+    }
+    res.send(response.body);
+  });
+
+  app.post("/search/suggestions", async (req, res) => {
+    const response = await handlers.searchSuggestions(req);
     res.status(response.status);
     if (response.headers) {
       for (const [key, value] of Object.entries(response.headers)) {
@@ -144,6 +159,36 @@ describe("route-actions", () => {
     });
   });
 
+  it("executeSearchSuggestions rejects short query", async () => {
+    const server = createMockServer();
+
+    await expect(executeSearchSuggestions(server, { query: "  " })).rejects.toBeInstanceOf(
+      ValidationError,
+    );
+    await expect(executeSearchSuggestions(server, { query: "a" })).rejects.toBeInstanceOf(
+      ValidationError,
+    );
+  });
+
+  it("executeSearchSuggestions delegates to orchestrator", async () => {
+    const server = createMockServer();
+
+    const result = await executeSearchSuggestions(server, {
+      query: "red",
+      catalogLocale: "en",
+      limit: 5,
+    });
+
+    expect(server.orchestrator.suggestByText).toHaveBeenCalledWith({
+      query: "red",
+      catalogLocale: "en",
+      queryLocale: undefined,
+      locale: undefined,
+      limit: 5,
+    });
+    expect(result).toEqual({ suggestions: ["Red Shoes", "Running Shoes"] });
+  });
+
   it("executeTts rejects empty text", async () => {
     const server = createMockServer();
 
@@ -210,6 +255,27 @@ describe("createHandlers HTTP", () => {
     });
   });
 
+  it("searchSuggestions validates query via IncomingMessage", async () => {
+    const handlers = createHandlers(createMockServer());
+    const response = await handlers.searchSuggestions(jsonRequest({ query: "" }));
+
+    expect(response.status).toBe(400);
+    expect(JSON.parse(response.body as string)).toEqual({
+      error: "query must be at least 2 characters",
+    });
+  });
+
+  it("searchSuggestions returns orchestrator result", async () => {
+    const server = createMockServer();
+    const handlers = createHandlers(server);
+    const response = await handlers.searchSuggestions(jsonRequest({ query: "red" }));
+
+    expect(response.status).toBe(200);
+    expect(JSON.parse(response.body as string)).toEqual({
+      suggestions: ["Red Shoes", "Running Shoes"],
+    });
+  });
+
   it("tts returns audio buffer", async () => {
     const handlers = createHandlers(createMockServer());
     const response = await handlers.tts(jsonRequest({ text: "hello" }));
@@ -235,6 +301,16 @@ describe("createHandlers HTTP", () => {
     expect(server.orchestrator.searchByText).toHaveBeenCalledWith(
       expect.objectContaining({ query: "jacket", limit: 3 }),
     );
+
+    const suggestionsResponse = await request(app)
+      .post("/search/suggestions")
+      .send({ query: "red" })
+      .expect(200);
+
+    expect(suggestionsResponse.body).toEqual({
+      suggestions: ["Red Shoes", "Running Shoes"],
+    });
+    expect(server.orchestrator.suggestByText).toHaveBeenCalled();
 
     const voiceResponse = await request(app)
       .post("/search/voice")

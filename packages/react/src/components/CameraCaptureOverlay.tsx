@@ -1,9 +1,14 @@
 import { useEffect, useRef } from "react";
 import { Camera, X } from "lucide-react";
+import type { CommerceAISearchMessages } from "@commerce-ai-tool/core";
 
 export interface CameraCaptureOverlayProps {
   stream: MediaStream | null;
   error: string | null;
+  messages: Pick<
+    CommerceAISearchMessages,
+    "cameraCapture" | "cameraPreview" | "capturePhoto" | "cancel" | "dismiss"
+  >;
   onCapture: (video: HTMLVideoElement) => void;
   onClose: () => void;
   onDismissError: () => void;
@@ -12,6 +17,7 @@ export interface CameraCaptureOverlayProps {
 export function CameraCaptureOverlay({
   stream,
   error,
+  messages,
   onCapture,
   onClose,
   onDismissError,
@@ -39,13 +45,13 @@ export function CameraCaptureOverlay({
   }, [stream]);
 
   return (
-    <div className="cat-camera-overlay" role="dialog" aria-label="Camera capture">
+    <div className="cat-camera-overlay" role="dialog" aria-label={messages.cameraCapture}>
       <div className="cat-camera-overlay__panel">
         {error ? (
           <div className="cat-camera-overlay__error" role="alert">
             <p>{error}</p>
             <button type="button" className="cat-camera-overlay__btn" onClick={onDismissError}>
-              Dismiss
+              {messages.dismiss}
             </button>
           </div>
         ) : (
@@ -56,7 +62,7 @@ export function CameraCaptureOverlay({
               autoPlay
               playsInline
               muted
-              aria-label="Camera preview"
+              aria-label={messages.cameraPreview}
             />
 
             <div className="cat-camera-actions">
@@ -64,10 +70,10 @@ export function CameraCaptureOverlay({
                 type="button"
                 className="cat-camera-overlay__btn cat-camera-overlay__btn--secondary"
                 onClick={onClose}
-                aria-label="Close camera"
+                aria-label={messages.cancel}
               >
                 <X size={16} aria-hidden="true" />
-                Cancel
+                {messages.cancel}
               </button>
               <button
                 type="button"
@@ -75,10 +81,10 @@ export function CameraCaptureOverlay({
                 onClick={() => {
                   if (videoRef.current) onCapture(videoRef.current);
                 }}
-                aria-label="Capture photo"
+                aria-label={messages.capturePhoto}
               >
                 <Camera size={16} aria-hidden="true" />
-                Capture
+                {messages.capturePhoto}
               </button>
             </div>
           </>

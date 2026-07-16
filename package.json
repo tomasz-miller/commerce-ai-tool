@@ -23,7 +23,8 @@
     "eval:promptfoo:redteam:generate": "pnpm build && promptfoo redteam generate -c evals/promptfooconfig.redteam.yaml",
     "eval:promptfoo:view": "promptfoo view",
     "eval:fixtures:audio": "bash evals/scripts/generate-audio-fixtures.sh",
-    "eval:fixtures:images": "bash evals/scripts/compress-image-fixtures.sh"
+    "eval:fixtures:images": "bash evals/scripts/compress-image-fixtures.sh",
+    "test:e2e": "pnpm --filter demo-next test:e2e"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.0",
@@ -33,8 +34,9 @@
     "prettier": "^3.5.3",
     "promptfoo": "^0.120.4",
     "turbo": "^2.4.4",
-    "typescript": "^5.8.2",
-    "typescript-eslint": "^8.26.1",
+    "@typescript/native": "catalog:",
+    "typescript": "catalog:",
+    "typescript-eslint": "^8.63.0",
     "vitest": "^3.0.9"
   },
   "packageManager": "pnpm@11.9.0",

@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "echo 'No lint configured'",
     "typecheck": "tsc --noEmit",
-    "test": "echo 'No tests'"
+    "test": "echo 'No unit tests'",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@commerce-ai-tool/react": "workspace:*",
@@ -18,9 +19,11 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.52.0",
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.12",
     "@types/react-dom": "^19.0.4",
-    "typescript": "^5.8.2"
+    "@typescript/native": "catalog:",
+    "typescript": "catalog:"
   }
 }
