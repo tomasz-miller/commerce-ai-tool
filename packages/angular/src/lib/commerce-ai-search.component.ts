@@ -10,7 +10,12 @@ import {
   inject,
 } from "@angular/core";
 import { FormsModule } from "@angular/forms";
-import type { ProductCard, ThemeMode } from "@commerce-ai-tool/core";
+import type {
+  CommerceAISearchMessages,
+  ProductCard,
+  ThemeMode,
+} from "@commerce-ai-tool/core";
+import { resolveCommerceAISearchMessages } from "@commerce-ai-tool/core";
 import { CommerceAiApiService } from "./commerce-ai-api.service.js";
 import {
   buildCameraConstraints,
@@ -32,13 +37,13 @@ type SearchMode = "text" | "image" | "voice" | null;
       class="cat-root cat-wrapper"
       [attr.data-theme]="theme"
       role="search"
-      aria-label="Product search"
+      [attr.aria-label]="resolvedMessages.productSearchAriaLabel"
       (dragover)="onDragOver($event)"
       (dragleave)="isDragging = false"
       (drop)="onDrop($event)"
     >
       @if (isDragging && enableImageSearch) {
-        <div class="cat-drag-overlay" aria-hidden="true">Drop image to search</div>
+        <div class="cat-drag-overlay" aria-hidden="true">{{ resolvedMessages.dropImageToSearch }}</div>
       }
 
       <form class="cat-search-bar" (ngSubmit)="onSubmit()">
@@ -55,16 +60,68 @@ type SearchMode = "text" | "image" | "voice" | null;
           <path d="m21 21-4.3-4.3" />
         </svg>
 
-        <input
-          type="search"
-          class="cat-search-input"
-          [(ngModel)]="query"
-          name="query"
-          [placeholder]="placeholder"
-          aria-label="Search query"
-          autocomplete="off"
-          (ngModelChange)="onQueryChange($event)"
-        />
+        <div class="cat-search-input-wrap">
+          <input
+            type="search"
+            class="cat-search-input"
+            [(ngModel)]="query"
+            name="query"
+            [placeholder]="resolvedMessages.placeholder"
+            [attr.aria-label]="resolvedMessages.searchAriaLabel"
+            [attr.role]="enableAutocomplete ? 'combobox' : null"
+            [attr.aria-haspopup]="enableAutocomplete ? 'listbox' : null"
+            [attr.aria-autocomplete]="enableAutocomplete ? 'list' : null"
+            [attr.aria-expanded]="showSuggestions"
+            [attr.aria-controls]="showSuggestions ? 'cat-suggestions-listbox' : null"
+            [attr.aria-activedescendant]="activeSuggestionId"
+            autocomplete="off"
+            (ngModelChange)="onQueryChange($event)"
+            (keydown)="onInputKeyDown($event)"
+          />
+
+          @if (showSuggestions) {
+            <div
+              id="cat-suggestions-listbox"
+              class="cat-suggestions"
+              role="listbox"
+              [attr.aria-label]="resolvedMessages.suggestionsAriaLabel"
+            >
+              @if (isLoadingSuggestions && suggestions.length === 0 && !suggestionsError) {
+                <div class="cat-suggestions__status">{{ resolvedMessages.loadingSuggestions }}</div>
+              }
+
+              @if (suggestionsError) {
+                <div class="cat-suggestions__status cat-suggestions__status--error" role="alert">
+                  {{ suggestionsError }}
+                </div>
+              }
+
+              @if (
+                !isLoadingSuggestions &&
+                !suggestionsError &&
+                suggestionsReady &&
+                suggestions.length === 0
+              ) {
+                <div class="cat-suggestions__status">{{ resolvedMessages.noSuggestions }}</div>
+              }
+
+              @for (suggestion of suggestions; track $index; let index = $index) {
+                <button
+                  type="button"
+                  class="cat-suggestions__item"
+                  [class.cat-suggestions__item--active]="index === activeSuggestionIndex"
+                  role="option"
+                  [attr.id]="'cat-suggestion-' + index"
+                  [attr.aria-selected]="index === activeSuggestionIndex"
+                  (mousedown)="$event.preventDefault()"
+                  (click)="onSuggestionSelect(suggestion)"
+                >
+                  {{ suggestion }}
+                </button>
+              }
+            </div>
+          }
+        </div>
 
         @if (enableVoice) {
           <button
@@ -72,7 +129,7 @@ type SearchMode = "text" | "image" | "voice" | null;
             class="cat-icon-btn"
             [class.cat-icon-btn--active]="isRecording"
             [disabled]="isProcessing"
-            [attr.aria-label]="isRecording ? 'Stop recording' : 'Voice search'"
+            [attr.aria-label]="isRecording ? resolvedMessages.stopRecording : resolvedMessages.voiceSearch"
             [attr.aria-pressed]="isRecording"
             (click)="toggleRecording()"
           >
@@ -90,7 +147,7 @@ type SearchMode = "text" | "image" | "voice" | null;
               type="button"
               class="cat-icon-btn"
               [disabled]="isLoading"
-              aria-label="Search by camera"
+              aria-label="{{ resolvedMessages.searchByCamera }}"
               (click)="openCamera()"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -111,7 +168,7 @@ type SearchMode = "text" | "image" | "voice" | null;
             type="button"
             class="cat-icon-btn"
             [disabled]="isLoading"
-            aria-label="Search by image"
+            aria-label="{{ resolvedMessages.searchByImage }}"
             (click)="fileInput.click()"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -133,7 +190,7 @@ type SearchMode = "text" | "image" | "voice" | null;
           <button
             type="button"
             class="cat-icon-btn"
-            aria-label="Replay voice result summary"
+            aria-label="{{ resolvedMessages.replayVoiceSummary }}"
             (click)="replayVoiceSummary()"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -145,13 +202,13 @@ type SearchMode = "text" | "image" | "voice" | null;
       </form>
 
       @if (enableCameraSearch && (isCameraOpen || cameraError)) {
-        <div class="cat-camera-overlay" role="dialog" aria-label="Camera capture">
+        <div class="cat-camera-overlay" role="dialog" [attr.aria-label]="resolvedMessages.cameraCapture">
           <div class="cat-camera-overlay__panel">
             @if (cameraError) {
               <div class="cat-camera-overlay__error" role="alert">
                 <p>{{ cameraError }}</p>
                 <button type="button" class="cat-camera-overlay__btn" (click)="clearCameraError()">
-                  Dismiss
+                  {{ resolvedMessages.dismiss }}
                 </button>
               </div>
             } @else {
@@ -161,24 +218,24 @@ type SearchMode = "text" | "image" | "voice" | null;
                 autoplay
                 playsinline
                 muted
-                aria-label="Camera preview"
+                [attr.aria-label]="resolvedMessages.cameraPreview"
               ></video>
               <div class="cat-camera-actions">
                 <button
                   type="button"
                   class="cat-camera-overlay__btn cat-camera-overlay__btn--secondary"
-                  aria-label="Close camera"
+                  [attr.aria-label]="resolvedMessages.cancel"
                   (click)="closeCamera()"
                 >
-                  Cancel
+                  {{ resolvedMessages.cancel }}
                 </button>
                 <button
                   type="button"
                   class="cat-camera-overlay__btn cat-camera-overlay__btn--primary"
-                  aria-label="Capture photo"
+                  [attr.aria-label]="resolvedMessages.capturePhoto"
                   (click)="capturePhoto()"
                 >
-                  Capture
+                  {{ resolvedMessages.capturePhoto }}
                 </button>
               </div>
             }
@@ -187,9 +244,9 @@ type SearchMode = "text" | "image" | "voice" | null;
       }
 
       @if (showResults) {
-        <div class="cat-results" role="listbox" aria-label="Search results">
+        <div class="cat-results" role="listbox" [attr.aria-label]="resolvedMessages.searchResultsAriaLabel">
           @if (isLoading) {
-            <div class="cat-status">Searching...</div>
+            <div class="cat-status">{{ resolvedMessages.searching }}</div>
           }
           @if (error) {
             <div class="cat-status cat-status--error">{{ error }}</div>
@@ -225,9 +282,11 @@ type SearchMode = "text" | "image" | "voice" | null;
                 <path d="m9 9 4 4" />
               </svg>
               <div class="cat-status__content">
-                <div class="cat-status__title">No products found</div>
+                <div class="cat-status__title">{{ resolvedMessages.noProductsFound }}</div>
                 @if (meta?.queryInterpretation) {
-                  <div class="cat-status__hint">Searched for: {{ meta?.queryInterpretation }}</div>
+                  <div class="cat-status__hint">
+                    {{ resolvedMessages.searchedFor }} {{ meta?.queryInterpretation }}
+                  </div>
                 }
               </div>
             </div>
@@ -249,6 +308,8 @@ export class CommerceAiSearchComponent {
   /** @deprecated Use queryLocale */
   @Input() locale?: string;
   @Input() placeholder = "What are you looking for?";
+  @Input() messages?: Partial<CommerceAISearchMessages>;
+  @Input() enableAutocomplete = false;
   @Input() enableVoice = true;
   @Input() enableImageSearch = true;
   @Input() enableCameraSearch = true;
@@ -261,6 +322,12 @@ export class CommerceAiSearchComponent {
   @ViewChild("cameraVideo") cameraVideoRef?: ElementRef<HTMLVideoElement>;
 
   query = "";
+  suggestions: string[] = [];
+  activeSuggestionIndex = -1;
+  isLoadingSuggestions = false;
+  suggestionsError: string | null = null;
+  suggestionsReady = false;
+  suggestionsDismissed = false;
   results: ProductCard[] = [];
   meta: { queryInterpretation?: string } | null = null;
   isLoading = false;
@@ -278,8 +345,36 @@ export class CommerceAiSearchComponent {
   private audioChunks: Blob[] = [];
   private cameraStream: MediaStream | null = null;
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private suggestionsTimer: ReturnType<typeof setTimeout> | null = null;
   private searchAbort: AbortController | null = null;
+  private suggestionsAbort: AbortController | null = null;
   private searchRequestId = 0;
+  private suggestionsRequestId = 0;
+
+  get resolvedMessages(): CommerceAISearchMessages {
+    return resolveCommerceAISearchMessages({
+      ...this.messages,
+      placeholder: this.messages?.placeholder ?? this.placeholder,
+    });
+  }
+
+  get showSuggestions(): boolean {
+    return (
+      this.enableAutocomplete &&
+      !this.suggestionsDismissed &&
+      this.query.trim().length >= 2 &&
+      (this.isLoadingSuggestions ||
+        this.suggestions.length > 0 ||
+        !!this.suggestionsError ||
+        this.suggestionsReady)
+    );
+  }
+
+  get activeSuggestionId(): string | null {
+    return this.activeSuggestionIndex >= 0
+      ? `cat-suggestion-${this.activeSuggestionIndex}`
+      : null;
+  }
 
   get showResults(): boolean {
     const hasQuery = this.query.trim().length > 0;
@@ -297,9 +392,16 @@ export class CommerceAiSearchComponent {
   }
 
   onQueryChange(value: string): void {
+    this.activeSuggestionIndex = -1;
+    this.suggestionsDismissed = false;
+
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
       this.debounceTimer = null;
+    }
+    if (this.suggestionsTimer) {
+      clearTimeout(this.suggestionsTimer);
+      this.suggestionsTimer = null;
     }
 
     const trimmed = value.trim();
@@ -312,26 +414,119 @@ export class CommerceAiSearchComponent {
 
     this.lastSearchMode = "text";
     this.clearVoiceAudio();
+
+    if (this.enableAutocomplete) {
+      this.isLoadingSuggestions = true;
+      this.suggestionsTimer = setTimeout(() => this.fetchSuggestions(trimmed), 200);
+      return;
+    }
+
     this.isLoading = true;
     this.error = null;
     this.results = [];
     this.meta = null;
-
     this.debounceTimer = setTimeout(() => this.onSubmit(), 250);
+  }
+
+  onSuggestionSelect(suggestion: string): void {
+    this.activeSuggestionIndex = -1;
+    this.query = suggestion;
+    this.suggestions = [];
+    this.onSubmit();
+  }
+
+  onInputKeyDown(event: KeyboardEvent): void {
+    if (event.key === "Escape") {
+      this.activeSuggestionIndex = -1;
+      this.suggestionsDismissed = true;
+      return;
+    }
+
+    if (!this.showSuggestions || this.suggestions.length === 0) {
+      return;
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      this.activeSuggestionIndex =
+        this.activeSuggestionIndex < this.suggestions.length - 1
+          ? this.activeSuggestionIndex + 1
+          : 0;
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      this.activeSuggestionIndex =
+        this.activeSuggestionIndex > 0
+          ? this.activeSuggestionIndex - 1
+          : this.suggestions.length - 1;
+      return;
+    }
+
+    if (event.key === "Enter" && this.activeSuggestionIndex >= 0) {
+      event.preventDefault();
+      const suggestion = this.suggestions[this.activeSuggestionIndex];
+      if (suggestion) {
+        this.onSuggestionSelect(suggestion);
+      }
+    }
+  }
+
+  private fetchSuggestions(searchQuery: string): void {
+    this.suggestionsAbort?.abort();
+    const controller = new AbortController();
+    this.suggestionsAbort = controller;
+    const requestId = ++this.suggestionsRequestId;
+
+    this.isLoadingSuggestions = true;
+    this.suggestionsError = null;
+    this.suggestionsReady = false;
+
+    void this.api
+      .suggest(this.apiBaseUrl, searchQuery, this.localeFields, controller.signal)
+      .then((data) => {
+        if (requestId !== this.suggestionsRequestId) return;
+        this.suggestions = data.suggestions;
+        this.isLoadingSuggestions = false;
+        this.suggestionsReady = true;
+        this.cdr.detectChanges();
+      })
+      .catch((err: Error) => {
+        if (err.name === "AbortError") return;
+        if (requestId !== this.suggestionsRequestId) return;
+        this.suggestions = [];
+        this.suggestionsError = err.message || "Suggestions failed";
+        this.isLoadingSuggestions = false;
+        this.suggestionsReady = true;
+        this.cdr.detectChanges();
+      });
   }
 
   private clearResults(): void {
     this.searchAbort?.abort();
     this.searchAbort = null;
+    this.suggestionsAbort?.abort();
+    this.suggestionsAbort = null;
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
       this.debounceTimer = null;
+    }
+    if (this.suggestionsTimer) {
+      clearTimeout(this.suggestionsTimer);
+      this.suggestionsTimer = null;
     }
     this.results = [];
     this.meta = null;
     this.error = null;
     this.isLoading = false;
     this.hasSearched = false;
+    this.suggestions = [];
+    this.isLoadingSuggestions = false;
+    this.suggestionsError = null;
+    this.suggestionsReady = false;
+    this.suggestionsDismissed = false;
+    this.activeSuggestionIndex = -1;
   }
 
   private get localeFields() {
@@ -346,8 +541,19 @@ export class CommerceAiSearchComponent {
     const q = this.query.trim();
     if (!q) return;
 
+    if (
+      this.enableAutocomplete &&
+      this.activeSuggestionIndex >= 0 &&
+      this.suggestions[this.activeSuggestionIndex]
+    ) {
+      this.onSuggestionSelect(this.suggestions[this.activeSuggestionIndex]!);
+      return;
+    }
+
     this.lastSearchMode = "text";
     this.clearVoiceAudio();
+    this.suggestions = [];
+    this.activeSuggestionIndex = -1;
 
     this.searchAbort?.abort();
     const controller = new AbortController();
@@ -435,7 +641,7 @@ export class CommerceAiSearchComponent {
       void this.searchByImage(file);
     } catch (err) {
       this.closeCamera();
-      this.error = err instanceof Error ? err.message : "Could not capture photo";
+      this.error = err instanceof Error ? err.message : this.resolvedMessages.couldNotCapturePhoto;
     }
   }
 

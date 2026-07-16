@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import type { ProductCard, SearchResult } from "@commerce-ai-tool/core";
+import type { ProductCard, SearchResult, SuggestionsResult } from "@commerce-ai-tool/core";
 
 export interface SearchLocaleProps {
   queryLocale?: string;
@@ -38,11 +38,18 @@ export function appendLocaleFields(formData: FormData, options: SearchLocaleProp
 export interface UseCommerceAISearchOptions extends SearchLocaleProps {
   apiBaseUrl: string;
   debounceMs?: number;
+  suggestionsDebounceMs?: number;
+  enableAutocomplete?: boolean;
 }
 
 export interface UseCommerceAISearchReturn {
   query: string;
   setQuery: (query: string, options?: SetQueryOptions) => void;
+  suggestions: string[];
+  isLoadingSuggestions: boolean;
+  suggestionsError: string | null;
+  suggestionsReady: boolean;
+  selectSuggestion: (suggestion: string) => void;
   results: ProductCard[];
   setResults: Dispatch<SetStateAction<ProductCard[]>>;
   meta: SearchResult["meta"] | null;
@@ -61,20 +68,35 @@ export interface UseCommerceAISearchReturn {
 export function useCommerceAISearch(
   options: UseCommerceAISearchOptions,
 ): UseCommerceAISearchReturn {
-  const { apiBaseUrl, debounceMs = 250, queryLocale, catalogLocale, locale } = options;
+  const {
+    apiBaseUrl,
+    debounceMs = 250,
+    suggestionsDebounceMs = 200,
+    enableAutocomplete = false,
+    queryLocale,
+    catalogLocale,
+    locale,
+  } = options;
   const localePayload = useMemo(
     () => buildLocalePayload({ queryLocale, catalogLocale, locale }),
     [queryLocale, catalogLocale, locale],
   );
   const [query, setQueryState] = useState("");
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+  const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
+  const [suggestionsReady, setSuggestionsReady] = useState(false);
   const [results, setResults] = useState<ProductCard[]>([]);
   const [meta, setMeta] = useState<SearchResult["meta"] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const suggestionsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const suggestionsAbortRef = useRef<AbortController | null>(null);
   const requestIdRef = useRef(0);
+  const suggestionsRequestIdRef = useRef(0);
   const queryRef = useRef(query);
   queryRef.current = query;
 
@@ -83,16 +105,79 @@ export function useCommerceAISearch(
   const resetResults = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
+    suggestionsAbortRef.current?.abort();
+    suggestionsAbortRef.current = null;
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
       debounceRef.current = null;
+    }
+    if (suggestionsDebounceRef.current) {
+      clearTimeout(suggestionsDebounceRef.current);
+      suggestionsDebounceRef.current = null;
     }
     setResults([]);
     setMeta(null);
     setError(null);
     setIsLoading(false);
     setHasSearched(false);
+    setSuggestions([]);
+    setSuggestionsError(null);
+    setIsLoadingSuggestions(false);
+    setSuggestionsReady(false);
   }, []);
+
+  const fetchSuggestions = useCallback(
+    async (searchQuery: string) => {
+      const trimmed = searchQuery.trim();
+      if (!enableAutocomplete || trimmed.length < 2) {
+        setSuggestions([]);
+        setSuggestionsError(null);
+        setIsLoadingSuggestions(false);
+        setSuggestionsReady(false);
+        return;
+      }
+
+      suggestionsAbortRef.current?.abort();
+      const controller = new AbortController();
+      suggestionsAbortRef.current = controller;
+      const requestId = ++suggestionsRequestIdRef.current;
+
+      setIsLoadingSuggestions(true);
+      setSuggestionsError(null);
+      setSuggestionsReady(false);
+
+      try {
+        const response = await fetch(`${baseUrl}/search/suggestions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: trimmed, ...localePayload }),
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          const data = (await response.json()) as { error?: string };
+          throw new Error(data.error ?? "Suggestions failed");
+        }
+
+        const data = (await response.json()) as SuggestionsResult;
+        if (requestId !== suggestionsRequestIdRef.current) return;
+
+        setSuggestions(data.suggestions);
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        if (requestId !== suggestionsRequestIdRef.current) return;
+
+        setSuggestions([]);
+        setSuggestionsError(err instanceof Error ? err.message : "Suggestions failed");
+      } finally {
+        if (requestId === suggestionsRequestIdRef.current) {
+          setIsLoadingSuggestions(false);
+          setSuggestionsReady(true);
+        }
+      }
+    },
+    [baseUrl, enableAutocomplete, localePayload],
+  );
 
   const search = useCallback(
     async (searchQuery?: string) => {
@@ -102,6 +187,10 @@ export function useCommerceAISearch(
       if (debounceRef.current) {
         clearTimeout(debounceRef.current);
         debounceRef.current = null;
+      }
+      if (suggestionsDebounceRef.current) {
+        clearTimeout(suggestionsDebounceRef.current);
+        suggestionsDebounceRef.current = null;
       }
 
       abortRef.current?.abort();
@@ -113,6 +202,8 @@ export function useCommerceAISearch(
       setError(null);
       setResults([]);
       setMeta(null);
+      setSuggestions([]);
+      setSuggestionsError(null);
 
       try {
         const response = await fetch(`${baseUrl}/search`, {
@@ -156,11 +247,16 @@ export function useCommerceAISearch(
         clearTimeout(debounceRef.current);
         debounceRef.current = null;
       }
+      if (suggestionsDebounceRef.current) {
+        clearTimeout(suggestionsDebounceRef.current);
+        suggestionsDebounceRef.current = null;
+      }
 
       setIsLoading(true);
       setError(null);
       setResults([]);
       setMeta(null);
+      setSuggestions([]);
 
       try {
         const formData = new FormData();
@@ -204,14 +300,28 @@ export function useCommerceAISearch(
           clearTimeout(debounceRef.current);
           debounceRef.current = null;
         }
+        if (suggestionsDebounceRef.current) {
+          clearTimeout(suggestionsDebounceRef.current);
+          suggestionsDebounceRef.current = null;
+        }
         return;
       }
 
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (suggestionsDebounceRef.current) clearTimeout(suggestionsDebounceRef.current);
 
       const trimmed = value.trim();
       if (trimmed.length === 0 || trimmed.length < 2) {
         resetResults();
+        return;
+      }
+
+      if (enableAutocomplete) {
+        setIsLoadingSuggestions(true);
+        setSuggestionsError(null);
+        suggestionsDebounceRef.current = setTimeout(() => {
+          void fetchSuggestions(trimmed);
+        }, suggestionsDebounceMs);
         return;
       }
 
@@ -224,7 +334,17 @@ export function useCommerceAISearch(
         void search(trimmed);
       }, debounceMs);
     },
-    [debounceMs, resetResults, search],
+    [debounceMs, enableAutocomplete, fetchSuggestions, resetResults, search, suggestionsDebounceMs],
+  );
+
+  const selectSuggestion = useCallback(
+    (suggestion: string) => {
+      setQueryState(suggestion);
+      setSuggestions([]);
+      setSuggestionsError(null);
+      void search(suggestion);
+    },
+    [search],
   );
 
   const clear = useCallback(() => {
@@ -235,6 +355,11 @@ export function useCommerceAISearch(
   return {
     query,
     setQuery,
+    suggestions,
+    isLoadingSuggestions,
+    suggestionsError,
+    suggestionsReady,
+    selectSuggestion,
     results,
     setResults,
     meta,

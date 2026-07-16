@@ -18,6 +18,9 @@ function createMockServer(): CommerceAIServer {
       }),
       searchByVoice: vi.fn(),
       searchByImage: vi.fn(),
+      suggestByText: vi.fn().mockResolvedValue({
+        suggestions: ["Red Shoes"],
+      }),
     } as unknown as SearchOrchestrator,
     transcribeAudio: vi.fn(),
     synthesizeSpeech: vi.fn().mockResolvedValue(Buffer.from("mp3-bytes")),
@@ -49,6 +52,28 @@ describe("createNextHandlers", () => {
     await expect(response.json()).resolves.toEqual({
       products: [],
       meta: { total: 0 },
+    });
+  });
+
+  it("searchSuggestions uses shared route actions", async () => {
+    const server = createMockServer();
+    vi.mocked(createCommerceAIServer).mockReturnValue(server);
+
+    const handlers = createNextHandlers({} as never);
+    const response = await handlers.searchSuggestions(
+      new Request("http://localhost/search/suggestions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: "red" }),
+      }),
+    );
+
+    expect(server.orchestrator.suggestByText).toHaveBeenCalledWith(
+      expect.objectContaining({ query: "red" }),
+    );
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      suggestions: ["Red Shoes"],
     });
   });
 

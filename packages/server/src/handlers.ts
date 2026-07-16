@@ -4,6 +4,7 @@ import { errorResponse, jsonResponse, type HandlerResponse } from "./handler-res
 import {
   executeSearch,
   executeSearchImage,
+  executeSearchSuggestions,
   executeSearchVoice,
   executeTts,
   mapRouteError,
@@ -32,6 +33,24 @@ export function createHandlers(server: CommerceAIServer) {
         return jsonResponse(result);
       } catch (error) {
         const mapped = mapRouteError(error, "search", "Search failed");
+        return errorResponse(mapped.message, mapped.status);
+      }
+    },
+
+    async searchSuggestions(req: IncomingMessage): Promise<HandlerResponse> {
+      try {
+        const body = await readJsonBody<{
+          query: string;
+          queryLocale?: string;
+          catalogLocale?: string;
+          locale?: string;
+          limit?: number;
+        }>(req);
+
+        const result = await executeSearchSuggestions(server, body);
+        return jsonResponse(result);
+      } catch (error) {
+        const mapped = mapRouteError(error, "searchSuggestions", "Suggestions failed");
         return errorResponse(mapped.message, mapped.status);
       }
     },

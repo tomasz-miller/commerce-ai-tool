@@ -27,10 +27,11 @@
     "**/*.css"
   ],
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && node ../../scripts/emit-package-dts.mjs dist/index.d.ts",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
+    "test": "vitest run",
     "clean": "rm -rf dist"
   },
   "dependencies": {
@@ -44,12 +45,15 @@
   },
   "devDependencies": {
     "@angular/common": "^20.3.25",
+    "@angular/compiler": "^20.3.25",
     "@angular/core": "^20.3.25",
     "@angular/forms": "^19.2.3",
     "@angular/platform-browser": "^19.2.3",
     "rxjs": "^7.8.2",
     "tsup": "^8.4.0",
-    "typescript": "^5.8.2"
+    "@typescript/native": "catalog:",
+    "vitest": "^3.0.9",
+    "zone.js": "^0.15.0"
   },
   "publishConfig": {
     "access": "public"

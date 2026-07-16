@@ -73,3 +73,47 @@ export function buildInterpretedSearchCacheKey(
 ): string {
   return ["search", interpretedKey, catalogLocale, String(limit)].join("|");
 }
+
+export function buildSuggestionsCacheKey(
+  query: string,
+  suggestLocale: string,
+  limit: number,
+): string {
+  return [
+    "suggest",
+    normalizeCacheKeyPart(query),
+    suggestLocale,
+    String(limit),
+  ].join("|");
+}
+
+export function buildImageSearchCacheKey(
+  imageHash: string,
+  mimeType: string,
+  queryLocale: string,
+  catalogLocale: string,
+  limit: number,
+): string {
+  return ["image", imageHash, mimeType, queryLocale, catalogLocale, String(limit)].join("|");
+}
+
+export function buildVoiceSearchCacheKey(
+  audioHash: string,
+  mimeType: string,
+  voiceMode: string,
+  queryLocale: string,
+  catalogLocale: string,
+  limit: number,
+  enableTts: boolean,
+): string {
+  return [
+    "voice",
+    voiceMode,
+    enableTts ? "tts" : "no-tts",
+    audioHash,
+    mimeType,
+    queryLocale,
+    catalogLocale,
+    String(limit),
+  ].join("|");
+}

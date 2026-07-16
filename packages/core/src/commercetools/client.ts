@@ -16,6 +16,7 @@ import {
   productSearchUnavailableMessage,
 } from "./search-helpers.js";
 import { logSearchTrace } from "../utils/dev-trace.js";
+import { normalizeSearchSuggestions } from "./suggestions.js";
 
 export interface CommercetoolsClient {
   searchProducts(
@@ -31,6 +32,11 @@ export interface CommercetoolsClient {
     locale: string,
     currency?: string,
   ): Promise<ProductCard[]>;
+  suggestSearchTerms(
+    prefix: string,
+    locale: string,
+    limit?: number,
+  ): Promise<string[]>;
 }
 
 export type { ProductSearchBuildInput, ProductSearchQueryOptions } from "./query-builder.js";
@@ -117,6 +123,36 @@ export function createCommercetoolsClient(config: CommercetoolsConfig): Commerce
       return (response.body.results ?? [])
         .map((projection) => mapProjectionToCard(projection, locale, currency))
         .sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
+    },
+
+    async suggestSearchTerms(prefix, locale, limit = 8) {
+      const queryArgs: Record<string, string | number | boolean> = {
+        [`searchKeywords.${locale}`]: prefix,
+        limit,
+        fuzzy: true,
+        staged: false,
+      };
+
+      logSearchTrace("commercetools", {
+        api: "productProjections.suggest",
+        locale,
+        prefix,
+        limit,
+      });
+
+      const response = await apiRoot
+        .productProjections()
+        .suggest()
+        .get({ queryArgs })
+        .execute();
+
+      const suggestions = normalizeSearchSuggestions(response.body, locale, limit);
+      logSearchTrace("commercetools", {
+        api: "productProjections.suggest",
+        count: suggestions.length,
+      });
+
+      return suggestions;
     },
   };
 }

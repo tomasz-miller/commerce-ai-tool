@@ -9,3 +9,5 @@ export type {
 export { useVoiceSearch } from "./hooks/useVoiceSearch.js";
 export type { UseVoiceSearchOptions } from "./hooks/useVoiceSearch.js";
 export { useTheme, useResolvedTheme } from "./hooks/useTheme.js";
+export type { CommerceAISearchMessages } from "@commerce-ai-tool/core";
+export { DEFAULT_COMMERCE_AI_SEARCH_MESSAGES, resolveCommerceAISearchMessages } from "@commerce-ai-tool/core";

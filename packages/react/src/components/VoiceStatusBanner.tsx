@@ -1,4 +1,5 @@
 import { formatRecordingDuration } from "../hooks/useRecordingDuration.js";
+import type { CommerceAISearchMessages } from "@commerce-ai-tool/core";
 
 export interface VoiceStatusBannerProps {
   isRecording: boolean;
@@ -6,6 +7,10 @@ export interface VoiceStatusBannerProps {
   isLoadingTts: boolean;
   error: string | null;
   durationSeconds: number;
+  messages: Pick<
+    CommerceAISearchMessages,
+    "listening" | "tapMicToStop" | "understandingQuery" | "preparingAudioSummary"
+  >;
 }
 
 function VoiceWaveform() {
@@ -30,6 +35,7 @@ export function VoiceStatusBanner({
   isLoadingTts,
   error,
   durationSeconds,
+  messages,
 }: VoiceStatusBannerProps) {
   const isError = Boolean(error);
 
@@ -48,24 +54,24 @@ export function VoiceStatusBanner({
       {!isError && isRecording && (
         <div className="cat-voice-banner__content">
           <span className="cat-voice-dot" aria-hidden="true" />
-          <span className="cat-voice-banner__label">Listening…</span>
+          <span className="cat-voice-banner__label">{messages.listening}</span>
           <VoiceWaveform />
           <span className="cat-voice-banner__timer">{formatRecordingDuration(durationSeconds)}</span>
-          <span className="cat-voice-banner__hint">Tap mic to stop</span>
+          <span className="cat-voice-banner__hint">{messages.tapMicToStop}</span>
         </div>
       )}
 
       {!isError && !isRecording && isProcessing && (
         <div className="cat-voice-banner__content">
           <ProcessingSpinner />
-          <span className="cat-voice-banner__label">Understanding your query…</span>
+          <span className="cat-voice-banner__label">{messages.understandingQuery}</span>
         </div>
       )}
 
       {!isError && !isRecording && !isProcessing && isLoadingTts && (
         <div className="cat-voice-banner__content">
           <ProcessingSpinner />
-          <span className="cat-voice-banner__label">Preparing audio summary…</span>
+          <span className="cat-voice-banner__label">{messages.preparingAudioSummary}</span>
         </div>
       )}
     </div>

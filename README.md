@@ -14,9 +14,11 @@ AI-powered product search plugin for [commercetools](https://commercetools.com) 
 ## Features (v1.0)
 
 - **Text search** — natural language queries interpreted by AI (OpenRouter or AWS Bedrock)
+- **Autocomplete** — optional commercetools Search Term Suggestions while typing (`enableAutocomplete`)
 - **Voice search** — ElevenLabs STT with optional TTS result summary
 - **Image search** — vision AI extracts product attributes from photos
 - **Glass UI** — minimalist design with light / dark / auto theme
+- **Widget i18n** — override English default labels via the `messages` prop
 - **Server-only secrets** — API keys never exposed to the browser
 
 ## Quick start (Next.js)
@@ -53,7 +55,7 @@ const handlers = createNextHandlers(loadConfigFromEnv());
 export const POST = handlers.search;
 ```
 
-See [`apps/demo-next`](./apps/demo-next) for all route handlers (voice, image, TTS, health).
+See [`apps/demo-next`](./apps/demo-next) for all route handlers (search, suggestions, voice, image, TTS, health).
 
 ### Locale configuration
 
@@ -81,6 +83,11 @@ Server env vars (see `apps/demo-next/.env.example`):
 - `CAT_DEFAULT_LOCALE` — deprecated alias for `CAT_CATALOG_LOCALE`
 - `CAT_STORE_KEY` — reserved for future store-scoped search (not applied until store scope is enabled in core)
 - `CAT_DEBUG=true` — structured dev tracing for search and commercetools calls
+- `CAT_CACHE_ENABLED=true` — opt-in in-memory response cache (per server process)
+- `CAT_CACHE_TTL_MS=60000` — cache TTL in milliseconds
+- `CAT_CACHE_MAX_ENTRIES=500` — max cached entries per process
+
+Autocomplete uses commercetools Search Term Suggestions and requires Product Projection Search to be activated with indexed `searchKeywords` on products.
 
 Search queries are built in `@commerce-ai-tool/core` (`commercetools/query-builder.ts`): multi-field full-text (`name`, `searchKeywords`, `description`), optional fuzzy name matching, AI `filters` (color, brand, category, price range), and currency-scoped price sorting. Product Projection Search is used automatically when Product Search API is unavailable.
 
@@ -99,10 +106,15 @@ export function Search() {
       theme="auto"
       catalogLocale="no"
       queryLocale="en"
+      enableAutocomplete
       enableVoice
       enableImageSearch
       enableCameraSearch
       enableTts
+      messages={{
+        placeholder: "What are you looking for?",
+        searching: "Searching...",
+      }}
       onProductSelect={(product) => console.log(product)}
     />
   );

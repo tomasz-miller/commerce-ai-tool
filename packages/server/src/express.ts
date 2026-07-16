@@ -31,6 +31,11 @@ export function createExpressRouter(options: ExpressRouterOptions): Router {
     sendHandlerResponse(res, response);
   });
 
+  router.post(`${basePath}/search/suggestions`, async (req, res) => {
+    const response = await handlers.searchSuggestions(req);
+    sendHandlerResponse(res, response);
+  });
+
   router.post(`${basePath}/search/voice`, async (req, res) => {
     const response = await handlers.searchVoice(req);
     sendHandlerResponse(res, response);

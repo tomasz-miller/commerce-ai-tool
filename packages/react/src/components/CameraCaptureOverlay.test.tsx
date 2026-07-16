@@ -1,6 +1,9 @@
+import { DEFAULT_COMMERCE_AI_SEARCH_MESSAGES } from "@commerce-ai-tool/core";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { CameraCaptureOverlay } from "./CameraCaptureOverlay.js";
+
+const messages = DEFAULT_COMMERCE_AI_SEARCH_MESSAGES;
 
 describe("CameraCaptureOverlay", () => {
   it("renders preview and action buttons", () => {
@@ -12,6 +15,7 @@ describe("CameraCaptureOverlay", () => {
       <CameraCaptureOverlay
         stream={stream}
         error={null}
+        messages={messages}
         onCapture={vi.fn()}
         onClose={vi.fn()}
         onDismissError={vi.fn()}
@@ -20,8 +24,8 @@ describe("CameraCaptureOverlay", () => {
 
     expect(screen.getByRole("dialog", { name: "Camera capture" })).toBeTruthy();
     expect(screen.getByLabelText("Camera preview")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Capture photo" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Close camera" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Capture" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
   });
 
   it("calls onCapture with the video element", () => {
@@ -31,13 +35,14 @@ describe("CameraCaptureOverlay", () => {
       <CameraCaptureOverlay
         stream={null}
         error={null}
+        messages={messages}
         onCapture={onCapture}
         onClose={vi.fn()}
         onDismissError={vi.fn()}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Capture photo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Capture" }));
 
     expect(onCapture).toHaveBeenCalledTimes(1);
     expect(onCapture.mock.calls[0]?.[0]).toBeInstanceOf(HTMLVideoElement);
@@ -50,6 +55,7 @@ describe("CameraCaptureOverlay", () => {
       <CameraCaptureOverlay
         stream={null}
         error="Camera access denied"
+        messages={messages}
         onCapture={vi.fn()}
         onClose={vi.fn()}
         onDismissError={onDismissError}
