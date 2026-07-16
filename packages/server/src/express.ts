@@ -31,6 +31,11 @@ export function createExpressRouter(options: ExpressRouterOptions): Router {
     sendHandlerResponse(res, response);
   });
 
+  router.get(`${basePath}/search/facet-schema`, async (_req, res) => {
+    const response = await handlers.facetSchema();
+    sendHandlerResponse(res, response);
+  });
+
   router.post(`${basePath}/search/suggestions`, async (req, res) => {
     const response = await handlers.searchSuggestions(req);
     sendHandlerResponse(res, response);

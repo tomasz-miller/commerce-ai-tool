@@ -10,6 +10,8 @@ import {
 } from "../cache/search-cache.js";
 import { createCommercetoolsClient } from "../commercetools/client.js";
 import type { CommercetoolsClient } from "../commercetools/client.js";
+import { filterFacetSuggestions, normalizeProductSearchFacets } from "../commercetools/facets.js";
+import { FacetSchemaStore } from "../commercetools/product-types.js";
 import { resolveSearchLocales } from "../locale/resolve.js";
 import { hasSearchableContent } from "../commercetools/query-builder.js";
 import type { ProductSearchBuildInput } from "../commercetools/query-builder.js";
@@ -26,6 +28,7 @@ import type {
   SearchLocaleContext,
   SearchLocaleOptions,
   SearchResult,
+  ResolvedFacetSchema,
   SuggestionsRequest,
   SuggestionsResult,
   TextSearchRequest,
@@ -41,6 +44,7 @@ import {
 
 export interface SearchOrchestrator {
   searchByText(request: TextSearchRequest): Promise<SearchResult>;
+  getFacetSchema?(options?: SearchLocaleOptions): Promise<ResolvedFacetSchema>;
   searchByVoice(
     audio: Uint8Array,
     mimeType: string,
@@ -59,6 +63,7 @@ export interface SearchOrchestratorDeps {
   transcribeAudio?: (audio: Uint8Array, mimeType: string) => Promise<string>;
   aiProvider?: AIProvider;
   commercetoolsClient?: CommercetoolsClient;
+  facetSchemaStore?: FacetSchemaStore;
 }
 
 const DEFAULT_TIMEOUTS = {
@@ -84,9 +89,24 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
 
   const ai = deps.aiProvider ?? createAIProvider(config.ai);
   const ct = deps.commercetoolsClient ?? createCommercetoolsClient(config.commercetools);
+  const facetSchemaStore =
+    deps.facetSchemaStore ?? new FacetSchemaStore(config.facets?.schemaTtlMs);
 
   function resolveLocales(request?: SearchLocaleOptions): SearchLocaleContext {
     return resolveSearchLocales({ defaults: config.defaults, request });
+  }
+
+  async function resolveFacetSchema(locales: SearchLocaleContext): Promise<ResolvedFacetSchema> {
+    return facetSchemaStore.getOrResolve(
+      {
+        projectKey: config.commercetools.projectKey,
+        catalogLocale: locales.catalogLocale,
+        include: config.facets?.include,
+        exclude: config.facets?.exclude,
+        maxAttributes: config.facets?.maxAttributes,
+      },
+      () => ct.listProductTypes(),
+    );
   }
 
   function finishTimings(timer: ReturnType<typeof createSearchTimer>) {
@@ -124,12 +144,16 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
     searchLimit: number,
     offset = 0,
     timer?: ReturnType<typeof createSearchTimer>,
+    facetSchema?: ResolvedFacetSchema,
   ): Promise<SearchResult> {
     const interpretedCacheKey = buildInterpretedSearchCacheKey(
       JSON.stringify({
         searchTerms: interpreted.searchTerms,
         sort: interpreted.sort,
         filters: interpreted.filters,
+        suggestedFacets: interpreted.suggestedFacets,
+        schemaEtag: facetSchema?.etag ?? null,
+        includeFacets: Boolean(facetSchema),
       }),
       locales.catalogLocale,
       searchLimit,
@@ -165,6 +189,7 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
         storeKey: config.defaults?.storeKey,
         storeScopeEnabled: false,
       },
+      facetSchema,
     };
 
     logSearchTrace("ai", {
@@ -201,7 +226,23 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
         catalogLocale: locales.catalogLocale,
         queryLocale: locales.queryLocale,
         queryInterpretation: interpreted.interpretation,
+        searchTerms: interpreted.searchTerms,
+        appliedFilters: interpreted.filters,
+        sort: interpreted.sort,
+        ...(facetSchema ? { schemaEtag: facetSchema.etag } : {}),
       },
+      ...(facetSchema
+        ? {
+            facetSchema: facetSchema.attributes,
+            suggestedFacets: filterFacetSuggestions(interpreted.suggestedFacets, facetSchema),
+            facets: normalizeProductSearchFacets(
+              searchResult.facets,
+              facetSchema,
+              interpreted.suggestedFacets,
+              interpreted.filters,
+            ),
+          }
+        : {}),
     };
 
     resultCache?.set(`${interpretedCacheKey}|${offset}`, result);
@@ -263,13 +304,25 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
   }
 
   return {
+    async getFacetSchema(options = {}) {
+      return resolveFacetSchema(resolveLocales(options));
+    },
+
     async searchByText(request) {
       const locales = resolveLocales(request);
       const searchLimit = request.limit ?? limit;
       const timer = createSearchTimer();
 
+      const includeFacets = Boolean(request.includeFacets || config.facets?.enabled);
       const cacheKey = buildTextSearchCacheKey(
-        request.query,
+        JSON.stringify({
+          query: request.query,
+          searchTerms: request.searchTerms,
+          filters: request.filters,
+          refineQuery: request.refineQuery,
+          suggestedFacets: request.suggestedFacets,
+          includeFacets,
+        }),
         locales.queryLocale,
         locales.catalogLocale,
         searchLimit,
@@ -286,12 +339,63 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
         catalogLocale: locales.catalogLocale,
       });
 
-      const interpreted = await withTimeout(
-        ai.interpretTextQuery(request.query, locales),
-        timeouts.aiTextMs,
-        "ai_interpret",
-      );
-      timer.mark("ai_interpret");
+      let facetSchema: ResolvedFacetSchema | undefined;
+      if (includeFacets) {
+        try {
+          facetSchema = await resolveFacetSchema(locales);
+        } catch (error) {
+          console.warn(
+            `[commerce-ai-tool/core] Unable to resolve facet schema: ${
+              error instanceof Error ? error.message : "unknown error"
+            }`,
+          );
+        }
+      }
+
+      let interpreted: InterpretedSearchQuery;
+      if (request.refineQuery && request.searchTerms) {
+        interpreted = await withTimeout(
+          ai.interpretRefineQuery(
+            request.refineQuery,
+            {
+              searchTerms: request.searchTerms,
+              filters: request.filters ?? {},
+              attributeCatalog: facetSchema?.attributes ?? [],
+            },
+            locales,
+          ),
+          timeouts.aiTextMs,
+          "ai_refine",
+        );
+        interpreted = {
+          ...interpreted,
+          searchTerms: interpreted.searchTerms.length ? interpreted.searchTerms : request.searchTerms,
+          filters: { ...(request.filters ?? {}), ...(interpreted.filters ?? {}) },
+          suggestedFacets: interpreted.suggestedFacets?.length
+            ? interpreted.suggestedFacets
+            : request.suggestedFacets,
+        };
+        timer.mark("ai_refine");
+      } else if (request.searchTerms) {
+        interpreted = {
+          searchTerms: request.searchTerms,
+          filters: request.filters,
+          sort: request.sort,
+          interpretation: request.query,
+          suggestedFacets: request.suggestedFacets,
+        };
+      } else {
+        interpreted = await withTimeout(
+          ai.interpretTextQuery(request.query, locales, facetSchema?.attributes),
+          timeouts.aiTextMs,
+          "ai_interpret",
+        );
+        interpreted = {
+          ...interpreted,
+          filters: { ...(interpreted.filters ?? {}), ...(request.filters ?? {}) },
+        };
+        timer.mark("ai_interpret");
+      }
 
       const result = await executeSearch(
         interpreted,
@@ -299,6 +403,7 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
         searchLimit,
         request.offset ?? 0,
         timer,
+        facetSchema,
       );
       resultCache?.set(`${cacheKey}|${request.offset ?? 0}`, result);
       return withTimings(result, timer);

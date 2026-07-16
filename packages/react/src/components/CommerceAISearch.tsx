@@ -7,6 +7,7 @@ import { useCameraCapture } from "../hooks/useCameraCapture.js";
 import { useRecordingDuration } from "../hooks/useRecordingDuration.js";
 import { useVoiceSearch } from "../hooks/useVoiceSearch.js";
 import { CameraCaptureOverlay } from "./CameraCaptureOverlay.js";
+import { SearchFacets } from "./SearchFacets.js";
 import { VoiceStatusBanner } from "./VoiceStatusBanner.js";
 import type { CameraFacingMode } from "../utils/camera.js";
 import "../styles/commerce-ai-search.css";
@@ -25,6 +26,8 @@ export interface CommerceAISearchProps {
   placeholder?: string;
   messages?: Partial<CommerceAISearchMessages>;
   enableAutocomplete?: boolean;
+  enableFacets?: boolean;
+  persistSession?: boolean;
   enableVoice?: boolean;
   enableImageSearch?: boolean;
   enableCameraSearch?: boolean;
@@ -43,6 +46,8 @@ export function CommerceAISearch({
   placeholder,
   messages: messageOverrides,
   enableAutocomplete = false,
+  enableFacets = false,
+  persistSession = true,
   enableVoice = true,
   enableImageSearch = true,
   enableCameraSearch = true,
@@ -89,12 +94,19 @@ export function CommerceAISearch({
     setMeta,
     setError,
     setIsLoading,
+    facets = [],
+    suggestedFacets = [],
+    refineFilters = async () => undefined,
+    refine = async () => undefined,
+    startNewSearch = async () => undefined,
   } = useCommerceAISearch({
     apiBaseUrl,
     catalogLocale,
     queryLocale,
     locale,
     enableAutocomplete,
+    enableFacets,
+    persistSession,
   });
 
   const voice = useVoiceSearch({
@@ -149,9 +161,24 @@ export function CommerceAISearch({
         return;
       }
 
-      void search(query);
+      if (enableFacets && meta?.searchTerms) {
+        void refine(query);
+      } else {
+        void search(query);
+      }
     },
-    [activeSuggestionIndex, enableAutocomplete, query, search, selectSuggestion, suggestions, voice],
+    [
+      activeSuggestionIndex,
+      enableAutocomplete,
+      enableFacets,
+      meta?.searchTerms,
+      query,
+      refine,
+      search,
+      selectSuggestion,
+      suggestions,
+      voice,
+    ],
   );
 
   const handleQueryChange = useCallback(
@@ -426,6 +453,17 @@ export function CommerceAISearch({
           error={voice.error}
           durationSeconds={recordingDuration}
           messages={messages}
+        />
+      )}
+
+      {enableFacets && lastSearchMode === "text" && hasSearched && (
+        <SearchFacets
+          facets={facets}
+          suggestedFacets={suggestedFacets}
+          filters={meta?.appliedFilters ?? {}}
+          messages={messages}
+          onChange={(filters) => void refineFilters(filters)}
+          onNewSearch={() => void startNewSearch()}
         />
       )}
 

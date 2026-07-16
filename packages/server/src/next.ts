@@ -4,6 +4,7 @@ import { toWebErrorResponse, toWebResponse } from "./handler-response.js";
 import { createCommerceAIServer } from "./server.js";
 import {
   executeSearch,
+  executeFacetSchema,
   executeSearchImage,
   executeSearchSuggestions,
   executeSearchVoice,
@@ -15,6 +16,7 @@ import { parseMultipartRequest } from "./utils/multipart.js";
 export interface NextHandlers {
   health: () => Promise<Response>;
   search: (req: Request) => Promise<Response>;
+  facetSchema: () => Promise<Response>;
   searchSuggestions: (req: Request) => Promise<Response>;
   searchVoice: (req: Request) => Promise<Response>;
   searchImage: (req: Request) => Promise<Response>;
@@ -27,6 +29,15 @@ export function createNextHandlers(config: CommerceAIConfig): NextHandlers {
 
   return {
     health: async () => toWebResponse(await handlers.health()),
+
+    facetSchema: async () => {
+      try {
+        return Response.json(await executeFacetSchema(server, undefined));
+      } catch (error) {
+        const mapped = mapRouteError(error, "facetSchema", "Facet schema failed");
+        return toWebErrorResponse(mapped.message, mapped.status);
+      }
+    },
 
     search: async (req: Request) => {
       try {

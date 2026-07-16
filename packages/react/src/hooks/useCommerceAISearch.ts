@@ -1,5 +1,13 @@
-import { useCallback, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import type { ProductCard, SearchResult, SuggestionsResult } from "@commerce-ai-tool/core";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import type {
+  InterpretedSearchFilters,
+  ProductCard,
+  SearchFacetGroup,
+  SearchResult,
+  SearchSessionState,
+  SuggestedFacet,
+  SuggestionsResult,
+} from "@commerce-ai-tool/core";
 
 export interface SearchLocaleProps {
   queryLocale?: string;
@@ -40,6 +48,8 @@ export interface UseCommerceAISearchOptions extends SearchLocaleProps {
   debounceMs?: number;
   suggestionsDebounceMs?: number;
   enableAutocomplete?: boolean;
+  enableFacets?: boolean;
+  persistSession?: boolean;
 }
 
 export interface UseCommerceAISearchReturn {
@@ -62,6 +72,12 @@ export interface UseCommerceAISearchReturn {
   setError: Dispatch<SetStateAction<string | null>>;
   search: (query?: string) => Promise<void>;
   searchByImage: (file: File) => Promise<void>;
+  facets?: SearchFacetGroup[];
+  suggestedFacets?: SuggestedFacet[];
+  refineFilters?: (filters: InterpretedSearchFilters) => Promise<void>;
+  refine?: (query: string) => Promise<void>;
+  /** Clear session and run a fresh AI search with the current query. */
+  startNewSearch?: () => Promise<void>;
   clear: () => void;
 }
 
@@ -73,6 +89,8 @@ export function useCommerceAISearch(
     debounceMs = 250,
     suggestionsDebounceMs = 200,
     enableAutocomplete = false,
+    enableFacets = false,
+    persistSession = true,
     queryLocale,
     catalogLocale,
     locale,
@@ -91,6 +109,9 @@ export function useCommerceAISearch(
   const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [facets, setFacets] = useState<SearchFacetGroup[]>([]);
+  const [suggestedFacets, setSuggestedFacets] = useState<SuggestedFacet[]>([]);
+  const [searchSession, setSearchSession] = useState<SearchSessionState | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suggestionsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -101,6 +122,23 @@ export function useCommerceAISearch(
   queryRef.current = query;
 
   const baseUrl = apiBaseUrl.replace(/\/$/, "");
+  const sessionStorageKey = `cat:search-session:${baseUrl}`;
+
+  useEffect(() => {
+    if (!enableFacets || !persistSession || typeof window === "undefined") return;
+    const stored = window.sessionStorage.getItem(sessionStorageKey);
+    if (!stored) return;
+    try {
+      setSearchSession(JSON.parse(stored) as SearchSessionState);
+    } catch {
+      window.sessionStorage.removeItem(sessionStorageKey);
+    }
+  }, [enableFacets, persistSession, sessionStorageKey]);
+
+  useEffect(() => {
+    if (!enableFacets || !persistSession || !searchSession || typeof window === "undefined") return;
+    window.sessionStorage.setItem(sessionStorageKey, JSON.stringify(searchSession));
+  }, [enableFacets, persistSession, searchSession, sessionStorageKey]);
 
   const resetResults = useCallback(() => {
     abortRef.current?.abort();
@@ -124,7 +162,13 @@ export function useCommerceAISearch(
     setSuggestionsError(null);
     setIsLoadingSuggestions(false);
     setSuggestionsReady(false);
-  }, []);
+    setFacets([]);
+    setSuggestedFacets([]);
+    setSearchSession(null);
+    if (typeof window !== "undefined") {
+      window.sessionStorage.removeItem(sessionStorageKey);
+    }
+  }, [sessionStorageKey]);
 
   const fetchSuggestions = useCallback(
     async (searchQuery: string) => {
@@ -179,6 +223,26 @@ export function useCommerceAISearch(
     [baseUrl, enableAutocomplete, localePayload],
   );
 
+  const applySearchResult = useCallback(
+    (data: SearchResult, sessionQuery?: string) => {
+      setResults(data.products);
+      setMeta(data.meta);
+      setFacets(data.facets ?? []);
+      setSuggestedFacets(data.suggestedFacets ?? []);
+      if (enableFacets && data.meta.searchTerms) {
+        setSearchSession({
+          query: sessionQuery?.trim() || queryRef.current || data.meta.queryInterpretation || "",
+          searchTerms: data.meta.searchTerms,
+          appliedFilters: data.meta.appliedFilters ?? {},
+          suggestedFacets: data.suggestedFacets ?? [],
+          facetSchema: data.facetSchema,
+          schemaEtag: data.meta.schemaEtag,
+        });
+      }
+    },
+    [enableFacets],
+  );
+
   const search = useCallback(
     async (searchQuery?: string) => {
       const q = (searchQuery ?? queryRef.current).trim();
@@ -209,7 +273,7 @@ export function useCommerceAISearch(
         const response = await fetch(`${baseUrl}/search`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: q, ...localePayload }),
+          body: JSON.stringify({ query: q, includeFacets: enableFacets, ...localePayload }),
           signal: controller.signal,
         });
 
@@ -221,8 +285,7 @@ export function useCommerceAISearch(
         const data = (await response.json()) as SearchResult;
         if (requestId !== requestIdRef.current) return;
 
-        setResults(data.products);
-        setMeta(data.meta);
+        applySearchResult(data, q);
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") return;
         if (requestId !== requestIdRef.current) return;
@@ -237,8 +300,91 @@ export function useCommerceAISearch(
         }
       }
     },
-    [baseUrl, localePayload],
+    [applySearchResult, baseUrl, enableFacets, localePayload],
   );
+
+  const submitRefinement = useCallback(
+    async (
+      body: {
+        filters?: InterpretedSearchFilters;
+        refineQuery?: string;
+      },
+    ) => {
+      if (!searchSession) return;
+
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+      const requestId = ++requestIdRef.current;
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const response = await fetch(`${baseUrl}/search`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            query: searchSession.query,
+            searchTerms: searchSession.searchTerms,
+            filters: body.filters ?? searchSession.appliedFilters,
+            refineQuery: body.refineQuery,
+            suggestedFacets: searchSession.suggestedFacets,
+            includeFacets: true,
+            ...localePayload,
+          }),
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          const data = (await response.json()) as { error?: string };
+          throw new Error(data.error ?? "Search refinement failed");
+        }
+        const data = (await response.json()) as SearchResult;
+        if (requestId !== requestIdRef.current) return;
+        applySearchResult(data, searchSession.query);
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        if (requestId === requestIdRef.current) {
+          setError(err instanceof Error ? err.message : "Search refinement failed");
+        }
+      } finally {
+        if (requestId === requestIdRef.current) {
+          setIsLoading(false);
+          setHasSearched(true);
+        }
+      }
+    },
+    [applySearchResult, baseUrl, localePayload, searchSession],
+  );
+
+  const refineFilters = useCallback(
+    async (filters: InterpretedSearchFilters) => submitRefinement({ filters }),
+    [submitRefinement],
+  );
+
+  const refine = useCallback(
+    async (refineQuery: string) => {
+      const trimmed = refineQuery.trim();
+      if (trimmed) await submitRefinement({ refineQuery: trimmed });
+    },
+    [submitRefinement],
+  );
+
+  const startNewSearch = useCallback(async () => {
+    const previousQuery = searchSession?.query;
+    const q = (queryRef.current.trim() || previousQuery || "").trim();
+    setSearchSession(null);
+    setFacets([]);
+    setSuggestedFacets([]);
+    if (typeof window !== "undefined") {
+      window.sessionStorage.removeItem(sessionStorageKey);
+    }
+    if (q) {
+      if (!queryRef.current.trim() && previousQuery) {
+        setQueryState(previousQuery);
+      }
+      await search(q);
+    }
+  }, [search, searchSession?.query, sessionStorageKey]);
 
   const searchByImage = useCallback(
     async (file: File) => {
@@ -372,6 +518,11 @@ export function useCommerceAISearch(
     setError,
     search,
     searchByImage,
+    facets,
+    suggestedFacets,
+    refineFilters,
+    refine,
+    startNewSearch,
     clear,
   };
 }

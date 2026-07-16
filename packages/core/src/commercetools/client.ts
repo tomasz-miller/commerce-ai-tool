@@ -5,6 +5,7 @@ import {
 } from "@commercetools/sdk-client-v2";
 import { createApiBuilderFromCtpClient, type ProductSearchRequest } from "@commercetools/platform-sdk";
 import type { CommercetoolsConfig, ProductCard } from "../types/index.js";
+import type { ProductTypeForFacets } from "./product-types.js";
 import {
   buildProductSearchRequest,
   buildProjectionSearchQueryArgs,
@@ -26,7 +27,9 @@ export interface CommercetoolsClient {
     productIds: string[];
     total: number;
     projections?: ProductCard[];
+    facets?: unknown;
   }>;
+  listProductTypes(): Promise<ProductTypeForFacets[]>;
   getProductProjections(
     productIds: string[],
     locale: string,
@@ -75,6 +78,22 @@ export function createCommercetoolsClient(config: CommercetoolsConfig): Commerce
   });
 
   return {
+    async listProductTypes() {
+      const results: ProductTypeForFacets[] = [];
+      let offset = 0;
+      const limit = 500;
+      let hasMore = true;
+
+      while (hasMore) {
+        const response = await apiRoot.productTypes().get({ queryArgs: { limit, offset } }).execute();
+        results.push(...(response.body.results as ProductTypeForFacets[]));
+        hasMore = response.body.results.length === limit;
+        offset += limit;
+      }
+
+      return results;
+    },
+
     async searchProducts(input, options) {
       const body = buildProductSearchRequest(input);
       const locale = options?.locale ?? input.catalogLocale;
@@ -182,6 +201,7 @@ async function searchWithProductSearchApi(
   return {
     productIds,
     total,
+    facets: response.body.facets,
   };
 }
 
@@ -225,6 +245,7 @@ async function searchWithProductProjectionSearch(
     productIds,
     total,
     projections,
+    facets: response.body.facets,
   };
 }
 

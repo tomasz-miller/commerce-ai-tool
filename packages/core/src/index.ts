@@ -9,6 +9,23 @@ export type { AIProvider } from "./ai/types.js";
 export { createCommercetoolsClient } from "./commercetools/client.js";
 export type { CommercetoolsClient, ProductSearchBuildInput, ProductSearchQueryOptions } from "./commercetools/client.js";
 export {
+  FacetSchemaStore,
+  resolveFacetSchema,
+} from "./commercetools/product-types.js";
+export {
+  buildProductSearchFacets,
+  buildProjectionFacetParams,
+  filterFacetSuggestions,
+  isFacetFilterSelected,
+  normalizeProductSearchFacets,
+  priceBucketKeyFromFilters,
+  priceRangeToFilterValues,
+  toggleFacetFilter,
+  CATEGORIES_FACET_ID,
+  DEFAULT_PRICE_RANGES,
+  PRICE_FACET_ID,
+} from "./commercetools/facets.js";
+export {
   buildProductSearchBody,
   buildProductSearchRequest,
   buildProjectionSearchQueryArgs,
@@ -20,6 +37,8 @@ export type { SearchOrchestrator, SearchOrchestratorDeps } from "./search/orches
 export {
   parseInterpretedQuery,
   parseVoiceAudioInterpretation,
+  buildRefineQueryUserMessage,
+  buildSchemaAwareTextQueryUserMessage,
 } from "./prompts/index.js";
 export {
   buildTtsSummaryFallback,

@@ -27,6 +27,10 @@ export interface CommerceAISearchMessages {
   suggestionsAriaLabel: string;
   loadingSuggestions: string;
   noSuggestions: string;
+  filtersAriaLabel: string;
+  clearFilters: string;
+  narrowResults: string;
+  newSearch: string;
 }
 
 export const DEFAULT_COMMERCE_AI_SEARCH_MESSAGES: CommerceAISearchMessages = {
@@ -58,6 +62,10 @@ export const DEFAULT_COMMERCE_AI_SEARCH_MESSAGES: CommerceAISearchMessages = {
   suggestionsAriaLabel: "Search suggestions",
   loadingSuggestions: "Loading suggestions...",
   noSuggestions: "No suggestions",
+  filtersAriaLabel: "Search filters",
+  clearFilters: "Clear filters",
+  narrowResults: "Narrow your results",
+  newSearch: "New search",
 };
 
 export function resolveCommerceAISearchMessages(

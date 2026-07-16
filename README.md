@@ -86,10 +86,18 @@ Server env vars (see `apps/demo-next/.env.example`):
 - `CAT_CACHE_ENABLED=true` — opt-in in-memory response cache (per server process)
 - `CAT_CACHE_TTL_MS=60000` — cache TTL in milliseconds
 - `CAT_CACHE_MAX_ENTRIES=500` — max cached entries per process
+- `CAT_FACETS_ENABLED=true` — enable schema-driven faceted search on the server
+- `CAT_FACET_SCHEMA_TTL_MS=600000` — Product Types schema cache TTL
+- `CAT_FACET_INCLUDE=color,size` / `CAT_FACET_EXCLUDE=internalCode` — restrict discovered attributes
+- `CAT_FACET_MAX_ATTRIBUTES=12` — limit the attribute catalog supplied to the AI
 
 Autocomplete uses commercetools Search Term Suggestions and requires Product Projection Search to be activated with indexed `searchKeywords` on products.
 
 Search queries are built in `@commerce-ai-tool/core` (`commercetools/query-builder.ts`): multi-field full-text (`name`, `searchKeywords`, `description`), optional fuzzy name matching, AI `filters` (color, brand, category, price range), and currency-scoped price sorting. Product Projection Search is used automatically when Product Search API is unavailable.
+
+### Faceted search
+
+Set `enableFacets` on the widget to let the search pipeline discover filterable attributes from commercetools Product Types. Only attributes marked `isSearchable` are considered. The AI proposes relevant facets for the initial query; users can refine with facet chips or natural language, such as “height above 10 cm”. The server keeps the schema in a short-lived process cache and exposes `GET /search/facet-schema` for host-app preload.
 
 ### 4. Add the widget
 
@@ -107,6 +115,7 @@ export function Search() {
       catalogLocale="no"
       queryLocale="en"
       enableAutocomplete
+      enableFacets
       enableVoice
       enableImageSearch
       enableCameraSearch

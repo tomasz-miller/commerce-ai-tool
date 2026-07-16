@@ -161,7 +161,26 @@ export function loadConfigFromEnv(): CommerceAIConfig {
       : process.env.CAT_CACHE_ENABLED === "true"
         ? {}
         : undefined,
+    facets:
+      process.env.CAT_FACETS_ENABLED === "true"
+        ? {
+            enabled: true,
+            schemaTtlMs: process.env.CAT_FACET_SCHEMA_TTL_MS
+              ? Number(process.env.CAT_FACET_SCHEMA_TTL_MS)
+              : undefined,
+            include: parseCsvEnv(process.env.CAT_FACET_INCLUDE),
+            exclude: parseCsvEnv(process.env.CAT_FACET_EXCLUDE),
+            maxAttributes: process.env.CAT_FACET_MAX_ATTRIBUTES
+              ? Number(process.env.CAT_FACET_MAX_ATTRIBUTES)
+              : undefined,
+          }
+        : undefined,
   };
+}
+
+function parseCsvEnv(value: string | undefined): string[] | undefined {
+  const values = value?.split(",").map((item) => item.trim()).filter(Boolean);
+  return values?.length ? values : undefined;
 }
 
 function requiredEnv(name: string): string {

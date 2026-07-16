@@ -1,5 +1,9 @@
 import { logSearchTrace, SearchTimeoutError } from "@commerce-ai-tool/core";
-import type { VoiceSearchResult } from "@commerce-ai-tool/core";
+import type {
+  InterpretedSearchFilters,
+  SuggestedFacet,
+  VoiceSearchResult,
+} from "@commerce-ai-tool/core";
 import {
   clampSuggestionsLimit,
   normalizeSuggestionsPrefix,
@@ -22,6 +26,12 @@ export interface SearchRequestBody {
   catalogLocale?: string;
   locale?: string;
   limit?: number;
+  filters?: InterpretedSearchFilters;
+  searchTerms?: string[];
+  sort?: "relevance" | "price_asc" | "price_desc";
+  refineQuery?: string;
+  includeFacets?: boolean;
+  suggestedFacets?: SuggestedFacet[];
 }
 
 export interface SuggestionsRequestBody {
@@ -66,6 +76,9 @@ export async function executeSearch(
   if (!body.query?.trim()) {
     throw new ValidationError("query is required");
   }
+  if (body.refineQuery && (!body.searchTerms || body.searchTerms.length === 0)) {
+    throw new ValidationError("searchTerms are required for a refinement");
+  }
 
   const localeOptions = parseSearchLocaleOptions(body);
   logSearchTrace("handler", {
@@ -79,7 +92,23 @@ export async function executeSearch(
     query: body.query,
     ...localeOptions,
     limit: body.limit,
+    filters: body.filters,
+    searchTerms: body.searchTerms,
+    sort: body.sort,
+    refineQuery: body.refineQuery,
+    includeFacets: body.includeFacets,
+    suggestedFacets: body.suggestedFacets,
   });
+}
+
+export async function executeFacetSchema(
+  server: CommerceAIServer,
+  options?: SearchRequestBody,
+): Promise<unknown> {
+  if (!server.orchestrator.getFacetSchema) {
+    throw new Error("Facet schema is not available");
+  }
+  return server.orchestrator.getFacetSchema(options);
 }
 
 export async function executeSearchSuggestions(

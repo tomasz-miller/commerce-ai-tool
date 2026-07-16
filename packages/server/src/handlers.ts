@@ -3,6 +3,7 @@ import type { CommerceAIServer } from "./server.js";
 import { errorResponse, jsonResponse, type HandlerResponse } from "./handler-response.js";
 import {
   executeSearch,
+  executeFacetSchema,
   executeSearchImage,
   executeSearchSuggestions,
   executeSearchVoice,
@@ -33,6 +34,15 @@ export function createHandlers(server: CommerceAIServer) {
         return jsonResponse(result);
       } catch (error) {
         const mapped = mapRouteError(error, "search", "Search failed");
+        return errorResponse(mapped.message, mapped.status);
+      }
+    },
+
+    async facetSchema(): Promise<HandlerResponse> {
+      try {
+        return jsonResponse(await executeFacetSchema(server, undefined));
+      } catch (error) {
+        const mapped = mapRouteError(error, "facetSchema", "Facet schema failed");
         return errorResponse(mapped.message, mapped.status);
       }
     },

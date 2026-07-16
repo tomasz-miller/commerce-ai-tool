@@ -1,7 +1,26 @@
-import type { InterpretedSearchQuery, SearchLocaleContext, VoiceAudioInterpretation } from "../types/index.js";
+import type {
+  FacetAttributeDefinition,
+  InterpretedSearchFilters,
+  InterpretedSearchQuery,
+  SearchLocaleContext,
+  VoiceAudioInterpretation,
+} from "../types/index.js";
 
 export interface AIProvider {
-  interpretTextQuery(text: string, locales: SearchLocaleContext): Promise<InterpretedSearchQuery>;
+  interpretTextQuery(
+    text: string,
+    locales: SearchLocaleContext,
+    attributeCatalog?: FacetAttributeDefinition[],
+  ): Promise<InterpretedSearchQuery>;
+  interpretRefineQuery(
+    text: string,
+    context: {
+      searchTerms: string[];
+      filters: InterpretedSearchFilters;
+      attributeCatalog: FacetAttributeDefinition[];
+    },
+    locales: SearchLocaleContext,
+  ): Promise<InterpretedSearchQuery>;
   interpretImageQuery(
     imageBase64: string,
     mimeType: string,

@@ -57,4 +57,63 @@ describe("useCommerceAISearch", () => {
 
     expect(result.current.hasSearched).toBe(false);
   });
+
+  it("sends suggestedFacets on chip refine and supports startNewSearch", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        products: [{ id: "p1", name: "Glass" }],
+        facets: [
+          {
+            id: "color",
+            label: "Color",
+            type: "distinct",
+            buckets: [{ key: "red", label: "red", count: 1 }],
+          },
+        ],
+        suggestedFacets: [{ name: "color" }],
+        meta: {
+          total: 1,
+          limit: 20,
+          offset: 0,
+          locale: "en",
+          catalogLocale: "en",
+          queryLocale: "en",
+          queryInterpretation: "glasses",
+          searchTerms: ["glasses"],
+          appliedFilters: {},
+        },
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() =>
+      useCommerceAISearch({ apiBaseUrl: "/api/commerce-ai", enableFacets: true, persistSession: false }),
+    );
+
+    await act(async () => {
+      await result.current.search("glasses");
+    });
+
+    await act(async () => {
+      await result.current.refineFilters?.({ color: "red" });
+    });
+
+    const refineBody = JSON.parse(
+      (fetchMock.mock.calls.at(-1)?.[1] as { body: string }).body,
+    ) as { suggestedFacets?: Array<{ name: string }>; filters?: Record<string, string> };
+    expect(refineBody.suggestedFacets).toEqual([{ name: "color" }]);
+    expect(refineBody.filters).toEqual({ color: "red" });
+
+    await act(async () => {
+      await result.current.startNewSearch?.();
+    });
+
+    const newSearchBody = JSON.parse(
+      (fetchMock.mock.calls.at(-1)?.[1] as { body: string }).body,
+    ) as { searchTerms?: string[]; includeFacets?: boolean; refineQuery?: string };
+    expect(newSearchBody.searchTerms).toBeUndefined();
+    expect(newSearchBody.refineQuery).toBeUndefined();
+    expect(newSearchBody.includeFacets).toBe(true);
+  });
 });
