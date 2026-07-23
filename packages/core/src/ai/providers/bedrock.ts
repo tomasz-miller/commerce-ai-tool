@@ -17,10 +17,13 @@ import {
   buildImageQueryUserMessage,
   buildTextQueryUserMessage,
   buildVoiceEnhanceUserMessage,
+  buildSuggestSearchTermsUserMessage,
   IMAGE_QUERY_SYSTEM_PROMPT,
   TEXT_QUERY_SYSTEM_PROMPT,
   VOICE_ENHANCE_SYSTEM_PROMPT,
+  SUGGEST_SEARCH_TERMS_SYSTEM_PROMPT,
   parseInterpretedQuery,
+  parseSuggestSearchTerms,
 } from "../../prompts/index.js";
 import {
   buildTtsSummaryUserMessage,
@@ -131,6 +134,25 @@ export class BedrockProvider implements AIProvider {
     ]);
 
     return this.extractText(response).trim();
+  }
+
+  async suggestSearchTerms(query: string, locales: SearchLocaleContext, limit = 8) {
+    const response = await this.converse(this.modelId, [
+      {
+        role: "user",
+        content: [
+          {
+            text: `${SUGGEST_SEARCH_TERMS_SYSTEM_PROMPT}\n\n${buildSuggestSearchTermsUserMessage(
+              query,
+              locales,
+              limit,
+            )}`,
+          },
+        ],
+      },
+    ]);
+
+    return parseSuggestSearchTerms(this.extractText(response), limit);
   }
 
   async summarizeVoiceResults(

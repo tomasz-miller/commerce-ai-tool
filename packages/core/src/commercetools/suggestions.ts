@@ -2,31 +2,34 @@ import type { SuggestionResult } from "@commercetools/platform-sdk";
 
 export function normalizeSearchSuggestions(
   result: SuggestionResult,
-  locale: string,
+  localeOrLocales: string | string[],
   limit: number,
 ): string[] {
-  const key = `searchKeywords.${locale}`;
-  const suggestions = result[key] ?? [];
-
+  const locales = Array.isArray(localeOrLocales) ? localeOrLocales : [localeOrLocales];
   const seen = new Set<string>();
   const normalized: string[] = [];
 
-  for (const suggestion of suggestions) {
-    const text = suggestion.text?.trim();
-    if (!text) {
-      continue;
-    }
+  for (const locale of locales) {
+    const key = `searchKeywords.${locale}`;
+    const suggestions = result[key] ?? [];
 
-    const dedupeKey = text.toLowerCase();
-    if (seen.has(dedupeKey)) {
-      continue;
-    }
+    for (const suggestion of suggestions) {
+      const text = suggestion.text?.trim();
+      if (!text) {
+        continue;
+      }
 
-    seen.add(dedupeKey);
-    normalized.push(text);
+      const dedupeKey = text.toLowerCase();
+      if (seen.has(dedupeKey)) {
+        continue;
+      }
 
-    if (normalized.length >= limit) {
-      break;
+      seen.add(dedupeKey);
+      normalized.push(text);
+
+      if (normalized.length >= limit) {
+        return normalized;
+      }
     }
   }
 

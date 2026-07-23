@@ -14,6 +14,19 @@ describe("normalizeSearchSuggestions", () => {
     expect(result).toEqual(["Red Shoes", "Running Shoes"]);
   });
 
+  it("merges multiple locales with catalog order and dedupe", () => {
+    const result = normalizeSearchSuggestions(
+      {
+        "searchKeywords.en": [{ text: "Glasses" }],
+        "searchKeywords.pl": [{ text: "Okulary" }, { text: "glasses" }],
+      },
+      ["en", "pl"],
+      8,
+    );
+
+    expect(result).toEqual(["Glasses", "Okulary"]);
+  });
+
   it("deduplicates case-insensitively and respects the limit", () => {
     const result = normalizeSearchSuggestions(
       {

@@ -32,6 +32,11 @@ export interface AIProvider {
     locales: SearchLocaleContext,
   ): Promise<VoiceAudioInterpretation>;
   enhanceVoiceTranscript(transcript: string, locales: SearchLocaleContext): Promise<string>;
+  suggestSearchTerms(
+    query: string,
+    locales: SearchLocaleContext,
+    limit?: number,
+  ): Promise<string[]>;
   summarizeVoiceResults(
     count: number,
     topProductName: string | undefined,

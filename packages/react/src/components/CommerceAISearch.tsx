@@ -139,6 +139,7 @@ export function CommerceAISearch({
   const showSuggestions =
     enableAutocomplete &&
     !suggestionsDismissed &&
+    !showResults &&
     query.trim().length >= 2 &&
     (isLoadingSuggestions ||
       suggestions.length > 0 ||
@@ -326,49 +327,6 @@ export function CommerceAISearch({
             autoComplete="off"
             role={enableAutocomplete ? "combobox" : undefined}
           />
-
-          {showSuggestions && (
-            <div
-              id="cat-suggestions-listbox"
-              className="cat-suggestions"
-              role="listbox"
-              aria-label={messages.suggestionsAriaLabel}
-            >
-              {isLoadingSuggestions && suggestions.length === 0 && !suggestionsError && (
-                <div className="cat-suggestions__status">{messages.loadingSuggestions}</div>
-              )}
-
-              {suggestionsError && (
-                <div className="cat-suggestions__status cat-suggestions__status--error" role="alert">
-                  {suggestionsError}
-                </div>
-              )}
-
-              {!isLoadingSuggestions &&
-                !suggestionsError &&
-                suggestionsReady &&
-                suggestions.length === 0 && (
-                  <div className="cat-suggestions__status">{messages.noSuggestions}</div>
-                )}
-
-              {suggestions.map((suggestion, index) => (
-                <button
-                  key={`${index}-${suggestion}`}
-                  id={`cat-suggestion-${index}`}
-                  type="button"
-                  className={`cat-suggestions__item ${
-                    index === activeSuggestionIndex ? "cat-suggestions__item--active" : ""
-                  }`}
-                  role="option"
-                  aria-selected={index === activeSuggestionIndex}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => handleSuggestionSelect(suggestion)}
-                >
-                  {suggestion}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
 
         {enableVoice && (
@@ -443,6 +401,49 @@ export function CommerceAISearch({
             <Volume2 size={16} />
           </button>
         )}
+
+        {showSuggestions && (
+          <div
+            id="cat-suggestions-listbox"
+            className="cat-suggestions"
+            role="listbox"
+            aria-label={messages.suggestionsAriaLabel}
+          >
+            {isLoadingSuggestions && suggestions.length === 0 && !suggestionsError && (
+              <div className="cat-suggestions__status">{messages.loadingSuggestions}</div>
+            )}
+
+            {suggestionsError && (
+              <div className="cat-suggestions__status cat-suggestions__status--error" role="alert">
+                {suggestionsError}
+              </div>
+            )}
+
+            {!isLoadingSuggestions &&
+              !suggestionsError &&
+              suggestionsReady &&
+              suggestions.length === 0 && (
+                <div className="cat-suggestions__status">{messages.noSuggestions}</div>
+              )}
+
+            {suggestions.map((suggestion, index) => (
+              <button
+                key={`${index}-${suggestion}`}
+                id={`cat-suggestion-${index}`}
+                type="button"
+                className={`cat-suggestions__item ${
+                  index === activeSuggestionIndex ? "cat-suggestions__item--active" : ""
+                }`}
+                role="option"
+                aria-selected={index === activeSuggestionIndex}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => handleSuggestionSelect(suggestion)}
+              >
+                {suggestion}
+              </button>
+            ))}
+          </div>
+        )}
       </form>
 
       {showVoiceBanner && (
@@ -453,6 +454,7 @@ export function CommerceAISearch({
           error={voice.error}
           durationSeconds={recordingDuration}
           messages={messages}
+          onDismissError={voice.clearError}
         />
       )}
 

@@ -75,6 +75,11 @@ export interface CommerceAIDefaults {
   currency?: string;
 }
 
+export interface LangfuseConfig {
+  /** Derived from LANGFUSE_PUBLIC_KEY + LANGFUSE_SECRET_KEY when loading from env. */
+  enabled?: boolean;
+}
+
 export interface CommerceAIConfig {
   commercetools: CommercetoolsConfig;
   ai: AIConfig;
@@ -84,6 +89,7 @@ export interface CommerceAIConfig {
   cache?: SearchCacheConfig;
   timeouts?: SearchTimeoutsConfig;
   facets?: FacetConfig;
+  langfuse?: LangfuseConfig;
 }
 
 export interface ProductCard {
@@ -117,6 +123,11 @@ export interface SearchMeta {
   timings?: Record<string, number>;
   /** Total pipeline duration in milliseconds (dev / CAT_DEBUG only) */
   totalMs?: number;
+  /**
+   * Active OpenTelemetry / Langfuse trace id when Langfuse is enabled or CAT_DEBUG=true.
+   * Non-stable for client contracts — intended for local/dev linking.
+   */
+  traceId?: string;
 }
 
 export interface SearchResult {
@@ -134,6 +145,11 @@ export interface SuggestionsRequest extends SearchLocaleOptions {
 
 export interface SuggestionsResult {
   suggestions: string[];
+  /**
+   * True when this request invoked AI `suggestSearchTerms` (not a cache hit).
+   * Used by the server to flush Langfuse on serverless hosts.
+   */
+  aiFallbackUsed?: boolean;
 }
 
 export interface TextSearchRequest {

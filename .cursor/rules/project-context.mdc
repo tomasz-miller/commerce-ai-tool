@@ -13,7 +13,7 @@ AI-powered product search plugin for commercetools (text, voice, image). pnpm + 
 - `packages/server` — Next.js/Express handlers, ElevenLabs STT/TTS
 - `packages/react` — React search widget (glass UI)
 - `packages/angular` — Angular component
-- `apps/demo-next` — Next.js 15 demo app
+- `apps/demo-next` — Next.js 16 demo app
 
 Dependencies: `server` / `react` / `angular` → `core`. API secrets stay on the server only.
 

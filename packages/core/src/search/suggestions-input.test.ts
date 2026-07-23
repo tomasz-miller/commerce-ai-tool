@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   clampSuggestionsLimit,
+  normalizeSuggestionList,
   normalizeSuggestionsPrefix,
   resolveSuggestLocale,
+  resolveSuggestLocales,
+  shouldUseAiSuggestionFallback,
   SUGGESTIONS_MAX_PREFIX_LENGTH,
 } from "./suggestions-input.js";
 import {
@@ -39,11 +42,47 @@ describe("normalizeSuggestionsPrefix", () => {
 });
 
 describe("resolveSuggestLocale", () => {
-  it("prefers query locale over catalog locale", () => {
-    expect(resolveSuggestLocale("en", "no")).toBe("en");
+  it("prefers catalog locale over query locale", () => {
+    expect(resolveSuggestLocale("pl", "en")).toBe("en");
   });
 
-  it("falls back to catalog locale when query locale is empty", () => {
-    expect(resolveSuggestLocale("", "no")).toBe("no");
+  it("falls back to query locale when catalog locale is empty", () => {
+    expect(resolveSuggestLocale("pl", "")).toBe("pl");
+  });
+});
+
+describe("resolveSuggestLocales", () => {
+  it("returns catalog locale alone when query matches", () => {
+    expect(resolveSuggestLocales("en", "en")).toEqual(["en"]);
+  });
+
+  it("returns catalog first then query when they differ", () => {
+    expect(resolveSuggestLocales("pl", "en")).toEqual(["en", "pl"]);
+  });
+});
+
+describe("shouldUseAiSuggestionFallback", () => {
+  it("is false for short queries", () => {
+    expect(shouldUseAiSuggestionFallback("sto", "pl", "en-GB")).toBe(false);
+  });
+
+  it("is true when query and catalog locales differ", () => {
+    expect(shouldUseAiSuggestionFallback("stol", "pl", "en-GB")).toBe(true);
+  });
+
+  it("is true for multi-token same-locale queries", () => {
+    expect(shouldUseAiSuggestionFallback("wooden table", "en", "en")).toBe(true);
+  });
+
+  it("is false for short same-locale single tokens", () => {
+    expect(shouldUseAiSuggestionFallback("glas", "en-GB", "en-GB")).toBe(false);
+  });
+});
+
+describe("normalizeSuggestionList", () => {
+  it("trims, dedupes case-insensitively, and clamps", () => {
+    expect(
+      normalizeSuggestionList([" Wooden Table ", "wooden table", "Wood", ""], 2),
+    ).toEqual(["Wooden Table", "Wood"]);
   });
 });

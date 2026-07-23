@@ -24,7 +24,8 @@
     "eval:promptfoo:view": "promptfoo view",
     "eval:fixtures:audio": "bash evals/scripts/generate-audio-fixtures.sh",
     "eval:fixtures:images": "bash evals/scripts/compress-image-fixtures.sh",
-    "test:e2e": "pnpm --filter demo-next test:e2e"
+    "test:e2e": "pnpm --filter demo-next test:e2e",
+    "seed:search-keywords": "pnpm --filter @commerce-ai-tool/core build && node scripts/seed-search-keywords.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.0",

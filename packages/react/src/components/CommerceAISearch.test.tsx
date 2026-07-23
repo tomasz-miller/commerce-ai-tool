@@ -41,6 +41,7 @@ const defaultVoiceReturn = {
   isProcessing: false,
   isLoadingTts: false,
   error: null,
+  clearError: vi.fn(),
   audioSummary: null,
   clearAudioSummary: vi.fn(),
   replayAudioSummary: vi.fn(),
@@ -145,6 +146,29 @@ describe("CommerceAISearch autocomplete", () => {
     render(<CommerceAISearch apiBaseUrl="/api/commerce-ai" enableAutocomplete />);
 
     expect(screen.getByText("No suggestions")).not.toBeNull();
+  });
+
+  it("hides suggestions when search results are visible", () => {
+    mockUseCommerceAISearch.mockReturnValue({
+      ...defaultSearchReturn,
+      query: "glass",
+      suggestionsReady: true,
+      suggestions: ["Wine Glass"],
+      hasSearched: true,
+      results: [
+        {
+          id: "1",
+          name: "Chianti Wine Glass",
+          slug: "chianti-wine-glass",
+        },
+      ],
+    });
+
+    render(<CommerceAISearch apiBaseUrl="/api/commerce-ai" enableAutocomplete />);
+
+    expect(screen.queryByLabelText("Search suggestions")).toBeNull();
+    expect(screen.queryByText("No suggestions")).toBeNull();
+    expect(screen.getByText("Chianti Wine Glass")).not.toBeNull();
   });
 });
 

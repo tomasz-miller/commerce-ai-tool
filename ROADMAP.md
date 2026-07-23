@@ -13,7 +13,8 @@
 
 ## v1.1
 
-- [x] AI query suggestions and autocomplete (commercetools Search Term Suggestions API)
+- [x] Autocomplete via commercetools Search Term Suggestions (`searchKeywords`)
+- [x] AI suggestion fallback when CT Suggest is empty for cross-locale or multi-word NL queries (`suggestSearchTerms`)
 - [x] AI-suggested faceted search filters in UI
 - [x] Internationalization (i18n) for widget labels (runtime `messages` overrides)
 - [x] Short-lived response cache on server (opt-in via `CAT_CACHE_*`)
@@ -82,12 +83,12 @@ Integrate [Langfuse](https://langfuse.com) for every AI step in the search pipel
 
 ### Implementation checklist
 
-- [ ] Langfuse SDK in `@commerce-ai-tool/core` (wrap AI provider calls or orchestrator spans)
-- [ ] Env config: `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL` (optional self-host)
-- [ ] Trace metadata: `queryLocale`, `catalogLocale`, search type, commercetools `projectKey`, model id
-- [ ] Instrument all `AIProvider` methods: `interpretTextQuery`, `interpretImageQuery`, `enhanceVoiceTranscript`, `summarizeVoiceResults`
-- [ ] Link server voice handler span to core child spans (single trace id returned optionally in dev)
-- [ ] Document setup in `.env.example` and README; note relationship to existing `CAT_DEBUG` dev tracing
+- [x] Langfuse SDK in `@commerce-ai-tool/core` (wrap AI provider calls or orchestrator spans)
+- [x] Env config: `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL` (optional self-host)
+- [x] Trace metadata: `queryLocale`, `catalogLocale`, search type, commercetools `projectKey`, model id
+- [x] Instrument all `AIProvider` methods: `interpretTextQuery`, `interpretImageQuery`, `enhanceVoiceTranscript`, `summarizeVoiceResults`, `suggestSearchTerms`
+- [x] Link server voice handler span to core child spans (single trace id returned optionally in dev)
+- [x] Document setup in `.env.example` and README; note relationship to existing `CAT_DEBUG` dev tracing
 - [ ] Optional: Langfuse prompt labels synced with `packages/core/src/prompts` for managed prompts
 
 ## v1.3 — Cart

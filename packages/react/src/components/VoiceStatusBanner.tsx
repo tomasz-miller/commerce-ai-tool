@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import { formatRecordingDuration } from "../hooks/useRecordingDuration.js";
 import type { CommerceAISearchMessages } from "@commerce-ai-tool/core";
 
@@ -9,8 +10,9 @@ export interface VoiceStatusBannerProps {
   durationSeconds: number;
   messages: Pick<
     CommerceAISearchMessages,
-    "listening" | "tapMicToStop" | "understandingQuery" | "preparingAudioSummary"
+    "listening" | "tapMicToStop" | "understandingQuery" | "preparingAudioSummary" | "dismiss"
   >;
+  onDismissError?: () => void;
 }
 
 function VoiceWaveform() {
@@ -36,6 +38,7 @@ export function VoiceStatusBanner({
   error,
   durationSeconds,
   messages,
+  onDismissError,
 }: VoiceStatusBannerProps) {
   const isError = Boolean(error);
 
@@ -48,6 +51,16 @@ export function VoiceStatusBanner({
       {isError && (
         <div className="cat-voice-banner__content">
           <span className="cat-voice-banner__label">{error}</span>
+          {onDismissError && (
+            <button
+              type="button"
+              className="cat-voice-banner__dismiss"
+              onClick={onDismissError}
+              aria-label={messages.dismiss}
+            >
+              <X size={14} aria-hidden="true" />
+            </button>
+          )}
         </div>
       )}
 

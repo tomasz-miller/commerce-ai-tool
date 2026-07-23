@@ -32,13 +32,26 @@ export {
   hasSearchableContent,
   joinSearchTerms,
 } from "./commercetools/query-builder.js";
+export {
+  buildSearchKeywordsFromProductCopy,
+  hasNonEmptySearchKeywords,
+} from "./commercetools/build-search-keywords.js";
+export type {
+  BuildSearchKeywordsFromProductCopyInput,
+  BuildSearchKeywordsFromProductCopyResult,
+  BuiltSearchKeywords,
+  LocalizedTextMap,
+  WhitespaceSearchKeyword,
+} from "./commercetools/build-search-keywords.js";
 export { createSearchOrchestrator } from "./search/orchestrator.js";
 export type { SearchOrchestrator, SearchOrchestratorDeps } from "./search/orchestrator.js";
 export {
   parseInterpretedQuery,
   parseVoiceAudioInterpretation,
+  parseSuggestSearchTerms,
   buildRefineQueryUserMessage,
   buildSchemaAwareTextQueryUserMessage,
+  buildSuggestSearchTermsUserMessage,
 } from "./prompts/index.js";
 export {
   buildTtsSummaryFallback,
@@ -48,9 +61,31 @@ export {
 export { resolveSearchLocales } from "./locale/resolve.js";
 export {
   clampSuggestionsLimit,
+  normalizeSuggestionList,
   normalizeSuggestionsPrefix,
   resolveSuggestLocale,
+  resolveSuggestLocales,
+  shouldUseAiSuggestionFallback,
+  AI_SUGGESTION_FALLBACK_MIN_LENGTH,
   SUGGESTIONS_MAX_PREFIX_LENGTH,
 } from "./search/suggestions-input.js";
 export { logSearchTrace } from "./utils/dev-trace.js";
 export { SearchTimeoutError } from "./utils/with-timeout.js";
+export {
+  isLangfuseEnabled,
+  shouldExposeTraceId,
+  shouldTraceSuggestions,
+  getCurrentTraceId,
+  withPipelineSpan,
+  withPropagatedAttributes,
+  withTraceIdMeta,
+  wrapAIProvider,
+  redactBinaryInput,
+  redactBase64ImageInput,
+} from "./observability/index.js";
+export type {
+  AIProviderTraceMeta,
+  PipelineSpanAttributes,
+  PropagatedTraceMetadata,
+  RedactedBinaryInput,
+} from "./observability/index.js";
