@@ -37,7 +37,7 @@ export interface CommercetoolsClient {
   ): Promise<ProductCard[]>;
   suggestSearchTerms(
     prefix: string,
-    locale: string,
+    locale: string | string[],
     limit?: number,
   ): Promise<string[]>;
 }
@@ -144,17 +144,20 @@ export function createCommercetoolsClient(config: CommercetoolsConfig): Commerce
         .sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
     },
 
-    async suggestSearchTerms(prefix, locale, limit = 8) {
+    async suggestSearchTerms(prefix, localeOrLocales, limit = 8) {
+      const locales = Array.isArray(localeOrLocales) ? localeOrLocales : [localeOrLocales];
       const queryArgs: Record<string, string | number | boolean> = {
-        [`searchKeywords.${locale}`]: prefix,
         limit,
         fuzzy: true,
         staged: false,
       };
+      for (const locale of locales) {
+        queryArgs[`searchKeywords.${locale}`] = prefix;
+      }
 
       logSearchTrace("commercetools", {
         api: "productProjections.suggest",
-        locale,
+        locales,
         prefix,
         limit,
       });
@@ -165,7 +168,7 @@ export function createCommercetoolsClient(config: CommercetoolsConfig): Commerce
         .get({ queryArgs })
         .execute();
 
-      const suggestions = normalizeSearchSuggestions(response.body, locale, limit);
+      const suggestions = normalizeSearchSuggestions(response.body, locales, limit);
       logSearchTrace("commercetools", {
         api: "productProjections.suggest",
         count: suggestions.length,

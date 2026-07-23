@@ -1,6 +1,6 @@
 import { DEFAULT_COMMERCE_AI_SEARCH_MESSAGES } from "@commerce-ai-tool/core";
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { VoiceStatusBanner } from "./VoiceStatusBanner.js";
 
 const messages = DEFAULT_COMMERCE_AI_SEARCH_MESSAGES;
@@ -71,5 +71,24 @@ describe("VoiceStatusBanner", () => {
     const status = screen.getByRole("status");
     expect(status.textContent).toContain("Microphone access denied");
     expect(status.className).toContain("cat-voice-banner--error");
+  });
+
+  it("dismisses error when close is clicked", () => {
+    const onDismissError = vi.fn();
+
+    render(
+      <VoiceStatusBanner
+        isRecording={false}
+        isProcessing={false}
+        isLoadingTts={false}
+        error="Search timed out after 20000ms at step: ai_voice_audio"
+        durationSeconds={0}
+        messages={messages}
+        onDismissError={onDismissError}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(onDismissError).toHaveBeenCalledTimes(1);
   });
 });

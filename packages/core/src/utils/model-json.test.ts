@@ -11,6 +11,11 @@ describe("extractJsonObjectLiteral", () => {
     expect(extractJsonObjectLiteral(raw)).toBe('{"searchTerms":["shoes"]}');
   });
 
+  it("extracts JSON from fences without a language tag", () => {
+    const raw = '```\n{"searchTerms":["boots"]}\n```';
+    expect(extractJsonObjectLiteral(raw)).toBe('{"searchTerms":["boots"]}');
+  });
+
   it("extracts the first balanced JSON object", () => {
     const raw = 'prefix {"transcript":"hello","searchTerms":["sko"]} suffix';
     expect(extractJsonObjectLiteral(raw)).toBe('{"transcript":"hello","searchTerms":["sko"]}');
@@ -22,6 +27,25 @@ describe("repairTruncatedJsonObject", () => {
     const raw = '{"transcript":"szukam butów","interpretation":"użytkownik szuka';
     expect(repairTruncatedJsonObject(raw)).toBe(
       '{"transcript":"szukam butów","interpretation":"użytkownik szuka"}',
+    );
+  });
+
+  it("fills a dangling colon before closing the object", () => {
+    expect(repairTruncatedJsonObject('{\n  "transcript":')).toBe(
+      '{\n  "transcript": null}',
+    );
+  });
+
+  it("fills an empty value before an existing closing brace", () => {
+    expect(repairTruncatedJsonObject('{\n  "transcript":}')).toBe(
+      '{\n  "transcript": null}',
+    );
+  });
+
+  it("does not rewrite colons that appear inside string values", () => {
+    const raw = '{"interpretation":"use :} carefully","transcript":';
+    expect(repairTruncatedJsonObject(raw)).toBe(
+      '{"interpretation":"use :} carefully","transcript": null}',
     );
   });
 });
@@ -42,6 +66,14 @@ describe("parseModelJson", () => {
 
     expect(result.transcript).toBe("czerwone buty");
     expect(result.enhancedQuery).toBe("czerwone buty");
+  });
+
+  it("repairs truncation right after a property colon", () => {
+    const result = parseModelJson<{ transcript: string | null }>(
+      '{\n  "transcript":',
+    );
+
+    expect(result.transcript).toBeNull();
   });
 
   it("throws a clear error for invalid JSON", () => {

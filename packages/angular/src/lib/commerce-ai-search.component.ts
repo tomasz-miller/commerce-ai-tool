@@ -81,49 +81,6 @@ type SearchMode = "text" | "image" | "voice" | null;
             (ngModelChange)="onQueryChange($event)"
             (keydown)="onInputKeyDown($event)"
           />
-
-          @if (showSuggestions) {
-            <div
-              id="cat-suggestions-listbox"
-              class="cat-suggestions"
-              role="listbox"
-              [attr.aria-label]="resolvedMessages.suggestionsAriaLabel"
-            >
-              @if (isLoadingSuggestions && suggestions.length === 0 && !suggestionsError) {
-                <div class="cat-suggestions__status">{{ resolvedMessages.loadingSuggestions }}</div>
-              }
-
-              @if (suggestionsError) {
-                <div class="cat-suggestions__status cat-suggestions__status--error" role="alert">
-                  {{ suggestionsError }}
-                </div>
-              }
-
-              @if (
-                !isLoadingSuggestions &&
-                !suggestionsError &&
-                suggestionsReady &&
-                suggestions.length === 0
-              ) {
-                <div class="cat-suggestions__status">{{ resolvedMessages.noSuggestions }}</div>
-              }
-
-              @for (suggestion of suggestions; track $index; let index = $index) {
-                <button
-                  type="button"
-                  class="cat-suggestions__item"
-                  [class.cat-suggestions__item--active]="index === activeSuggestionIndex"
-                  role="option"
-                  [attr.id]="'cat-suggestion-' + index"
-                  [attr.aria-selected]="index === activeSuggestionIndex"
-                  (mousedown)="$event.preventDefault()"
-                  (click)="onSuggestionSelect(suggestion)"
-                >
-                  {{ suggestion }}
-                </button>
-              }
-            </div>
-          }
         </div>
 
         @if (enableVoice) {
@@ -201,6 +158,49 @@ type SearchMode = "text" | "image" | "voice" | null;
               <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
             </svg>
           </button>
+        }
+
+        @if (showSuggestions) {
+          <div
+            id="cat-suggestions-listbox"
+            class="cat-suggestions"
+            role="listbox"
+            [attr.aria-label]="resolvedMessages.suggestionsAriaLabel"
+          >
+            @if (isLoadingSuggestions && suggestions.length === 0 && !suggestionsError) {
+              <div class="cat-suggestions__status">{{ resolvedMessages.loadingSuggestions }}</div>
+            }
+
+            @if (suggestionsError) {
+              <div class="cat-suggestions__status cat-suggestions__status--error" role="alert">
+                {{ suggestionsError }}
+              </div>
+            }
+
+            @if (
+              !isLoadingSuggestions &&
+              !suggestionsError &&
+              suggestionsReady &&
+              suggestions.length === 0
+            ) {
+              <div class="cat-suggestions__status">{{ resolvedMessages.noSuggestions }}</div>
+            }
+
+            @for (suggestion of suggestions; track $index; let index = $index) {
+              <button
+                type="button"
+                class="cat-suggestions__item"
+                [class.cat-suggestions__item--active]="index === activeSuggestionIndex"
+                role="option"
+                [attr.id]="'cat-suggestion-' + index"
+                [attr.aria-selected]="index === activeSuggestionIndex"
+                (mousedown)="$event.preventDefault()"
+                (click)="onSuggestionSelect(suggestion)"
+              >
+                {{ suggestion }}
+              </button>
+            }
+          </div>
         }
       </form>
 
@@ -408,6 +408,7 @@ export class CommerceAiSearchComponent {
     return (
       this.enableAutocomplete &&
       !this.suggestionsDismissed &&
+      !this.showResults &&
       this.query.trim().length >= 2 &&
       (this.isLoadingSuggestions ||
         this.suggestions.length > 0 ||
@@ -462,6 +463,11 @@ export class CommerceAiSearchComponent {
     this.clearVoiceAudio();
 
     if (this.enableAutocomplete) {
+      // Hide previous results so autocomplete can show while typing after a search.
+      this.results = [];
+      this.error = null;
+      this.isLoading = false;
+      this.hasSearched = false;
       this.isLoadingSuggestions = true;
       this.suggestionsTimer = setTimeout(() => this.fetchSuggestions(trimmed), 200);
       return;

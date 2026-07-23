@@ -162,11 +162,16 @@ export function useVoiceSearch(options: UseVoiceSearchOptions) {
     }
   }, [isRecording, startRecording, stopRecording]);
 
+  const clearError = useCallback(() => {
+    setError(null);
+  }, []);
+
   return {
     isRecording,
     isProcessing,
     isLoadingTts,
     error,
+    clearError,
     audioSummary,
     clearAudioSummary,
     replayAudioSummary,

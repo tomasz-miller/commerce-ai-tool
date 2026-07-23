@@ -54,4 +54,55 @@ describe("CommerceAiSearchComponent", () => {
     );
     expect(fixture.componentInstance.suggestions).toEqual(["Red Shoes"]);
   });
+
+  it("hides suggestions when search results are visible", async () => {
+    await TestBed.configureTestingModule({
+      imports: [CommerceAiSearchComponent],
+      providers: [{ provide: CommerceAiApiService, useValue: { suggest: vi.fn(), search: vi.fn() } }],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(CommerceAiSearchComponent);
+    fixture.componentInstance.enableAutocomplete = true;
+    fixture.componentInstance.query = "glass";
+    fixture.componentInstance.suggestionsReady = true;
+    fixture.componentInstance.suggestions = ["Wine Glass"];
+    fixture.componentInstance.hasSearched = true;
+    fixture.componentInstance.results = [
+      {
+        id: "1",
+        name: "Chianti Wine Glass",
+        slug: "chianti-wine-glass",
+      },
+    ];
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.showResults).toBe(true);
+    expect(fixture.componentInstance.showSuggestions).toBe(false);
+  });
+
+  it("clears results when typing so suggestions can show after a search", async () => {
+    const suggest = vi.fn().mockResolvedValue({ suggestions: ["Wine Glass"] });
+    await TestBed.configureTestingModule({
+      imports: [CommerceAiSearchComponent],
+      providers: [{ provide: CommerceAiApiService, useValue: { suggest, search: vi.fn() } }],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(CommerceAiSearchComponent);
+    fixture.componentInstance.enableAutocomplete = true;
+    fixture.componentInstance.query = "glass";
+    fixture.componentInstance.hasSearched = true;
+    fixture.componentInstance.results = [
+      {
+        id: "1",
+        name: "Chianti Wine Glass",
+        slug: "chianti-wine-glass",
+      },
+    ];
+    fixture.detectChanges();
+
+    fixture.componentInstance.onQueryChange("wi");
+    expect(fixture.componentInstance.results).toEqual([]);
+    expect(fixture.componentInstance.hasSearched).toBe(false);
+    expect(fixture.componentInstance.isLoadingSuggestions).toBe(true);
+  });
 });

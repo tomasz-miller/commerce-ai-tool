@@ -68,10 +68,10 @@ describe("createSearchOrchestrator.suggestByText", () => {
     expect(first).toEqual({ suggestions: ["Red Shoes", "Running Shoes"] });
     expect(second).toEqual(first);
     expect(ct.suggestSearchTerms).toHaveBeenCalledTimes(1);
-    expect(ct.suggestSearchTerms).toHaveBeenCalledWith("red", "en", 8);
+    expect(ct.suggestSearchTerms).toHaveBeenCalledWith("red", ["en"], 8);
   });
 
-  it("uses query locale for suggestions when it differs from catalog locale", async () => {
+  it("uses catalog locale for suggestions when query locale differs", async () => {
     const ct = createMockCommercetoolsClient();
     const orchestrator = createSearchOrchestrator({
       config: baseConfig,
@@ -79,12 +79,12 @@ describe("createSearchOrchestrator.suggestByText", () => {
     });
 
     await orchestrator.suggestByText({
-      query: "red",
-      catalogLocale: "no",
-      queryLocale: "en",
+      query: "glass",
+      catalogLocale: "en",
+      queryLocale: "pl",
     });
 
-    expect(ct.suggestSearchTerms).toHaveBeenCalledWith("red", "en", 8);
+    expect(ct.suggestSearchTerms).toHaveBeenCalledWith("glass", ["en", "pl"], 8);
   });
 
   it("clamps suggestion limits to a safe range", async () => {
@@ -96,7 +96,128 @@ describe("createSearchOrchestrator.suggestByText", () => {
 
     await orchestrator.suggestByText({ query: "red", limit: 0 });
 
-    expect(ct.suggestSearchTerms).toHaveBeenCalledWith("red", "en", 1);
+    expect(ct.suggestSearchTerms).toHaveBeenCalledWith("red", ["en"], 1);
+  });
+
+  it("falls back to AI when CT is empty and locales differ", async () => {
+    const ct = createMockCommercetoolsClient({
+      suggestSearchTerms: vi.fn().mockResolvedValue([]),
+    });
+    const ai = {
+      interpretTextQuery: vi.fn(),
+      interpretRefineQuery: vi.fn(),
+      interpretImageQuery: vi.fn(),
+      interpretVoiceAudio: vi.fn(),
+      enhanceVoiceTranscript: vi.fn(),
+      suggestSearchTerms: vi.fn().mockResolvedValue(["wooden table", "wood table"]),
+      summarizeVoiceResults: vi.fn(),
+    };
+    const orchestrator = createSearchOrchestrator({
+      config: baseConfig,
+      commercetoolsClient: ct,
+      aiProvider: ai as never,
+    });
+
+    const result = await orchestrator.suggestByText({
+      query: "szukam stołu",
+      queryLocale: "pl",
+      catalogLocale: "en",
+    });
+
+    expect(ct.suggestSearchTerms).toHaveBeenCalledOnce();
+    expect(ai.suggestSearchTerms).toHaveBeenCalledWith(
+      "szukam stołu",
+      { queryLocale: "pl", catalogLocale: "en" },
+      8,
+    );
+    expect(result).toEqual({
+      suggestions: ["wooden table", "wood table"],
+      aiFallbackUsed: true,
+    });
+  });
+
+  it("skips AI fallback for short same-locale tokens when CT is empty", async () => {
+    const ct = createMockCommercetoolsClient({
+      suggestSearchTerms: vi.fn().mockResolvedValue([]),
+    });
+    const ai = {
+      interpretTextQuery: vi.fn(),
+      interpretRefineQuery: vi.fn(),
+      interpretImageQuery: vi.fn(),
+      interpretVoiceAudio: vi.fn(),
+      enhanceVoiceTranscript: vi.fn(),
+      suggestSearchTerms: vi.fn(),
+      summarizeVoiceResults: vi.fn(),
+    };
+    const orchestrator = createSearchOrchestrator({
+      config: baseConfig,
+      commercetoolsClient: ct,
+      aiProvider: ai as never,
+    });
+
+    const result = await orchestrator.suggestByText({
+      query: "glas",
+      queryLocale: "en",
+      catalogLocale: "en",
+    });
+
+    expect(result).toEqual({ suggestions: [] });
+    expect(ai.suggestSearchTerms).not.toHaveBeenCalled();
+  });
+
+  it("returns empty suggestions when AI fallback fails", async () => {
+    const ct = createMockCommercetoolsClient({
+      suggestSearchTerms: vi.fn().mockResolvedValue([]),
+    });
+    const ai = {
+      interpretTextQuery: vi.fn(),
+      interpretRefineQuery: vi.fn(),
+      interpretImageQuery: vi.fn(),
+      interpretVoiceAudio: vi.fn(),
+      enhanceVoiceTranscript: vi.fn(),
+      suggestSearchTerms: vi.fn().mockRejectedValue(new Error("AI down")),
+      summarizeVoiceResults: vi.fn(),
+    };
+    const orchestrator = createSearchOrchestrator({
+      config: baseConfig,
+      commercetoolsClient: ct,
+      aiProvider: ai as never,
+    });
+
+    const result = await orchestrator.suggestByText({
+      query: "drewniany stol",
+      queryLocale: "pl",
+      catalogLocale: "en-GB",
+    });
+
+    expect(result).toEqual({ suggestions: [], aiFallbackUsed: true });
+  });
+
+  it("does not call AI when CT already returns suggestions", async () => {
+    const ct = createMockCommercetoolsClient();
+    const ai = {
+      interpretTextQuery: vi.fn(),
+      interpretRefineQuery: vi.fn(),
+      interpretImageQuery: vi.fn(),
+      interpretVoiceAudio: vi.fn(),
+      enhanceVoiceTranscript: vi.fn(),
+      suggestSearchTerms: vi.fn(),
+      summarizeVoiceResults: vi.fn(),
+    };
+    const orchestrator = createSearchOrchestrator({
+      config: baseConfig,
+      commercetoolsClient: ct,
+      aiProvider: ai as never,
+    });
+
+    const result = await orchestrator.suggestByText({
+      query: "glass",
+      queryLocale: "pl",
+      catalogLocale: "en",
+    });
+
+    expect(result.suggestions).toEqual(["Red Shoes", "Running Shoes"]);
+    expect(ai.suggestSearchTerms).not.toHaveBeenCalled();
   });
 });
 
@@ -113,6 +234,7 @@ describe("createSearchOrchestrator.searchByText facets", () => {
       interpretImageQuery: vi.fn(),
       interpretVoiceAudio: vi.fn(),
       enhanceVoiceTranscript: vi.fn(),
+      suggestSearchTerms: vi.fn(),
       summarizeForTts: vi.fn(),
     };
   }
@@ -178,5 +300,39 @@ describe("createSearchOrchestrator.searchByText facets", () => {
     await orchestrator.searchByText({ query: "glasses", includeFacets: true });
 
     expect(searchProducts).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("createSearchOrchestrator with Langfuse disabled", () => {
+  it("returns search results without requiring OTel setup", async () => {
+    const ct = createMockCommercetoolsClient({
+      searchProducts: vi.fn().mockResolvedValue({
+        productIds: ["p1"],
+        total: 1,
+        projections: [{ id: "p1", name: "Shoe" }],
+      }),
+    });
+    const ai = {
+      interpretTextQuery: vi.fn().mockResolvedValue({
+        searchTerms: ["shoe"],
+        interpretation: "shoe",
+      }),
+      interpretRefineQuery: vi.fn(),
+      interpretImageQuery: vi.fn(),
+      interpretVoiceAudio: vi.fn(),
+      enhanceVoiceTranscript: vi.fn(),
+      summarizeVoiceResults: vi.fn(),
+    };
+    const orchestrator = createSearchOrchestrator({
+      config: baseConfig,
+      commercetoolsClient: ct,
+      aiProvider: ai as never,
+    });
+
+    const result = await orchestrator.searchByText({ query: "shoe" });
+    expect(result.products).toEqual([{ id: "p1", name: "Shoe" }]);
+    expect(result.meta.total).toBe(1);
+    expect(result.meta.traceId).toBeUndefined();
+    expect(ai.interpretTextQuery).toHaveBeenCalledOnce();
   });
 });

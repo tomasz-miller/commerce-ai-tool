@@ -67,4 +67,49 @@ describe("useCommerceAISearch autocomplete", () => {
       expect(result.current.results).toEqual([{ id: "p1", name: "Red Shoes" }]);
     });
   });
+
+  it("clears previous results when typing so suggestions can show again", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          products: [{ id: "p1", name: "Glass" }],
+          meta: { total: 1 },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ suggestions: ["Wine Glass"] }),
+      });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() =>
+      useCommerceAISearch({
+        apiBaseUrl: "/api/commerce-ai",
+        enableAutocomplete: true,
+      }),
+    );
+
+    await act(async () => {
+      await result.current.search("glass");
+    });
+
+    await waitFor(() => {
+      expect(result.current.results).toHaveLength(1);
+      expect(result.current.hasSearched).toBe(true);
+    });
+
+    act(() => {
+      result.current.setQuery("wi");
+    });
+
+    expect(result.current.results).toEqual([]);
+    expect(result.current.hasSearched).toBe(false);
+
+    await waitFor(() => {
+      expect(result.current.suggestions).toEqual(["Wine Glass"]);
+    });
+  });
 });

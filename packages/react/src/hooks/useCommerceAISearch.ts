@@ -463,6 +463,11 @@ export function useCommerceAISearch(
       }
 
       if (enableAutocomplete) {
+        // Hide previous results so autocomplete can show while typing after a search.
+        setResults([]);
+        setError(null);
+        setIsLoading(false);
+        setHasSearched(false);
         setIsLoadingSuggestions(true);
         setSuggestionsError(null);
         suggestionsDebounceRef.current = setTimeout(() => {
