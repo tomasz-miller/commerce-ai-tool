@@ -130,7 +130,10 @@ describe("createSearchOrchestrator.suggestByText", () => {
       { queryLocale: "pl", catalogLocale: "en" },
       8,
     );
-    expect(result).toEqual({ suggestions: ["wooden table", "wood table"] });
+    expect(result).toEqual({
+      suggestions: ["wooden table", "wood table"],
+      aiFallbackUsed: true,
+    });
   });
 
   it("skips AI fallback for short same-locale tokens when CT is empty", async () => {
@@ -187,7 +190,7 @@ describe("createSearchOrchestrator.suggestByText", () => {
       catalogLocale: "en-GB",
     });
 
-    expect(result).toEqual({ suggestions: [] });
+    expect(result).toEqual({ suggestions: [], aiFallbackUsed: true });
   });
 
   it("does not call AI when CT already returns suggestions", async () => {

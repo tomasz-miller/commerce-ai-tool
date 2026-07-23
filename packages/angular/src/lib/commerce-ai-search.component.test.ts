@@ -79,4 +79,30 @@ describe("CommerceAiSearchComponent", () => {
     expect(fixture.componentInstance.showResults).toBe(true);
     expect(fixture.componentInstance.showSuggestions).toBe(false);
   });
+
+  it("clears results when typing so suggestions can show after a search", async () => {
+    const suggest = vi.fn().mockResolvedValue({ suggestions: ["Wine Glass"] });
+    await TestBed.configureTestingModule({
+      imports: [CommerceAiSearchComponent],
+      providers: [{ provide: CommerceAiApiService, useValue: { suggest, search: vi.fn() } }],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(CommerceAiSearchComponent);
+    fixture.componentInstance.enableAutocomplete = true;
+    fixture.componentInstance.query = "glass";
+    fixture.componentInstance.hasSearched = true;
+    fixture.componentInstance.results = [
+      {
+        id: "1",
+        name: "Chianti Wine Glass",
+        slug: "chianti-wine-glass",
+      },
+    ];
+    fixture.detectChanges();
+
+    fixture.componentInstance.onQueryChange("wi");
+    expect(fixture.componentInstance.results).toEqual([]);
+    expect(fixture.componentInstance.hasSearched).toBe(false);
+    expect(fixture.componentInstance.isLoadingSuggestions).toBe(true);
+  });
 });

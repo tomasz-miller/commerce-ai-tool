@@ -463,6 +463,11 @@ export class CommerceAiSearchComponent {
     this.clearVoiceAudio();
 
     if (this.enableAutocomplete) {
+      // Hide previous results so autocomplete can show while typing after a search.
+      this.results = [];
+      this.error = null;
+      this.isLoading = false;
+      this.hasSearched = false;
       this.isLoadingSuggestions = true;
       this.suggestionsTimer = setTimeout(() => this.fetchSuggestions(trimmed), 200);
       return;

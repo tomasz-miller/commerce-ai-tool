@@ -1,17 +1,19 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   flushLangfuse,
+  isLangfuseEnabled,
   registerLangfuseFlush,
   withOptionalRequestSpan,
   withRequestSpan,
 } from "./langfuse.js";
-import { executeSearch, executeTts, ValidationError } from "../route-actions.js";
+import { executeSearch, executeSearchSuggestions, executeTts, ValidationError } from "../route-actions.js";
 import type { CommerceAIServer } from "../server.js";
 
 describe("langfuse server helpers", () => {
   afterEach(() => {
     delete process.env.LANGFUSE_PUBLIC_KEY;
     delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_TRACE_SUGGESTIONS;
     registerLangfuseFlush(null);
   });
 
@@ -47,9 +49,23 @@ describe("langfuse server helpers", () => {
     );
     expect(result).toEqual({ suggestions: ["glass"] });
   });
+
+  it("isLangfuseEnabled requires both keys", () => {
+    expect(isLangfuseEnabled()).toBe(false);
+    process.env.LANGFUSE_PUBLIC_KEY = "pk";
+    process.env.LANGFUSE_SECRET_KEY = "sk";
+    expect(isLangfuseEnabled()).toBe(true);
+  });
 });
 
 describe("route actions with tracing no-op", () => {
+  afterEach(() => {
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_TRACE_SUGGESTIONS;
+    registerLangfuseFlush(null);
+  });
+
   it("executeSearch still returns orchestrator results", async () => {
     const server = {
       orchestrator: {
@@ -67,6 +83,51 @@ describe("route actions with tracing no-op", () => {
       products: [{ id: "1", name: "Shoe" }],
       meta: { total: 1 },
     });
+  });
+
+  it("executeSearchSuggestions flushes Langfuse when AI fallback ran without a request span", async () => {
+    process.env.LANGFUSE_PUBLIC_KEY = "pk";
+    process.env.LANGFUSE_SECRET_KEY = "sk";
+    const flush = vi.fn().mockResolvedValue(undefined);
+    registerLangfuseFlush(flush);
+
+    const server = {
+      orchestrator: {
+        suggestByText: vi.fn().mockResolvedValue({
+          suggestions: ["wooden table"],
+          aiFallbackUsed: true,
+        }),
+      },
+      transcribeAudio: vi.fn(),
+      synthesizeSpeech: vi.fn(),
+    } as unknown as CommerceAIServer;
+
+    const result = await executeSearchSuggestions(server, { query: "szukam stolu" });
+    expect(result).toEqual({
+      suggestions: ["wooden table"],
+      aiFallbackUsed: true,
+    });
+    expect(flush).toHaveBeenCalledOnce();
+  });
+
+  it("executeSearchSuggestions does not flush for CT-only suggestions", async () => {
+    process.env.LANGFUSE_PUBLIC_KEY = "pk";
+    process.env.LANGFUSE_SECRET_KEY = "sk";
+    const flush = vi.fn().mockResolvedValue(undefined);
+    registerLangfuseFlush(flush);
+
+    const server = {
+      orchestrator: {
+        suggestByText: vi.fn().mockResolvedValue({
+          suggestions: ["glass"],
+        }),
+      },
+      transcribeAudio: vi.fn(),
+      synthesizeSpeech: vi.fn(),
+    } as unknown as CommerceAIServer;
+
+    await executeSearchSuggestions(server, { query: "gl" });
+    expect(flush).not.toHaveBeenCalled();
   });
 
   it("executeTts still synthesizes speech", async () => {

@@ -145,6 +145,11 @@ export interface SuggestionsRequest extends SearchLocaleOptions {
 
 export interface SuggestionsResult {
   suggestions: string[];
+  /**
+   * True when this request invoked AI `suggestSearchTerms` (not a cache hit).
+   * Used by the server to flush Langfuse on serverless hosts.
+   */
+  aiFallbackUsed?: boolean;
 }
 
 export interface TextSearchRequest {

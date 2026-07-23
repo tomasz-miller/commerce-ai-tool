@@ -596,7 +596,8 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
       )}${aiEligible ? "|ai" : ""}`;
       const cached = suggestionCache?.get(cacheKey);
       if (cached) {
-        return cached;
+        // Cache hits never re-run AI; omit aiFallbackUsed so hosts skip Langfuse flush.
+        return { suggestions: cached.suggestions };
       }
 
       logSearchTrace("input", {
@@ -614,7 +615,9 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
         "ct_suggest",
       );
 
+      let aiFallbackUsed = false;
       if (suggestions.length === 0 && aiEligible) {
+        aiFallbackUsed = true;
         try {
           suggestions = await withTimeout(
             ai.suggestSearchTerms(trimmed, locales, suggestLimit),
@@ -629,10 +632,12 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
         }
       }
 
+      const normalized = normalizeSuggestionList(suggestions, suggestLimit);
       const result: SuggestionsResult = {
-        suggestions: normalizeSuggestionList(suggestions, suggestLimit),
+        suggestions: normalized,
+        ...(aiFallbackUsed ? { aiFallbackUsed: true } : {}),
       };
-      suggestionCache?.set(cacheKey, result);
+      suggestionCache?.set(cacheKey, { suggestions: normalized });
       return result;
     },
   };

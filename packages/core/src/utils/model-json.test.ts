@@ -41,6 +41,13 @@ describe("repairTruncatedJsonObject", () => {
       '{\n  "transcript": null}',
     );
   });
+
+  it("does not rewrite colons that appear inside string values", () => {
+    const raw = '{"interpretation":"use :} carefully","transcript":';
+    expect(repairTruncatedJsonObject(raw)).toBe(
+      '{"interpretation":"use :} carefully","transcript": null}',
+    );
+  });
 });
 
 describe("parseModelJson", () => {

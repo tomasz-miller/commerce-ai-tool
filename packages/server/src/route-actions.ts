@@ -8,7 +8,7 @@ import {
   clampSuggestionsLimit,
   normalizeSuggestionsPrefix,
 } from "@commerce-ai-tool/core";
-import { redactBinaryInput, withOptionalRequestSpan, withRequestSpan, shouldTraceSuggestions } from "./observability/langfuse.js";
+import { redactBinaryInput, withOptionalRequestSpan, withRequestSpan, shouldTraceSuggestions, flushLangfuse, isLangfuseEnabled } from "./observability/langfuse.js";
 import type { CommerceAIServer } from "./server.js";
 import { logServerError, logServerWarning } from "./utils/log-error.js";
 import { parseSearchLocaleOptions } from "./utils/locale.js";
@@ -152,12 +152,21 @@ export async function executeSearchSuggestions(
         catalogLocale: localeOptions.catalogLocale ?? "",
       },
     },
-    () =>
-      server.orchestrator.suggestByText({
+    async () => {
+      const result = await server.orchestrator.suggestByText({
         query: normalizedQuery,
         ...localeOptions,
         limit: clampSuggestionsLimit(body.limit),
-      }),
+      });
+
+      // AI fallback emits generations even when the Suggest request span is skipped;
+      // flush so serverless isolates do not drop them.
+      if (!shouldTraceSuggestions() && result.aiFallbackUsed && isLangfuseEnabled()) {
+        await flushLangfuse();
+      }
+
+      return result;
+    },
   );
 }
 

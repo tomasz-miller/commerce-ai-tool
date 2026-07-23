@@ -79,6 +79,63 @@ export function extractJsonObjectLiteral(raw: string): string {
   return candidate.slice(start);
 }
 
+/**
+ * Insert `null` after property colons that have no value yet (`:`, `:}`, `:]` , `:,`).
+ * Only mutates structure outside JSON strings so values like `"a:}"` stay intact.
+ */
+function fillDanglingColonsOutsideStrings(json: string): string {
+  let result = "";
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < json.length; i++) {
+    const char = json[i]!;
+
+    if (escaped) {
+      result += char;
+      escaped = false;
+      continue;
+    }
+
+    if (char === "\\" && inString) {
+      result += char;
+      escaped = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      result += char;
+      continue;
+    }
+
+    if (inString || char !== ":") {
+      result += char;
+      continue;
+    }
+
+    result += ":";
+    let j = i + 1;
+    while (j < json.length) {
+      const space = json[j]!;
+      if (space !== " " && space !== "\t" && space !== "\r" && space !== "\n") {
+        break;
+      }
+      result += space;
+      j += 1;
+    }
+
+    const next = j < json.length ? json[j] : undefined;
+    if (next === undefined || next === "," || next === "}" || next === "]") {
+      result += result.endsWith(":") ? " null" : "null";
+    }
+
+    i = j - 1;
+  }
+
+  return result;
+}
+
 export function repairTruncatedJsonObject(json: string): string {
   let repaired = json.trim();
   if (!repaired) {
@@ -111,10 +168,7 @@ export function repairTruncatedJsonObject(json: string): string {
   }
 
   // Incomplete values from truncated model output, e.g. {"transcript": or {"transcript":}
-  repaired = repaired.replace(/:\s*,/g, ": null,");
-  repaired = repaired.replace(/:\s*([}\]])/g, ": null$1");
-  repaired = repaired.replace(/:\s*$/, ": null");
-
+  repaired = fillDanglingColonsOutsideStrings(repaired);
   repaired = repaired.replace(/,\s*$/, "");
 
   let openBraces = 0;
