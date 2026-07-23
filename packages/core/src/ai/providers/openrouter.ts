@@ -8,12 +8,15 @@ import {
   buildTextQueryUserMessage,
   buildVoiceAudioUserMessage,
   buildVoiceEnhanceUserMessage,
+  buildSuggestSearchTermsUserMessage,
   IMAGE_QUERY_SYSTEM_PROMPT,
   TEXT_QUERY_SYSTEM_PROMPT,
   VOICE_AUDIO_INTERPRET_SYSTEM_PROMPT,
   VOICE_ENHANCE_SYSTEM_PROMPT,
+  SUGGEST_SEARCH_TERMS_SYSTEM_PROMPT,
   parseInterpretedQuery,
   parseVoiceAudioInterpretation,
+  parseSuggestSearchTerms,
 } from "../../prompts/index.js";
 import { mimeTypeToAudioFormat, uint8ArrayToBase64 } from "../../utils/audio.js";
 import {
@@ -127,7 +130,9 @@ export class OpenRouterProvider implements AIProvider {
         },
       ],
       response_format: { type: "json_object" },
-      max_tokens: 1024,
+      // Gemini 2.5+ reasoning can consume most of a low max_tokens budget and truncate JSON.
+      max_tokens: 4096,
+      reasoning: { effort: "low" },
     });
 
     const content = this.extractContent(response);
@@ -147,6 +152,22 @@ export class OpenRouterProvider implements AIProvider {
     });
 
     return this.extractContent(response).trim();
+  }
+
+  async suggestSearchTerms(query: string, locales: SearchLocaleContext, limit = 8) {
+    const response = await this.client.chat.send({
+      model: this.model,
+      messages: [
+        { role: "system", content: SUGGEST_SEARCH_TERMS_SYSTEM_PROMPT },
+        {
+          role: "user",
+          content: buildSuggestSearchTermsUserMessage(query, locales, limit),
+        },
+      ],
+      responseFormat: { type: "json_object" },
+    });
+
+    return parseSuggestSearchTerms(this.extractContent(response), limit);
   }
 
   async summarizeVoiceResults(

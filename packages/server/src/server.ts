@@ -1,6 +1,11 @@
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import type { CommerceAIConfig, VoiceMode } from "@commerce-ai-tool/core";
-import { createSearchOrchestrator } from "@commerce-ai-tool/core";
+import {
+  createSearchOrchestrator,
+  isLangfuseEnabled,
+  redactBinaryInput,
+  withPipelineSpan,
+} from "@commerce-ai-tool/core";
 import type { SearchOrchestrator } from "@commerce-ai-tool/core";
 
 export interface CommerceAIServer {
@@ -23,7 +28,10 @@ export function createCommerceAIServer(options: CommerceAIServerOptions): Commer
     config,
     transcribeAudio:
       voiceMode === "elevenlabs-stt" && elevenlabs
-        ? async (audio, mimeType) => transcribeWithElevenLabs(elevenlabs, audio, mimeType, config)
+        ? async (audio, mimeType) =>
+            withElevenLabsSpan("elevenlabs.stt", { audio: redactBinaryInput(mimeType, audio) }, () =>
+              transcribeWithElevenLabs(elevenlabs, audio, mimeType, config),
+            )
         : undefined,
   });
 
@@ -33,28 +41,57 @@ export function createCommerceAIServer(options: CommerceAIServerOptions): Commer
       if (!elevenlabs) {
         throw new Error("ElevenLabs is not configured");
       }
-      return transcribeWithElevenLabs(elevenlabs, audio, mimeType, config);
+      return withElevenLabsSpan(
+        "elevenlabs.stt",
+        { audio: redactBinaryInput(mimeType, audio) },
+        () => transcribeWithElevenLabs(elevenlabs, audio, mimeType, config),
+      );
     },
     async synthesizeSpeech(text) {
       if (!elevenlabs) {
         throw new Error("ElevenLabs is not configured");
       }
 
-      const voiceId = config.elevenlabs?.ttsVoiceId ?? "JBFqnCBsd6RMkjVDRZzb";
-      const audio = await elevenlabs.textToSpeech.convert(voiceId, {
-        text,
-        modelId: config.elevenlabs?.ttsModel ?? "eleven_multilingual_v2",
-        outputFormat: "mp3_44100_128",
+      return withElevenLabsSpan("elevenlabs.tts", { input: { textLength: text.length } }, async () => {
+        const voiceId = config.elevenlabs?.ttsVoiceId ?? "JBFqnCBsd6RMkjVDRZzb";
+        const audio = await elevenlabs.textToSpeech.convert(voiceId, {
+          text,
+          modelId: config.elevenlabs?.ttsModel ?? "eleven_multilingual_v2",
+          outputFormat: "mp3_44100_128",
+        });
+
+        const chunks: Uint8Array[] = [];
+        for await (const chunk of audio as AsyncIterable<Uint8Array>) {
+          chunks.push(chunk);
+        }
+
+        return Buffer.concat(chunks);
       });
-
-      const chunks: Uint8Array[] = [];
-      for await (const chunk of audio as AsyncIterable<Uint8Array>) {
-        chunks.push(chunk);
-      }
-
-      return Buffer.concat(chunks);
     },
   };
+}
+
+async function withElevenLabsSpan<T>(
+  name: string,
+  attributes: { input?: unknown; audio?: unknown },
+  fn: () => Promise<T>,
+): Promise<T> {
+  return withPipelineSpan(
+    name,
+    {
+      input: attributes.input ?? attributes.audio,
+      metadata: { vendor: "elevenlabs" },
+    },
+    async (span) => {
+      const result = await fn();
+      if (typeof result === "string") {
+        span?.update({ output: { transcriptLength: result.length } });
+      } else if (Buffer.isBuffer(result)) {
+        span?.update({ output: { byteLength: result.byteLength } });
+      }
+      return result;
+    },
+  );
 }
 
 function createElevenLabsClient(config: import("@commerce-ai-tool/core").ElevenLabsConfig): ElevenLabsClient {
@@ -175,6 +212,9 @@ export function loadConfigFromEnv(): CommerceAIConfig {
               : undefined,
           }
         : undefined,
+    langfuse: {
+      enabled: isLangfuseEnabled(),
+    },
   };
 }
 

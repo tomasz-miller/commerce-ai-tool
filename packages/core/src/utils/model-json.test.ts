@@ -24,6 +24,18 @@ describe("repairTruncatedJsonObject", () => {
       '{"transcript":"szukam butów","interpretation":"użytkownik szuka"}',
     );
   });
+
+  it("fills a dangling colon before closing the object", () => {
+    expect(repairTruncatedJsonObject('{\n  "transcript":')).toBe(
+      '{\n  "transcript": null}',
+    );
+  });
+
+  it("fills an empty value before an existing closing brace", () => {
+    expect(repairTruncatedJsonObject('{\n  "transcript":}')).toBe(
+      '{\n  "transcript": null}',
+    );
+  });
 });
 
 describe("parseModelJson", () => {
@@ -42,6 +54,14 @@ describe("parseModelJson", () => {
 
     expect(result.transcript).toBe("czerwone buty");
     expect(result.enhancedQuery).toBe("czerwone buty");
+  });
+
+  it("repairs truncation right after a property colon", () => {
+    const result = parseModelJson<{ transcript: string | null }>(
+      '{\n  "transcript":',
+    );
+
+    expect(result.transcript).toBeNull();
   });
 
   it("throws a clear error for invalid JSON", () => {

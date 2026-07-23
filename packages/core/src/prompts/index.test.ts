@@ -5,6 +5,7 @@ import {
   buildTextQueryUserMessage,
   formatLocaleContext,
   parseInterpretedQuery,
+  parseSuggestSearchTerms,
   parseVoiceAudioInterpretation,
 } from "./index.js";
 
@@ -22,6 +23,23 @@ describe("formatLocaleContext", () => {
     expect(
       formatLocaleContext({ queryLocale: "pl", catalogLocale: "no" }),
     ).toContain("CRITICAL: searchTerms must use only the catalog language (no)");
+  });
+});
+
+describe("parseSuggestSearchTerms", () => {
+  it("parses and clamps suggestion phrases", () => {
+    const result = parseSuggestSearchTerms(
+      JSON.stringify({
+        suggestions: ["wooden table", " Wooden Table ", "wood table", ""],
+      }),
+      2,
+    );
+
+    expect(result).toEqual(["wooden table", "wood table"]);
+  });
+
+  it("throws when suggestions array is missing", () => {
+    expect(() => parseSuggestSearchTerms("{}", 8)).toThrow("missing suggestions array");
   });
 });
 

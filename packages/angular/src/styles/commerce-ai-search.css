@@ -43,6 +43,7 @@
 }
 
 .cat-search-bar {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -76,7 +77,6 @@
 }
 
 .cat-search-input-wrap {
-  position: relative;
   flex: 1;
   min-width: 0;
 }

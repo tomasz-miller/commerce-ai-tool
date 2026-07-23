@@ -15,6 +15,12 @@ import { FacetSchemaStore } from "../commercetools/product-types.js";
 import { resolveSearchLocales } from "../locale/resolve.js";
 import { hasSearchableContent } from "../commercetools/query-builder.js";
 import type { ProductSearchBuildInput } from "../commercetools/query-builder.js";
+import {
+  withPipelineSpan,
+  withPropagatedAttributes,
+  withTraceIdMeta,
+  wrapAIProvider,
+} from "../observability/index.js";
 import { buildTtsSummaryFallback } from "./voice-tts.js";
 import { logSearchTrace } from "../utils/dev-trace.js";
 import { hashUint8Array } from "../utils/hash.js";
@@ -22,6 +28,7 @@ import { createSearchTimer, shouldIncludeSearchTimings } from "../utils/search-t
 import { withTimeout } from "../utils/with-timeout.js";
 import { uint8ArrayToBase64 } from "../utils/audio.js";
 import type {
+  AIConfig,
   CommerceAIConfig,
   ImageSearchResult,
   InterpretedSearchQuery,
@@ -38,8 +45,10 @@ import type {
 } from "../types/index.js";
 import {
   clampSuggestionsLimit,
+  normalizeSuggestionList,
   normalizeSuggestionsPrefix,
-  resolveSuggestLocale,
+  resolveSuggestLocales,
+  shouldUseAiSuggestionFallback,
 } from "./suggestions-input.js";
 
 export interface SearchOrchestrator {
@@ -87,7 +96,8 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
     : null;
   const imageResultCache = config.cache ? new SearchCache<ImageSearchResult>(config.cache) : null;
 
-  const ai = deps.aiProvider ?? createAIProvider(config.ai);
+  const rawAi = deps.aiProvider ?? createAIProvider(config.ai);
+  const ai = wrapAIProvider(rawAi, resolveAIProviderTraceMeta(config.ai));
   const ct = deps.commercetoolsClient ?? createCommercetoolsClient(config.commercetools);
   const facetSchemaStore =
     deps.facetSchemaStore ?? new FacetSchemaStore(config.facets?.schemaTtlMs);
@@ -161,7 +171,17 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
     const cached = resultCache?.get(`${interpretedCacheKey}|${offset}`);
     if (cached) {
       timer?.mark("cache_hit");
-      return cached;
+      return withPipelineSpan(
+        "commercetools.search",
+        {
+          metadata: { cacheHit: true },
+          output: { total: cached.meta.total, productCount: cached.products.length },
+        },
+        async (span) => {
+          span?.update({ metadata: { cacheHit: true } });
+          return cached;
+        },
+      );
     }
 
     if (!hasSearchableContent(interpreted)) {
@@ -199,54 +219,71 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
       catalogLocale: locales.catalogLocale,
     });
 
-    const searchResult = await withTimeout(
-      ct.searchProducts(searchInput, { currency, locale: locales.catalogLocale }),
-      timeouts.commercetoolsMs,
-      "ct_search",
-    );
-    timer?.mark("ct_search");
-
-    let products = searchResult.projections;
-    if (!products) {
-      products = await withTimeout(
-        ct.getProductProjections(productIdsFrom(searchResult), locales.catalogLocale, currency),
-        timeouts.commercetoolsMs,
-        "ct_projections",
-      );
-      timer?.mark("ct_projections");
-    }
-
-    const result: SearchResult = {
-      products,
-      meta: {
-        total: searchResult.total,
-        limit: searchLimit,
-        offset,
-        locale: locales.catalogLocale,
-        catalogLocale: locales.catalogLocale,
-        queryLocale: locales.queryLocale,
-        queryInterpretation: interpreted.interpretation,
-        searchTerms: interpreted.searchTerms,
-        appliedFilters: interpreted.filters,
-        sort: interpreted.sort,
-        ...(facetSchema ? { schemaEtag: facetSchema.etag } : {}),
+    return withPipelineSpan(
+      "commercetools.search",
+      {
+        input: {
+          searchTerms: interpreted.searchTerms,
+          catalogLocale: locales.catalogLocale,
+          limit: searchLimit,
+          offset,
+        },
+        metadata: { cacheHit: false },
       },
-      ...(facetSchema
-        ? {
-            facetSchema: facetSchema.attributes,
-            suggestedFacets: filterFacetSuggestions(interpreted.suggestedFacets, facetSchema),
-            facets: normalizeProductSearchFacets(
-              searchResult.facets,
-              facetSchema,
-              interpreted.suggestedFacets,
-              interpreted.filters,
-            ),
-          }
-        : {}),
-    };
+      async (span) => {
+        const searchResult = await withTimeout(
+          ct.searchProducts(searchInput, { currency, locale: locales.catalogLocale }),
+          timeouts.commercetoolsMs,
+          "ct_search",
+        );
+        timer?.mark("ct_search");
 
-    resultCache?.set(`${interpretedCacheKey}|${offset}`, result);
-    return result;
+        let products = searchResult.projections;
+        if (!products) {
+          products = await withTimeout(
+            ct.getProductProjections(productIdsFrom(searchResult), locales.catalogLocale, currency),
+            timeouts.commercetoolsMs,
+            "ct_projections",
+          );
+          timer?.mark("ct_projections");
+        }
+
+        const result: SearchResult = {
+          products,
+          meta: {
+            total: searchResult.total,
+            limit: searchLimit,
+            offset,
+            locale: locales.catalogLocale,
+            catalogLocale: locales.catalogLocale,
+            queryLocale: locales.queryLocale,
+            queryInterpretation: interpreted.interpretation,
+            searchTerms: interpreted.searchTerms,
+            appliedFilters: interpreted.filters,
+            sort: interpreted.sort,
+            ...(facetSchema ? { schemaEtag: facetSchema.etag } : {}),
+          },
+          ...(facetSchema
+            ? {
+                facetSchema: facetSchema.attributes,
+                suggestedFacets: filterFacetSuggestions(interpreted.suggestedFacets, facetSchema),
+                facets: normalizeProductSearchFacets(
+                  searchResult.facets,
+                  facetSchema,
+                  interpreted.suggestedFacets,
+                  interpreted.filters,
+                ),
+              }
+            : {}),
+        };
+
+        span?.update({
+          output: { total: result.meta.total, productCount: result.products.length },
+        });
+        resultCache?.set(`${interpretedCacheKey}|${offset}`, result);
+        return result;
+      },
+    );
   }
 
   async function interpretVoice(
@@ -313,106 +350,128 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
       const searchLimit = request.limit ?? limit;
       const timer = createSearchTimer();
 
-      const includeFacets = Boolean(request.includeFacets || config.facets?.enabled);
-      const cacheKey = buildTextSearchCacheKey(
-        JSON.stringify({
-          query: request.query,
-          searchTerms: request.searchTerms,
-          filters: request.filters,
-          refineQuery: request.refineQuery,
-          suggestedFacets: request.suggestedFacets,
-          includeFacets,
-        }),
-        locales.queryLocale,
-        locales.catalogLocale,
-        searchLimit,
-      );
-      const cached = resultCache?.get(`${cacheKey}|${request.offset ?? 0}`);
-      if (cached) {
-        timer.mark("cache_hit");
-        return withTimings(cached, timer);
-      }
-
-      logSearchTrace("input", {
-        query: request.query,
+      const pipelineMeta = {
         queryLocale: locales.queryLocale,
         catalogLocale: locales.catalogLocale,
+        searchType: "text",
+        projectKey: config.commercetools.projectKey,
+        aiProvider: config.ai.provider,
+        voiceMode,
+      };
+
+      return withPropagatedAttributes(pipelineMeta, async () => {
+            const includeFacets = Boolean(request.includeFacets || config.facets?.enabled);
+            const cacheKey = buildTextSearchCacheKey(
+              JSON.stringify({
+                query: request.query,
+                searchTerms: request.searchTerms,
+                filters: request.filters,
+                refineQuery: request.refineQuery,
+                suggestedFacets: request.suggestedFacets,
+                includeFacets,
+              }),
+              locales.queryLocale,
+              locales.catalogLocale,
+              searchLimit,
+            );
+            const cached = resultCache?.get(`${cacheKey}|${request.offset ?? 0}`);
+            if (cached) {
+              timer.mark("cache_hit");
+              return withTraceIdMeta(withTimings(cached, timer));
+            }
+
+            logSearchTrace("input", {
+              query: request.query,
+              queryLocale: locales.queryLocale,
+              catalogLocale: locales.catalogLocale,
+            });
+
+            let facetSchema: ResolvedFacetSchema | undefined;
+            if (includeFacets) {
+              try {
+                facetSchema = await resolveFacetSchema(locales);
+              } catch (error) {
+                console.warn(
+                  `[commerce-ai-tool/core] Unable to resolve facet schema: ${
+                    error instanceof Error ? error.message : "unknown error"
+                  }`,
+                );
+              }
+            }
+
+            let interpreted: InterpretedSearchQuery;
+            if (request.refineQuery && request.searchTerms) {
+              interpreted = await withTimeout(
+                ai.interpretRefineQuery(
+                  request.refineQuery,
+                  {
+                    searchTerms: request.searchTerms,
+                    filters: request.filters ?? {},
+                    attributeCatalog: facetSchema?.attributes ?? [],
+                  },
+                  locales,
+                ),
+                timeouts.aiTextMs,
+                "ai_refine",
+              );
+              interpreted = {
+                ...interpreted,
+                searchTerms: interpreted.searchTerms.length
+                  ? interpreted.searchTerms
+                  : request.searchTerms,
+                filters: { ...(request.filters ?? {}), ...(interpreted.filters ?? {}) },
+                suggestedFacets: interpreted.suggestedFacets?.length
+                  ? interpreted.suggestedFacets
+                  : request.suggestedFacets,
+              };
+              timer.mark("ai_refine");
+            } else if (request.searchTerms) {
+              interpreted = {
+                searchTerms: request.searchTerms,
+                filters: request.filters,
+                sort: request.sort,
+                interpretation: request.query,
+                suggestedFacets: request.suggestedFacets,
+              };
+            } else {
+              interpreted = await withTimeout(
+                ai.interpretTextQuery(request.query, locales, facetSchema?.attributes),
+                timeouts.aiTextMs,
+                "ai_interpret",
+              );
+              interpreted = {
+                ...interpreted,
+                filters: { ...(interpreted.filters ?? {}), ...(request.filters ?? {}) },
+              };
+              timer.mark("ai_interpret");
+            }
+
+            const result = await executeSearch(
+              interpreted,
+              locales,
+              searchLimit,
+              request.offset ?? 0,
+              timer,
+              facetSchema,
+            );
+            resultCache?.set(`${cacheKey}|${request.offset ?? 0}`, result);
+            return withTraceIdMeta(withTimings(result, timer));
       });
-
-      let facetSchema: ResolvedFacetSchema | undefined;
-      if (includeFacets) {
-        try {
-          facetSchema = await resolveFacetSchema(locales);
-        } catch (error) {
-          console.warn(
-            `[commerce-ai-tool/core] Unable to resolve facet schema: ${
-              error instanceof Error ? error.message : "unknown error"
-            }`,
-          );
-        }
-      }
-
-      let interpreted: InterpretedSearchQuery;
-      if (request.refineQuery && request.searchTerms) {
-        interpreted = await withTimeout(
-          ai.interpretRefineQuery(
-            request.refineQuery,
-            {
-              searchTerms: request.searchTerms,
-              filters: request.filters ?? {},
-              attributeCatalog: facetSchema?.attributes ?? [],
-            },
-            locales,
-          ),
-          timeouts.aiTextMs,
-          "ai_refine",
-        );
-        interpreted = {
-          ...interpreted,
-          searchTerms: interpreted.searchTerms.length ? interpreted.searchTerms : request.searchTerms,
-          filters: { ...(request.filters ?? {}), ...(interpreted.filters ?? {}) },
-          suggestedFacets: interpreted.suggestedFacets?.length
-            ? interpreted.suggestedFacets
-            : request.suggestedFacets,
-        };
-        timer.mark("ai_refine");
-      } else if (request.searchTerms) {
-        interpreted = {
-          searchTerms: request.searchTerms,
-          filters: request.filters,
-          sort: request.sort,
-          interpretation: request.query,
-          suggestedFacets: request.suggestedFacets,
-        };
-      } else {
-        interpreted = await withTimeout(
-          ai.interpretTextQuery(request.query, locales, facetSchema?.attributes),
-          timeouts.aiTextMs,
-          "ai_interpret",
-        );
-        interpreted = {
-          ...interpreted,
-          filters: { ...(interpreted.filters ?? {}), ...(request.filters ?? {}) },
-        };
-        timer.mark("ai_interpret");
-      }
-
-      const result = await executeSearch(
-        interpreted,
-        locales,
-        searchLimit,
-        request.offset ?? 0,
-        timer,
-        facetSchema,
-      );
-      resultCache?.set(`${cacheKey}|${request.offset ?? 0}`, result);
-      return withTimings(result, timer);
     },
 
     async searchByVoice(audio, mimeType, options = {}) {
       const locales = resolveLocales(options);
       const searchLimit = options.limit ?? limit;
       const timer = createSearchTimer();
+
+      const pipelineMeta = {
+        queryLocale: locales.queryLocale,
+        catalogLocale: locales.catalogLocale,
+        searchType: "voice",
+        projectKey: config.commercetools.projectKey,
+        aiProvider: config.ai.provider,
+        voiceMode,
+      };
 
       logSearchTrace("input", {
         type: "voice",
@@ -422,41 +481,59 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
         catalogLocale: locales.catalogLocale,
       });
 
-      const enableTts = options.enableTts !== false;
-      const voiceCacheKey = buildVoiceSearchCacheKey(
-        hashUint8Array(audio),
-        mimeType,
-        voiceMode,
-        locales.queryLocale,
-        locales.catalogLocale,
-        searchLimit,
-        enableTts,
-      );
-      const cachedVoice = voiceResultCache?.get(voiceCacheKey);
-      if (cachedVoice) {
-        timer.mark("cache_hit");
-        return withTimings(cachedVoice, timer);
-      }
+      return withPropagatedAttributes(pipelineMeta, async () => {
+            const enableTts = options.enableTts !== false;
+            const voiceCacheKey = buildVoiceSearchCacheKey(
+              hashUint8Array(audio),
+              mimeType,
+              voiceMode,
+              locales.queryLocale,
+              locales.catalogLocale,
+              searchLimit,
+              enableTts,
+            );
+            const cachedVoice = voiceResultCache?.get(voiceCacheKey);
+            if (cachedVoice) {
+              timer.mark("cache_hit");
+              return withTraceIdMeta(withTimings(cachedVoice, timer));
+            }
 
-      const voiceInterpretation = await interpretVoice(audio, mimeType, locales, timer);
-      const { transcript, enhancedQuery, ...interpreted } = voiceInterpretation;
-      const result = await executeSearch(interpreted, locales, searchLimit, 0, timer);
+            const voiceInterpretation = await interpretVoice(audio, mimeType, locales, timer);
+            const { transcript, enhancedQuery, ...interpreted } = voiceInterpretation;
+            const result = await executeSearch(interpreted, locales, searchLimit, 0, timer);
 
-      const voiceResult: VoiceSearchResult & { ttsText?: string } = {
-        ...result,
-        transcript,
-        enhancedQuery,
-      };
+            const voiceResult: VoiceSearchResult & { ttsText?: string } = {
+              ...result,
+              transcript,
+              enhancedQuery,
+            };
 
-      const withTts = await attachVoiceTts(voiceResult, options, locales, ai, timer, timeouts.aiTextMs);
-      voiceResultCache?.set(voiceCacheKey, withTts);
-      return withTimings(withTts, timer);
+            const withTts = await attachVoiceTts(
+              voiceResult,
+              options,
+              locales,
+              ai,
+              timer,
+              timeouts.aiTextMs,
+            );
+            voiceResultCache?.set(voiceCacheKey, withTts);
+            return withTraceIdMeta(withTimings(withTts, timer));
+      });
     },
 
     async searchByImage(image, mimeType, options = {}) {
       const locales = resolveLocales(options);
       const searchLimit = options.limit ?? limit;
       const timer = createSearchTimer();
+
+      const pipelineMeta = {
+        queryLocale: locales.queryLocale,
+        catalogLocale: locales.catalogLocale,
+        searchType: "image",
+        projectKey: config.commercetools.projectKey,
+        aiProvider: config.ai.provider,
+        voiceMode,
+      };
 
       logSearchTrace("input", {
         type: "image",
@@ -465,34 +542,36 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
         catalogLocale: locales.catalogLocale,
       });
 
-      const imageCacheKey = buildImageSearchCacheKey(
-        hashUint8Array(image),
-        mimeType,
-        locales.queryLocale,
-        locales.catalogLocale,
-        searchLimit,
-      );
-      const cachedImage = imageResultCache?.get(imageCacheKey);
-      if (cachedImage) {
-        timer.mark("cache_hit");
-        return withTimings(cachedImage, timer);
-      }
+      return withPropagatedAttributes(pipelineMeta, async () => {
+            const imageCacheKey = buildImageSearchCacheKey(
+              hashUint8Array(image),
+              mimeType,
+              locales.queryLocale,
+              locales.catalogLocale,
+              searchLimit,
+            );
+            const cachedImage = imageResultCache?.get(imageCacheKey);
+            if (cachedImage) {
+              timer.mark("cache_hit");
+              return withTraceIdMeta(withTimings(cachedImage, timer));
+            }
 
-      const base64 = uint8ArrayToBase64(image);
-      const interpreted = await withTimeout(
-        ai.interpretImageQuery(base64, mimeType, locales),
-        timeouts.aiImageMs,
-        "ai_interpret_image",
-      );
-      timer.mark("ai_interpret_image");
+            const base64 = uint8ArrayToBase64(image);
+            const interpreted = await withTimeout(
+              ai.interpretImageQuery(base64, mimeType, locales),
+              timeouts.aiImageMs,
+              "ai_interpret_image",
+            );
+            timer.mark("ai_interpret_image");
 
-      const result = await executeSearch(interpreted, locales, searchLimit, 0, timer);
-      const imageResult: ImageSearchResult = {
-        ...withTimings(result, timer),
-        interpretation: interpreted.interpretation,
-      };
-      imageResultCache?.set(imageCacheKey, imageResult);
-      return imageResult;
+            const result = await executeSearch(interpreted, locales, searchLimit, 0, timer);
+            const imageResult: ImageSearchResult = {
+              ...withTimings(result, timer),
+              interpretation: interpreted.interpretation,
+            };
+            imageResultCache?.set(imageCacheKey, imageResult);
+            return withTraceIdMeta(imageResult);
+      });
     },
 
     async suggestByText(request) {
@@ -504,8 +583,17 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
         return { suggestions: [] };
       }
 
-      const suggestLocale = resolveSuggestLocale(locales.queryLocale, locales.catalogLocale);
-      const cacheKey = buildSuggestionsCacheKey(trimmed, suggestLocale, suggestLimit);
+      const suggestLocales = resolveSuggestLocales(locales.queryLocale, locales.catalogLocale);
+      const aiEligible = shouldUseAiSuggestionFallback(
+        trimmed,
+        locales.queryLocale,
+        locales.catalogLocale,
+      );
+      const cacheKey = `${buildSuggestionsCacheKey(
+        trimmed,
+        suggestLocales.join(","),
+        suggestLimit,
+      )}${aiEligible ? "|ai" : ""}`;
       const cached = suggestionCache?.get(cacheKey);
       if (cached) {
         return cached;
@@ -516,16 +604,34 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
         query: trimmed,
         queryLocale: locales.queryLocale,
         catalogLocale: locales.catalogLocale,
-        suggestLocale,
+        suggestLocales,
+        aiEligible,
       });
 
-      const suggestions = await withTimeout(
-        ct.suggestSearchTerms(trimmed, suggestLocale, suggestLimit),
+      let suggestions = await withTimeout(
+        ct.suggestSearchTerms(trimmed, suggestLocales, suggestLimit),
         timeouts.commercetoolsSuggestMs,
         "ct_suggest",
       );
 
-      const result: SuggestionsResult = { suggestions };
+      if (suggestions.length === 0 && aiEligible) {
+        try {
+          suggestions = await withTimeout(
+            ai.suggestSearchTerms(trimmed, locales, suggestLimit),
+            timeouts.aiTextMs,
+            "ai_suggest",
+          );
+        } catch (error) {
+          logSearchTrace("ai_suggest_fallback_failed", {
+            message: error instanceof Error ? error.message : "unknown error",
+          });
+          suggestions = [];
+        }
+      }
+
+      const result: SuggestionsResult = {
+        suggestions: normalizeSuggestionList(suggestions, suggestLimit),
+      };
       suggestionCache?.set(cacheKey, result);
       return result;
     },
@@ -542,6 +648,23 @@ function resolveVoiceMode(config: CommerceAIConfig): VoiceMode {
   }
 
   return "elevenlabs-stt";
+}
+
+function resolveAIProviderTraceMeta(ai: AIConfig) {
+  if (ai.provider === "openrouter") {
+    return {
+      provider: ai.provider,
+      textModel: ai.openrouter?.model,
+      visionModel: ai.openrouter?.visionModel ?? ai.openrouter?.model,
+      voiceModel: ai.openrouter?.voiceModel,
+    };
+  }
+
+  return {
+    provider: ai.provider,
+    textModel: ai.bedrock?.modelId,
+    visionModel: ai.bedrock?.visionModelId ?? ai.bedrock?.modelId,
+  };
 }
 
 function productIdsFrom(searchResult: { productIds: string[] }): string[] {

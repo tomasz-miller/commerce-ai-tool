@@ -14,7 +14,7 @@ AI-powered product search plugin for [commercetools](https://commercetools.com) 
 ## Features (v1.0)
 
 - **Text search** — natural language queries interpreted by AI (OpenRouter or AWS Bedrock)
-- **Autocomplete** — optional commercetools Search Term Suggestions while typing (`enableAutocomplete`)
+- **Autocomplete** — optional suggestions while typing (`enableAutocomplete`): commercetools Search Term Suggestions first, with AI catalog-language phrases when Suggest is empty for cross-locale or multi-word queries
 - **Voice search** — ElevenLabs STT with optional TTS result summary
 - **Image search** — vision AI extracts product attributes from photos
 - **Glass UI** — minimalist design with light / dark / auto theme
@@ -82,7 +82,9 @@ Server env vars (see `apps/demo-next/.env.example`):
 - `CAT_CATALOG_LOCALE` — primary catalog language (e.g. `no` for Norwegian shops)
 - `CAT_DEFAULT_LOCALE` — deprecated alias for `CAT_CATALOG_LOCALE`
 - `CAT_STORE_KEY` — reserved for future store-scoped search (not applied until store scope is enabled in core)
-- `CAT_DEBUG=true` — structured dev tracing for search and commercetools calls
+- `CAT_DEBUG=true` — structured console tracing for search and commercetools calls (local/dev)
+- `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` — opt-in [Langfuse](https://langfuse.com) AI observability (both required)
+- `LANGFUSE_BASE_URL` — Langfuse Cloud or self-hosted base URL (default `https://cloud.langfuse.com`)
 - `CAT_CACHE_ENABLED=true` — opt-in in-memory response cache (per server process)
 - `CAT_CACHE_TTL_MS=60000` — cache TTL in milliseconds
 - `CAT_CACHE_MAX_ENTRIES=500` — max cached entries per process
@@ -91,9 +93,33 @@ Server env vars (see `apps/demo-next/.env.example`):
 - `CAT_FACET_INCLUDE=color,size` / `CAT_FACET_EXCLUDE=internalCode` — restrict discovered attributes
 - `CAT_FACET_MAX_ATTRIBUTES=12` — limit the attribute catalog supplied to the AI
 
-Autocomplete uses commercetools Search Term Suggestions and requires Product Projection Search to be activated with indexed `searchKeywords` on products.
+Autocomplete uses commercetools Search Term Suggestions first (indexed `searchKeywords` in `catalogLocale`, plus `queryLocale` when it differs). When Suggest returns nothing for cross-locale or multi-word natural-language input, the server falls back to a lightweight AI call that proposes short **catalog-language** search phrases as suggestions. Set `CAT_CATALOG_LOCALE` to a real project language (for example `en-GB` or `en-US` — not bare `en` unless that locale exists on products).
+
+Same-locale single-token prefixes still rely on catalog `searchKeywords` (seed with `pnpm seed:search-keywords` for demos).
+
+To backfill keywords for a demo catalog from product name/description:
+
+```bash
+# Dry-run (default) — loads apps/demo-next/.env.local when CTP_* is unset
+pnpm seed:search-keywords
+
+# Write keywords (whitespace tokenizer on name + short description phrases)
+pnpm seed:search-keywords -- --apply
+```
+
+Options: `--force` overwrites existing keywords; `--limit N` caps how many products are processed.
 
 Search queries are built in `@commerce-ai-tool/core` (`commercetools/query-builder.ts`): multi-field full-text (`name`, `searchKeywords`, `description`), optional fuzzy name matching, AI `filters` (color, brand, category, price range), and currency-scoped price sorting. Product Projection Search is used automatically when Product Search API is unavailable.
+
+### Langfuse (AI observability)
+
+Opt-in production tracing for text / voice / image search and TTS: AI generations, commercetools search, and ElevenLabs STT/TTS nest under one OpenTelemetry request span exported to [Langfuse](https://langfuse.com).
+
+- Set `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` (and optionally `LANGFUSE_BASE_URL` for self-host or non-EU regions). Without both keys, tracing is a no-op.
+- Host apps must register a `LangfuseSpanProcessor` once (see `apps/demo-next/src/instrumentation.node.ts`) and may call `registerLangfuseFlush` from `@commerce-ai-tool/server/flush` (or set the shared `globalThis` flush key) for serverless flush.
+- Autocomplete (`/search/suggestions`) is **not** traced by default (high keystroke volume). CT-only hits stay off the request span; when the AI fallback runs, `suggestSearchTerms` still emits a generation via the wrapped AI provider. Set `LANGFUSE_TRACE_SUGGESTIONS=true` to also trace the Suggest request span.
+- `CAT_DEBUG` remains console-only local tracing; Langfuse is the searchable production path. When Langfuse is enabled or `CAT_DEBUG=true`, responses may include `meta.traceId` for local linking (non-stable client contract).
+- Binary image/audio payloads are redacted from traces (mime type, byte length, hash only). Voice **transcripts** may still contain personal speech content — configure Langfuse retention accordingly.
 
 ### Faceted search
 
@@ -155,7 +181,8 @@ export class AppComponent {}
 
 ```typescript
 import express from "express";
-import { createExpressRouter, loadConfigFromEnv } from "@commerce-ai-tool/server";
+import { loadConfigFromEnv } from "@commerce-ai-tool/server";
+import { createExpressRouter } from "@commerce-ai-tool/server/express";
 
 const app = express();
 app.use(createExpressRouter({ config: loadConfigFromEnv(), basePath: "/api/commerce-ai" }));

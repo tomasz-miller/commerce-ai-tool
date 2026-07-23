@@ -82,6 +82,11 @@ export function repairTruncatedJsonObject(json: string): string {
     repaired += '"';
   }
 
+  // Incomplete values from truncated model output, e.g. {"transcript": or {"transcript":}
+  repaired = repaired.replace(/:\s*,/g, ": null,");
+  repaired = repaired.replace(/:\s*([}\]])/g, ": null$1");
+  repaired = repaired.replace(/:\s*$/, ": null");
+
   repaired = repaired.replace(/,\s*$/, "");
 
   let openBraces = 0;

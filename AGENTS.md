@@ -24,7 +24,7 @@ Browser Widget → Host API (@commerce-ai-tool/server) → AI + ElevenLabs + com
 | `@commerce-ai-tool/server` | `packages/server` | Next.js / Express handlers, STT/TTS |
 | `@commerce-ai-tool/react` | `packages/react` | React/Next.js widget (glass UI) |
 | `@commerce-ai-tool/angular` | `packages/angular` | Angular component |
-| `demo-next` | `apps/demo-next` | Demo app (Next.js 15) |
+| `demo-next` | `apps/demo-next` | Demo app (Next.js 16) |
 
 Package dependencies: `server`, `react`, `angular` → `core`.
 
@@ -47,7 +47,7 @@ Package dependencies: `server`, `react`, `angular` → `core`.
 | Voice | `@elevenlabs/elevenlabs-js` (server) |
 | React UI | React ≥ 18, lucide-react |
 | Angular UI | Angular ≥ 17, RxJS ≥ 7 |
-| Demo | Next.js 15, React 19 |
+| Demo | Next.js 16, React 19 |
 
 Add new dependencies in the **specific package** `package.json`, not root (except shared dev tools).
 
@@ -168,8 +168,10 @@ Release (`.github/workflows/release.yml`) is disabled (`workflow_dispatch` only)
 - **`catalogLocale`** — commercetools index language (`fullText.language`, `localeProjection`). Set via `CAT_CATALOG_LOCALE` or per-request/widget override.
 - **`queryLocale`** — user input language for AI interpretation. Defaults to `catalogLocale` when omitted.
 - AI returns `searchTerms` in catalog language; product cards use catalog language.
+- Autocomplete: CT Search Term Suggestions on `searchKeywords` first; if empty and the query is cross-locale or multi-word NL, AI proposes catalog-language suggestion phrases (`suggestSearchTerms`).
 - Resolver: `packages/core/src/locale/resolve.ts` (`resolveSearchLocales`).
 - Dev tracing: `logSearchTrace` in `packages/core/src/utils/dev-trace.ts` (enabled when `NODE_ENV !== production` or `CAT_DEBUG=true`).
+- Langfuse (opt-in): set `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY`; core wraps AI + commercetools spans under the HTTP request span; autocomplete suggestions are not traced unless `LANGFUSE_TRACE_SUGGESTIONS=true`. Host registers `LangfuseSpanProcessor` (see `apps/demo-next/src/instrumentation.ts` and `@commerce-ai-tool/server/flush`). Complements `CAT_DEBUG`; see README “Langfuse (AI observability)”.
 
 ## Key config files
 

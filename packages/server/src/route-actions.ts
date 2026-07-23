@@ -8,6 +8,7 @@ import {
   clampSuggestionsLimit,
   normalizeSuggestionsPrefix,
 } from "@commerce-ai-tool/core";
+import { redactBinaryInput, withOptionalRequestSpan, withRequestSpan, shouldTraceSuggestions } from "./observability/langfuse.js";
 import type { CommerceAIServer } from "./server.js";
 import { logServerError, logServerWarning } from "./utils/log-error.js";
 import { parseSearchLocaleOptions } from "./utils/locale.js";
@@ -88,17 +89,29 @@ export async function executeSearch(
     catalogLocale: localeOptions.catalogLocale,
   });
 
-  return server.orchestrator.searchByText({
-    query: body.query,
-    ...localeOptions,
-    limit: body.limit,
-    filters: body.filters,
-    searchTerms: body.searchTerms,
-    sort: body.sort,
-    refineQuery: body.refineQuery,
-    includeFacets: body.includeFacets,
-    suggestedFacets: body.suggestedFacets,
-  });
+  return withRequestSpan(
+    "commerce-ai.search",
+    {
+      input: { query: body.query, refineQuery: body.refineQuery },
+      metadata: {
+        searchType: "text",
+        queryLocale: localeOptions.queryLocale ?? "",
+        catalogLocale: localeOptions.catalogLocale ?? "",
+      },
+    },
+    () =>
+      server.orchestrator.searchByText({
+        query: body.query,
+        ...localeOptions,
+        limit: body.limit,
+        filters: body.filters,
+        searchTerms: body.searchTerms,
+        sort: body.sort,
+        refineQuery: body.refineQuery,
+        includeFacets: body.includeFacets,
+        suggestedFacets: body.suggestedFacets,
+      }),
+  );
 }
 
 export async function executeFacetSchema(
@@ -128,11 +141,24 @@ export async function executeSearchSuggestions(
     catalogLocale: localeOptions.catalogLocale,
   });
 
-  return server.orchestrator.suggestByText({
-    query: normalizedQuery,
-    ...localeOptions,
-    limit: clampSuggestionsLimit(body.limit),
-  });
+  return withOptionalRequestSpan(
+    shouldTraceSuggestions(),
+    "commerce-ai.search.suggestions",
+    {
+      input: { query: normalizedQuery },
+      metadata: {
+        searchType: "suggest",
+        queryLocale: localeOptions.queryLocale ?? "",
+        catalogLocale: localeOptions.catalogLocale ?? "",
+      },
+    },
+    () =>
+      server.orchestrator.suggestByText({
+        query: normalizedQuery,
+        ...localeOptions,
+        limit: clampSuggestionsLimit(body.limit),
+      }),
+  );
 }
 
 export async function executeSearchVoice(
@@ -152,38 +178,51 @@ export async function executeSearchVoice(
     catalogLocale: localeOptions.catalogLocale,
   });
 
-  const result = await server.orchestrator.searchByVoice(
-    new Uint8Array(file.buffer),
-    file.mimeType,
+  return withRequestSpan(
+    "commerce-ai.search.voice",
     {
-      ...localeOptions,
-      limit: fields.limit ? Number(fields.limit) : undefined,
-      enableTts: fields.enableTts !== "false",
+      input: { audio: redactBinaryInput(file.mimeType, file.buffer) },
+      metadata: {
+        searchType: "voice",
+        queryLocale: localeOptions.queryLocale ?? "",
+        catalogLocale: localeOptions.catalogLocale ?? "",
+      },
+    },
+    async () => {
+      const result = await server.orchestrator.searchByVoice(
+        new Uint8Array(file.buffer),
+        file.mimeType,
+        {
+          ...localeOptions,
+          limit: fields.limit ? Number(fields.limit) : undefined,
+          enableTts: fields.enableTts !== "false",
+        },
+      );
+
+      const blockingTts = fields.blockingTts === "true";
+      let audioSummary: string | undefined;
+      if (blockingTts && result.ttsText) {
+        try {
+          const audio = await server.synthesizeSpeech(result.ttsText);
+          audioSummary = audio.toString("base64");
+        } catch (error) {
+          logServerWarning("searchVoice", "TTS summary skipped", {
+            reason: error instanceof Error ? error.message : "unknown",
+          });
+        }
+      }
+
+      return {
+        transcript: result.transcript,
+        enhancedQuery: result.enhancedQuery,
+        products: result.products,
+        meta: result.meta,
+        ttsText: result.ttsText,
+        audioSummary,
+        ttsPending: Boolean(result.ttsText && !audioSummary),
+      };
     },
   );
-
-  const blockingTts = fields.blockingTts === "true";
-  let audioSummary: string | undefined;
-  if (blockingTts && result.ttsText) {
-    try {
-      const audio = await server.synthesizeSpeech(result.ttsText);
-      audioSummary = audio.toString("base64");
-    } catch (error) {
-      logServerWarning("searchVoice", "TTS summary skipped", {
-        reason: error instanceof Error ? error.message : "unknown",
-      });
-    }
-  }
-
-  return {
-    transcript: result.transcript,
-    enhancedQuery: result.enhancedQuery,
-    products: result.products,
-    meta: result.meta,
-    ttsText: result.ttsText,
-    audioSummary,
-    ttsPending: Boolean(result.ttsText && !audioSummary),
-  };
 }
 
 export async function executeSearchImage(
@@ -203,13 +242,21 @@ export async function executeSearchImage(
     catalogLocale: localeOptions.catalogLocale,
   });
 
-  return server.orchestrator.searchByImage(
-    new Uint8Array(file.buffer),
-    file.mimeType,
+  return withRequestSpan(
+    "commerce-ai.search.image",
     {
-      ...localeOptions,
-      limit: fields.limit ? Number(fields.limit) : undefined,
+      input: { image: redactBinaryInput(file.mimeType, file.buffer) },
+      metadata: {
+        searchType: "image",
+        queryLocale: localeOptions.queryLocale ?? "",
+        catalogLocale: localeOptions.catalogLocale ?? "",
+      },
     },
+    () =>
+      server.orchestrator.searchByImage(new Uint8Array(file.buffer), file.mimeType, {
+        ...localeOptions,
+        limit: fields.limit ? Number(fields.limit) : undefined,
+      }),
   );
 }
 
@@ -221,5 +268,12 @@ export async function executeTts(
     throw new ValidationError("text is required");
   }
 
-  return server.synthesizeSpeech(text);
+  return withRequestSpan(
+    "commerce-ai.tts",
+    {
+      input: { textLength: text.length },
+      metadata: { searchType: "tts" },
+    },
+    () => server.synthesizeSpeech(text),
+  );
 }

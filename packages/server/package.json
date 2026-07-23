@@ -37,13 +37,23 @@
         "types": "./dist/express.d.cts",
         "default": "./dist/express.cjs"
       }
+    },
+    "./flush": {
+      "import": {
+        "types": "./dist/flush.d.ts",
+        "default": "./dist/flush.js"
+      },
+      "require": {
+        "types": "./dist/flush.d.cts",
+        "default": "./dist/flush.cjs"
+      }
     }
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsup && node ../../scripts/emit-package-dts.mjs dist/index.d.ts dist/next.d.ts dist/express.d.ts",
+    "build": "tsup && node ../../scripts/emit-package-dts.mjs dist/index.d.ts dist/next.d.ts dist/express.d.ts dist/flush.d.ts",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
@@ -74,11 +84,11 @@
     "@types/express": "^5.0.0",
     "@types/node": "^24.0.0",
     "@types/supertest": "^6.0.3",
+    "@typescript/native": "catalog:",
     "express": "^5.0.1",
-    "next": "^15.2.3",
+    "next": "^16.2.11",
     "supertest": "^7.1.0",
     "tsup": "^8.4.0",
-    "@typescript/native": "catalog:",
     "vitest": "^3.0.9"
   },
   "publishConfig": {
