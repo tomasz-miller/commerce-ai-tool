@@ -11,6 +11,11 @@ describe("extractJsonObjectLiteral", () => {
     expect(extractJsonObjectLiteral(raw)).toBe('{"searchTerms":["shoes"]}');
   });
 
+  it("extracts JSON from fences without a language tag", () => {
+    const raw = '```\n{"searchTerms":["boots"]}\n```';
+    expect(extractJsonObjectLiteral(raw)).toBe('{"searchTerms":["boots"]}');
+  });
+
   it("extracts the first balanced JSON object", () => {
     const raw = 'prefix {"transcript":"hello","searchTerms":["sko"]} suffix';
     expect(extractJsonObjectLiteral(raw)).toBe('{"transcript":"hello","searchTerms":["sko"]}');

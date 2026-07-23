@@ -1,7 +1,35 @@
 function stripMarkdownCodeFence(raw: string): string {
   const trimmed = raw.trim();
-  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  return (fenced?.[1] ?? trimmed).trim();
+  const openFence = trimmed.indexOf("```");
+  if (openFence === -1) {
+    return trimmed;
+  }
+
+  let contentStart = openFence + 3;
+  // Optional language tag (e.g. json) — ASCII letters only, no backtracking.
+  while (contentStart < trimmed.length) {
+    const code = trimmed.charCodeAt(contentStart);
+    const isLetter =
+      (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
+    if (!isLetter) {
+      break;
+    }
+    contentStart += 1;
+  }
+  while (contentStart < trimmed.length) {
+    const char = trimmed[contentStart]!;
+    if (char !== " " && char !== "\t" && char !== "\r" && char !== "\n") {
+      break;
+    }
+    contentStart += 1;
+  }
+
+  const closeFence = trimmed.indexOf("```", contentStart);
+  if (closeFence === -1) {
+    return trimmed;
+  }
+
+  return trimmed.slice(contentStart, closeFence).trim();
 }
 
 export function extractJsonObjectLiteral(raw: string): string {
