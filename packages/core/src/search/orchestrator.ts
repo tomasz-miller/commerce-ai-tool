@@ -21,6 +21,7 @@ import {
   withTraceIdMeta,
   wrapAIProvider,
 } from "../observability/index.js";
+import { configureLangfusePrompts } from "../prompts/resolve.js";
 import { buildTtsSummaryFallback } from "./voice-tts.js";
 import { logSearchTrace } from "../utils/dev-trace.js";
 import { hashUint8Array } from "../utils/hash.js";
@@ -85,6 +86,7 @@ const DEFAULT_TIMEOUTS = {
 
 export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOrchestrator {
   const { config } = deps;
+  configureLangfusePrompts(config.langfuse);
   const limit = config.defaults?.limit ?? 20;
   const currency = config.defaults?.currency ?? "EUR";
   const voiceMode = resolveVoiceMode(config);

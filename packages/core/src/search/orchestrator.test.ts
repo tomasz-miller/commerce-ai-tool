@@ -1,7 +1,13 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSearchOrchestrator } from "./orchestrator.js";
 import type { CommerceAIConfig } from "../types/index.js";
 import type { CommercetoolsClient } from "../commercetools/client.js";
+import {
+  _resetLangfusePromptRuntimeForTests,
+  _setLangfusePromptClientFactoryForTests,
+  resolveSystemPrompt,
+} from "../prompts/resolve.js";
+import { SYSTEM_PROMPT_NAMES } from "../prompts/catalog.js";
 
 const baseConfig: CommerceAIConfig = {
   commercetools: {
@@ -334,5 +340,59 @@ describe("createSearchOrchestrator with Langfuse disabled", () => {
     expect(result.meta.total).toBe(1);
     expect(result.meta.traceId).toBeUndefined();
     expect(ai.interpretTextQuery).toHaveBeenCalledOnce();
+  });
+});
+
+describe("createSearchOrchestrator Langfuse prompt config", () => {
+  afterEach(() => {
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_PROMPTS;
+    _resetLangfusePromptRuntimeForTests();
+  });
+
+  it("applies config.langfuse via configureLangfusePrompts", async () => {
+    process.env.LANGFUSE_PUBLIC_KEY = "pk";
+    process.env.LANGFUSE_SECRET_KEY = "sk";
+    // Env alone would leave prompts off; orchestrator config must enable them.
+    delete process.env.LANGFUSE_PROMPTS;
+
+    const get = vi.fn().mockResolvedValue({
+      prompt: "Orchestrator-managed prompt",
+      isFallback: false,
+    });
+    _setLangfusePromptClientFactoryForTests(() => ({ prompt: { get } }) as never);
+
+    createSearchOrchestrator({
+      config: {
+        ...baseConfig,
+        langfuse: {
+          promptsEnabled: true,
+          promptLabel: "staging",
+          promptCacheTtlSeconds: 15,
+        },
+      },
+      commercetoolsClient: createMockCommercetoolsClient(),
+      aiProvider: {
+        interpretTextQuery: vi.fn(),
+        interpretRefineQuery: vi.fn(),
+        interpretImageQuery: vi.fn(),
+        interpretVoiceAudio: vi.fn(),
+        enhanceVoiceTranscript: vi.fn(),
+        suggestSearchTerms: vi.fn(),
+        summarizeVoiceResults: vi.fn(),
+      } as never,
+    });
+
+    const resolved = await resolveSystemPrompt(SYSTEM_PROMPT_NAMES.TEXT_QUERY);
+    expect(resolved.source).toBe("langfuse");
+    expect(resolved.text).toBe("Orchestrator-managed prompt");
+    expect(get).toHaveBeenCalledWith(
+      SYSTEM_PROMPT_NAMES.TEXT_QUERY,
+      expect.objectContaining({
+        label: "staging",
+        cacheTtlSeconds: 15,
+      }),
+    );
   });
 });

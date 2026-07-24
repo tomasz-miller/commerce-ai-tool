@@ -78,6 +78,17 @@ export interface CommerceAIDefaults {
 export interface LangfuseConfig {
   /** Derived from LANGFUSE_PUBLIC_KEY + LANGFUSE_SECRET_KEY when loading from env. */
   enabled?: boolean;
+  /**
+   * Fetch system prompts from Langfuse at runtime.
+   * Applied via `configureLangfusePrompts` when creating the search orchestrator
+   * (or set `LANGFUSE_PROMPTS=true` when config omits this field).
+   * Local catalog remains the fallback and the source of truth for evals.
+   */
+  promptsEnabled?: boolean;
+  /** Langfuse prompt label (default `production`). From LANGFUSE_PROMPT_LABEL or this field. */
+  promptLabel?: string;
+  /** Client-side prompt cache TTL in seconds (default 60). From LANGFUSE_PROMPT_CACHE_TTL_SECONDS or this field. */
+  promptCacheTtlSeconds?: number;
 }
 
 export interface CommerceAIConfig {

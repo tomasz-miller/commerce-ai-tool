@@ -25,17 +25,19 @@
     "eval:fixtures:audio": "bash evals/scripts/generate-audio-fixtures.sh",
     "eval:fixtures:images": "bash evals/scripts/compress-image-fixtures.sh",
     "test:e2e": "pnpm --filter demo-next test:e2e",
-    "seed:search-keywords": "pnpm --filter @commerce-ai-tool/core build && node scripts/seed-search-keywords.mjs"
+    "seed:search-keywords": "pnpm --filter @commerce-ai-tool/core build && node scripts/seed-search-keywords.mjs",
+    "sync:langfuse-prompts": "pnpm --filter @commerce-ai-tool/core build && node scripts/sync-langfuse-prompts.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.0",
     "@commerce-ai-tool/core": "workspace:*",
     "@eslint/js": "^9.22.0",
+    "@langfuse/client": "^5.9.1",
+    "@typescript/native": "catalog:",
     "eslint": "^9.22.0",
     "prettier": "^3.5.3",
     "promptfoo": "^0.120.4",
     "turbo": "^2.4.4",
-    "@typescript/native": "catalog:",
     "typescript": "catalog:",
     "typescript-eslint": "^8.63.0",
     "vitest": "^3.0.9"

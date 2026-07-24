@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   isLangfuseEnabled,
+  isLangfusePromptsEnabled,
   shouldExposeTraceId,
   shouldTraceSuggestions,
 } from "./enabled.js";
@@ -27,6 +28,26 @@ describe("isLangfuseEnabled", () => {
     expect(isLangfuseEnabled()).toBe(false);
     process.env.LANGFUSE_SECRET_KEY = "sk";
     expect(isLangfuseEnabled()).toBe(true);
+  });
+});
+
+describe("isLangfusePromptsEnabled", () => {
+  const clearEnv = () => {
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_PROMPTS;
+  };
+
+  beforeEach(clearEnv);
+  afterEach(clearEnv);
+
+  it("requires keys and LANGFUSE_PROMPTS=true", () => {
+    expect(isLangfusePromptsEnabled()).toBe(false);
+    process.env.LANGFUSE_PUBLIC_KEY = "pk";
+    process.env.LANGFUSE_SECRET_KEY = "sk";
+    expect(isLangfusePromptsEnabled()).toBe(false);
+    process.env.LANGFUSE_PROMPTS = "true";
+    expect(isLangfusePromptsEnabled()).toBe(true);
   });
 });
 

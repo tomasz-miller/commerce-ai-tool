@@ -171,7 +171,7 @@ Release (`.github/workflows/release.yml`) is disabled (`workflow_dispatch` only)
 - Autocomplete: CT Search Term Suggestions on `searchKeywords` first; if empty and the query is cross-locale or multi-word NL, AI proposes catalog-language suggestion phrases (`suggestSearchTerms`).
 - Resolver: `packages/core/src/locale/resolve.ts` (`resolveSearchLocales`).
 - Dev tracing: `logSearchTrace` in `packages/core/src/utils/dev-trace.ts` (enabled when `NODE_ENV !== production` or `CAT_DEBUG=true`).
-- Langfuse (opt-in): set `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY`; core wraps AI + commercetools spans under the HTTP request span; autocomplete suggestions are not traced unless `LANGFUSE_TRACE_SUGGESTIONS=true`. Host registers `LangfuseSpanProcessor` (see `apps/demo-next/src/instrumentation.ts` and `@commerce-ai-tool/server/flush`). Complements `CAT_DEBUG`; see README “Langfuse (AI observability)”.
+- Langfuse (opt-in): set `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY`; core wraps AI + commercetools spans under the HTTP request span; autocomplete suggestions are not traced unless `LANGFUSE_TRACE_SUGGESTIONS=true`. Host registers `LangfuseSpanProcessor` (see `apps/demo-next/src/instrumentation.ts` and `@commerce-ai-tool/server/flush`). Complements `CAT_DEBUG`; see README “Langfuse (AI observability)”. Optional managed system prompts: `LANGFUSE_PROMPTS=true` or `CommerceAIConfig.langfuse.promptsEnabled` (applied by `createSearchOrchestrator` via `configureLangfusePrompts`) + `pnpm sync:langfuse-prompts` (default label `staging`; promote with `--label production` after evals). Git catalog remains source of truth / eval fallback (`createEvalAIProvider` forces local prompts).
 
 ## Key config files
 
