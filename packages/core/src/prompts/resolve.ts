@@ -28,7 +28,7 @@ let clientFactoryForTests: (() => LangfuseClient | null) | undefined;
 
 /**
  * Apply Langfuse prompt settings from CommerceAIConfig.
- * Call when creating the server/orchestrator so programmatic config is honored
+ * Called by `createSearchOrchestrator` so programmatic `config.langfuse` is honored
  * (not only process.env). Resets the cached Langfuse client.
  */
 export function configureLangfusePrompts(config: LangfuseConfig | undefined): void {

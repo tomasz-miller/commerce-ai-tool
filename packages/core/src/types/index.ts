@@ -80,7 +80,8 @@ export interface LangfuseConfig {
   enabled?: boolean;
   /**
    * Fetch system prompts from Langfuse at runtime.
-   * Applied via `configureLangfusePrompts` when creating the server (or set `LANGFUSE_PROMPTS=true`).
+   * Applied via `configureLangfusePrompts` when creating the search orchestrator
+   * (or set `LANGFUSE_PROMPTS=true` when config omits this field).
    * Local catalog remains the fallback and the source of truth for evals.
    */
   promptsEnabled?: boolean;

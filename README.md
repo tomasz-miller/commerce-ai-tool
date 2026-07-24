@@ -129,7 +129,7 @@ Opt-in production tracing for text / voice / image search and TTS: AI generation
 System prompts live in git under `packages/core/src/prompts` (source of truth for Vitest and Promptfoo). Optionally push them to Langfuse and fetch by label at runtime:
 
 1. Sync catalog → Langfuse staging: `pnpm sync:langfuse-prompts` (or `-- --dry-run`). Promote with `pnpm sync:langfuse-prompts -- --label production` only after Promptfoo passes.
-2. Enable runtime fetch with `LANGFUSE_PROMPTS=true` (same API keys), or set `langfuse.promptsEnabled` on `CommerceAIConfig` (applied when creating the server). Missing or failed fetches fall back to the local catalog; failures are logged when `CAT_DEBUG=true` / non-production.
+2. Enable runtime fetch with `LANGFUSE_PROMPTS=true` (same API keys), or set `langfuse.promptsEnabled` on `CommerceAIConfig` (applied when creating the search orchestrator). Missing or failed fetches fall back to the local catalog; failures are logged when `CAT_DEBUG=true` / non-production. Promptfoo evals call `configureLangfusePrompts({ promptsEnabled: false })` so they always use the git catalog.
 3. Optional: `LANGFUSE_PROMPT_LABEL` (default `production`) and `LANGFUSE_PROMPT_CACHE_TTL_SECONDS` (default `60`), or the matching `CommerceAIConfig.langfuse` fields.
 4. Generations link to the Langfuse prompt version when managed text is used (not on local fallback).
 
