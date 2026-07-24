@@ -9,20 +9,14 @@ import {
   buildVoiceAudioUserMessage,
   buildVoiceEnhanceUserMessage,
   buildSuggestSearchTermsUserMessage,
-  IMAGE_QUERY_SYSTEM_PROMPT,
-  TEXT_QUERY_SYSTEM_PROMPT,
-  VOICE_AUDIO_INTERPRET_SYSTEM_PROMPT,
-  VOICE_ENHANCE_SYSTEM_PROMPT,
-  SUGGEST_SEARCH_TERMS_SYSTEM_PROMPT,
   parseInterpretedQuery,
   parseVoiceAudioInterpretation,
   parseSuggestSearchTerms,
 } from "../../prompts/index.js";
+import { SYSTEM_PROMPT_NAMES } from "../../prompts/catalog.js";
+import { resolveAndLinkSystemPrompt } from "../../prompts/resolve.js";
 import { mimeTypeToAudioFormat, uint8ArrayToBase64 } from "../../utils/audio.js";
-import {
-  buildTtsSummaryUserMessage,
-  TTS_SUMMARY_PROMPT,
-} from "../../search/voice-tts.js";
+import { buildTtsSummaryUserMessage } from "../../search/voice-tts.js";
 
 const DEFAULT_MODEL = "google/gemini-3.1-flash-lite-preview";
 const DEFAULT_VISION_MODEL = "google/gemini-3.1-flash-lite-preview";
@@ -48,10 +42,11 @@ export class OpenRouterProvider implements AIProvider {
     locales: SearchLocaleContext,
     attributeCatalog: FacetAttributeDefinition[] = [],
   ) {
+    const system = await resolveAndLinkSystemPrompt(SYSTEM_PROMPT_NAMES.TEXT_QUERY);
     const response = await this.client.chat.send({
       model: this.model,
       messages: [
-        { role: "system", content: TEXT_QUERY_SYSTEM_PROMPT },
+        { role: "system", content: system },
         {
           role: "user",
           content: attributeCatalog.length
@@ -71,10 +66,11 @@ export class OpenRouterProvider implements AIProvider {
     context: Parameters<AIProvider["interpretRefineQuery"]>[1],
     locales: SearchLocaleContext,
   ) {
+    const system = await resolveAndLinkSystemPrompt(SYSTEM_PROMPT_NAMES.TEXT_QUERY);
     const response = await this.client.chat.send({
       model: this.model,
       messages: [
-        { role: "system", content: TEXT_QUERY_SYSTEM_PROMPT },
+        { role: "system", content: system },
         { role: "user", content: buildRefineQueryUserMessage(text, locales, context) },
       ],
       responseFormat: { type: "json_object" },
@@ -88,10 +84,11 @@ export class OpenRouterProvider implements AIProvider {
       ? imageBase64
       : `data:${mimeType};base64,${imageBase64}`;
 
+    const system = await resolveAndLinkSystemPrompt(SYSTEM_PROMPT_NAMES.IMAGE_QUERY);
     const response = await this.client.chat.send({
       model: this.visionModel,
       messages: [
-        { role: "system", content: IMAGE_QUERY_SYSTEM_PROMPT },
+        { role: "system", content: system },
         {
           role: "user",
           content: [
@@ -111,10 +108,11 @@ export class OpenRouterProvider implements AIProvider {
     const format = mimeTypeToAudioFormat(mimeType);
     const base64Audio = uint8ArrayToBase64(audio);
 
+    const system = await resolveAndLinkSystemPrompt(SYSTEM_PROMPT_NAMES.VOICE_AUDIO_INTERPRET);
     const response = await this.sendChatCompletion({
       model: this.voiceModel,
       messages: [
-        { role: "system", content: VOICE_AUDIO_INTERPRET_SYSTEM_PROMPT },
+        { role: "system", content: system },
         {
           role: "user",
           content: [
@@ -140,10 +138,11 @@ export class OpenRouterProvider implements AIProvider {
   }
 
   async enhanceVoiceTranscript(transcript: string, locales: SearchLocaleContext) {
+    const system = await resolveAndLinkSystemPrompt(SYSTEM_PROMPT_NAMES.VOICE_ENHANCE);
     const response = await this.client.chat.send({
       model: this.model,
       messages: [
-        { role: "system", content: VOICE_ENHANCE_SYSTEM_PROMPT },
+        { role: "system", content: system },
         {
           role: "user",
           content: buildVoiceEnhanceUserMessage(transcript, locales),
@@ -155,10 +154,11 @@ export class OpenRouterProvider implements AIProvider {
   }
 
   async suggestSearchTerms(query: string, locales: SearchLocaleContext, limit = 8) {
+    const system = await resolveAndLinkSystemPrompt(SYSTEM_PROMPT_NAMES.SUGGEST_SEARCH_TERMS);
     const response = await this.client.chat.send({
       model: this.model,
       messages: [
-        { role: "system", content: SUGGEST_SEARCH_TERMS_SYSTEM_PROMPT },
+        { role: "system", content: system },
         {
           role: "user",
           content: buildSuggestSearchTermsUserMessage(query, locales, limit),
@@ -175,10 +175,11 @@ export class OpenRouterProvider implements AIProvider {
     topProductName: string | undefined,
     locales: SearchLocaleContext,
   ) {
+    const system = await resolveAndLinkSystemPrompt(SYSTEM_PROMPT_NAMES.TTS_SUMMARY);
     const response = await this.client.chat.send({
       model: this.model,
       messages: [
-        { role: "system", content: TTS_SUMMARY_PROMPT },
+        { role: "system", content: system },
         {
           role: "user",
           content: buildTtsSummaryUserMessage(count, topProductName, locales),

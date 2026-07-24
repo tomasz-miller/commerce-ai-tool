@@ -21,7 +21,7 @@
 
 ## Prompt evaluations (Promptfoo)
 
-Local [Promptfoo](https://www.promptfoo.dev/) regression tests for AI prompts. Complements Vitest (deterministic parsers) and future Langfuse (production traces + datasets).
+Local [Promptfoo](https://www.promptfoo.dev/) regression tests for AI prompts. Complements Vitest (deterministic parsers) and Langfuse (production traces, datasets, and optional managed prompts).
 
 ### Done (phase 1)
 
@@ -89,7 +89,7 @@ Integrate [Langfuse](https://langfuse.com) for every AI step in the search pipel
 - [x] Instrument all `AIProvider` methods: `interpretTextQuery`, `interpretImageQuery`, `enhanceVoiceTranscript`, `summarizeVoiceResults`, `suggestSearchTerms`
 - [x] Link server voice handler span to core child spans (single trace id returned optionally in dev)
 - [x] Document setup in `.env.example` and README; note relationship to existing `CAT_DEBUG` dev tracing
-- [ ] Optional: Langfuse prompt labels synced with `packages/core/src/prompts` for managed prompts
+- [x] Optional: Langfuse prompt labels synced with `packages/core/src/prompts` for managed prompts (`LANGFUSE_PROMPTS`, `pnpm sync:langfuse-prompts`)
 
 ## v1.3 — Cart
 

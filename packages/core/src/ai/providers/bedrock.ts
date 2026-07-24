@@ -18,17 +18,12 @@ import {
   buildTextQueryUserMessage,
   buildVoiceEnhanceUserMessage,
   buildSuggestSearchTermsUserMessage,
-  IMAGE_QUERY_SYSTEM_PROMPT,
-  TEXT_QUERY_SYSTEM_PROMPT,
-  VOICE_ENHANCE_SYSTEM_PROMPT,
-  SUGGEST_SEARCH_TERMS_SYSTEM_PROMPT,
   parseInterpretedQuery,
   parseSuggestSearchTerms,
 } from "../../prompts/index.js";
-import {
-  buildTtsSummaryUserMessage,
-  TTS_SUMMARY_PROMPT,
-} from "../../search/voice-tts.js";
+import { SYSTEM_PROMPT_NAMES } from "../../prompts/catalog.js";
+import { resolveAndLinkSystemPrompt } from "../../prompts/resolve.js";
+import { buildTtsSummaryUserMessage } from "../../search/voice-tts.js";
 
 const DEFAULT_MODEL_ID = "anthropic.claude-3-5-sonnet-20241022-v2:0";
 
@@ -48,12 +43,13 @@ export class BedrockProvider implements AIProvider {
     locales: SearchLocaleContext,
     attributeCatalog: FacetAttributeDefinition[] = [],
   ) {
+    const system = await resolveAndLinkSystemPrompt(SYSTEM_PROMPT_NAMES.TEXT_QUERY);
     const response = await this.converse(this.modelId, [
       {
         role: "user",
         content: [
           {
-            text: `${TEXT_QUERY_SYSTEM_PROMPT}\n\n${
+            text: `${system}\n\n${
               attributeCatalog.length
                 ? buildSchemaAwareTextQueryUserMessage(text, locales, attributeCatalog)
                 : buildTextQueryUserMessage(text, locales)
@@ -71,16 +67,13 @@ export class BedrockProvider implements AIProvider {
     context: Parameters<AIProvider["interpretRefineQuery"]>[1],
     locales: SearchLocaleContext,
   ) {
+    const system = await resolveAndLinkSystemPrompt(SYSTEM_PROMPT_NAMES.TEXT_QUERY);
     const response = await this.converse(this.modelId, [
       {
         role: "user",
         content: [
           {
-            text: `${TEXT_QUERY_SYSTEM_PROMPT}\n\n${buildRefineQueryUserMessage(
-              text,
-              locales,
-              context,
-            )}`,
+            text: `${system}\n\n${buildRefineQueryUserMessage(text, locales, context)}`,
           },
         ],
       },
@@ -93,11 +86,12 @@ export class BedrockProvider implements AIProvider {
     const rawBase64 = imageBase64.replace(/^data:[^;]+;base64,/, "");
     const format = mimeType.includes("png") ? "png" : mimeType.includes("webp") ? "webp" : "jpeg";
 
+    const system = await resolveAndLinkSystemPrompt(SYSTEM_PROMPT_NAMES.IMAGE_QUERY);
     const response = await this.converse(this.visionModelId, [
       {
         role: "user",
         content: [
-          { text: `${IMAGE_QUERY_SYSTEM_PROMPT}\n\n${buildImageQueryUserMessage(locales)}` },
+          { text: `${system}\n\n${buildImageQueryUserMessage(locales)}` },
           {
             image: {
               format,
@@ -122,12 +116,13 @@ export class BedrockProvider implements AIProvider {
   }
 
   async enhanceVoiceTranscript(transcript: string, locales: SearchLocaleContext) {
+    const system = await resolveAndLinkSystemPrompt(SYSTEM_PROMPT_NAMES.VOICE_ENHANCE);
     const response = await this.converse(this.modelId, [
       {
         role: "user",
         content: [
           {
-            text: `${VOICE_ENHANCE_SYSTEM_PROMPT}\n\n${buildVoiceEnhanceUserMessage(transcript, locales)}`,
+            text: `${system}\n\n${buildVoiceEnhanceUserMessage(transcript, locales)}`,
           },
         ],
       },
@@ -137,16 +132,13 @@ export class BedrockProvider implements AIProvider {
   }
 
   async suggestSearchTerms(query: string, locales: SearchLocaleContext, limit = 8) {
+    const system = await resolveAndLinkSystemPrompt(SYSTEM_PROMPT_NAMES.SUGGEST_SEARCH_TERMS);
     const response = await this.converse(this.modelId, [
       {
         role: "user",
         content: [
           {
-            text: `${SUGGEST_SEARCH_TERMS_SYSTEM_PROMPT}\n\n${buildSuggestSearchTermsUserMessage(
-              query,
-              locales,
-              limit,
-            )}`,
+            text: `${system}\n\n${buildSuggestSearchTermsUserMessage(query, locales, limit)}`,
           },
         ],
       },
@@ -160,12 +152,13 @@ export class BedrockProvider implements AIProvider {
     topProductName: string | undefined,
     locales: SearchLocaleContext,
   ) {
+    const system = await resolveAndLinkSystemPrompt(SYSTEM_PROMPT_NAMES.TTS_SUMMARY);
     const response = await this.converse(this.modelId, [
       {
         role: "user",
         content: [
           {
-            text: `${TTS_SUMMARY_PROMPT}\n\n${buildTtsSummaryUserMessage(count, topProductName, locales)}`,
+            text: `${system}\n\n${buildTtsSummaryUserMessage(count, topProductName, locales)}`,
           },
         ],
       },

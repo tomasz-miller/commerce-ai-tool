@@ -1,11 +1,7 @@
 import type { SearchLocaleContext } from "../types/index.js";
 
-export const TTS_SUMMARY_PROMPT = `You are a voice assistant for an e-commerce storefront.
-Summarize product search results in one short spoken sentence.
-Respond in the user's query language only — never use another language.
-If the top product name is in a different language than the query language, translate it in the summary.
-Mention the number of results and highlight the top product name when available.
-Respond with plain text only — no JSON, quotes, or markdown.`;
+/** @deprecated Import from `../prompts/index.js` — re-exported for compatibility. */
+export { TTS_SUMMARY_PROMPT } from "../prompts/index.js";
 
 export function buildTtsSummaryUserMessage(
   count: number,

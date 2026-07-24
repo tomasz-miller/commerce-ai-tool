@@ -9,6 +9,12 @@ import {
   readImageFixture,
   readProviderConfig,
 } from "./eval-utils.ts";
+import {
+  configureLangfusePrompts,
+  resolveSystemPrompt,
+  SYSTEM_PROMPT_NAMES,
+  getLocalSystemPrompt,
+} from "@commerce-ai-tool/core";
 
 describe("readImageFixture", () => {
   it("reads compressed red-shoes fixture with jpeg mime type", () => {
@@ -27,6 +33,7 @@ describe("createEvalAIProvider", () => {
 
   afterEach(() => {
     process.env = { ...envSnapshot };
+    configureLangfusePrompts(undefined);
   });
 
   it("creates OpenRouter provider when API key is set", () => {
@@ -34,6 +41,19 @@ describe("createEvalAIProvider", () => {
     const result = createEvalAIProvider({ provider: "openrouter" });
     expect(result.skipped).toBe(false);
     expect(result.ai).not.toBeNull();
+  });
+
+  it("forces local git catalog prompts even when LANGFUSE_PROMPTS is set", async () => {
+    process.env.OPENROUTER_API_KEY = "test-key";
+    process.env.LANGFUSE_PUBLIC_KEY = "pk";
+    process.env.LANGFUSE_SECRET_KEY = "sk";
+    process.env.LANGFUSE_PROMPTS = "true";
+
+    createEvalAIProvider({ provider: "openrouter" });
+
+    const resolved = await resolveSystemPrompt(SYSTEM_PROMPT_NAMES.TEXT_QUERY);
+    expect(resolved.source).toBe("local");
+    expect(resolved.text).toBe(getLocalSystemPrompt(SYSTEM_PROMPT_NAMES.TEXT_QUERY));
   });
 
   it("throws when OpenRouter key is missing and skip is disabled", () => {

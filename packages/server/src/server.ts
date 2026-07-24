@@ -214,6 +214,16 @@ export function loadConfigFromEnv(): CommerceAIConfig {
         : undefined,
     langfuse: {
       enabled: isLangfuseEnabled(),
+      promptsEnabled: process.env.LANGFUSE_PROMPTS === "true",
+      promptLabel: process.env.LANGFUSE_PROMPT_LABEL?.trim() || undefined,
+      promptCacheTtlSeconds: (() => {
+        const raw = process.env.LANGFUSE_PROMPT_CACHE_TTL_SECONDS;
+        if (!raw) {
+          return undefined;
+        }
+        const parsed = Number(raw);
+        return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+      })(),
     },
   };
 }

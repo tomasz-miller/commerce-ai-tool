@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createAIProvider } from "@commerce-ai-tool/core";
+import { configureLangfusePrompts, createAIProvider } from "@commerce-ai-tool/core";
 import type { AIProvider } from "@commerce-ai-tool/core";
 import type { ProviderOptions, ProviderResponse } from "promptfoo";
 
@@ -124,6 +124,10 @@ export function createSkippedProviderResponse(reason: string): ProviderResponse 
 export function createEvalAIProvider(
   options: CreateEvalAIProviderOptions = {},
 ): EvalAIProviderResult {
+  // Promptfoo must always exercise the git catalog, even if the shell/CI enables
+  // LANGFUSE_PROMPTS for other workflows.
+  configureLangfusePrompts({ promptsEnabled: false });
+
   const provider = options.provider ?? "openrouter";
   const skipIfUnavailable = options.skipIfUnavailable ?? false;
 
