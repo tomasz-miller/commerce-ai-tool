@@ -52,11 +52,25 @@ export {
   buildRefineQueryUserMessage,
   buildSchemaAwareTextQueryUserMessage,
   buildSuggestSearchTermsUserMessage,
+  TTS_SUMMARY_PROMPT,
 } from "./prompts/index.js";
+export {
+  SYSTEM_PROMPT_NAMES,
+  SYSTEM_PROMPT_CATALOG,
+  getLocalSystemPrompt,
+  listSystemPromptEntries,
+} from "./prompts/catalog.js";
+export type { SystemPromptName } from "./prompts/catalog.js";
+export {
+  resolveSystemPrompt,
+  resolveAndLinkSystemPrompt,
+  linkActiveGenerationPrompt,
+  configureLangfusePrompts,
+} from "./prompts/resolve.js";
+export type { ResolvedSystemPrompt, ResolvedSystemPromptSource } from "./prompts/resolve.js";
 export {
   buildTtsSummaryFallback,
   buildTtsSummaryUserMessage,
-  TTS_SUMMARY_PROMPT,
 } from "./search/voice-tts.js";
 export { resolveSearchLocales } from "./locale/resolve.js";
 export {
@@ -73,6 +87,7 @@ export { logSearchTrace } from "./utils/dev-trace.js";
 export { SearchTimeoutError } from "./utils/with-timeout.js";
 export {
   isLangfuseEnabled,
+  isLangfusePromptsEnabled,
   shouldExposeTraceId,
   shouldTraceSuggestions,
   getCurrentTraceId,

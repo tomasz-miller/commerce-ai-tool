@@ -1,6 +1,7 @@
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import type { CommerceAIConfig, VoiceMode } from "@commerce-ai-tool/core";
 import {
+  configureLangfusePrompts,
   createSearchOrchestrator,
   isLangfuseEnabled,
   redactBinaryInput,
@@ -21,6 +22,7 @@ export interface CommerceAIServerOptions {
 
 export function createCommerceAIServer(options: CommerceAIServerOptions): CommerceAIServer {
   const { config } = options;
+  configureLangfusePrompts(config.langfuse);
   const voiceMode = resolveVoiceMode(config);
   const elevenlabs = config.elevenlabs ? createElevenLabsClient(config.elevenlabs) : null;
 
@@ -214,6 +216,16 @@ export function loadConfigFromEnv(): CommerceAIConfig {
         : undefined,
     langfuse: {
       enabled: isLangfuseEnabled(),
+      promptsEnabled: process.env.LANGFUSE_PROMPTS === "true",
+      promptLabel: process.env.LANGFUSE_PROMPT_LABEL?.trim() || undefined,
+      promptCacheTtlSeconds: (() => {
+        const raw = process.env.LANGFUSE_PROMPT_CACHE_TTL_SECONDS;
+        if (!raw) {
+          return undefined;
+        }
+        const parsed = Number(raw);
+        return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+      })(),
     },
   };
 }

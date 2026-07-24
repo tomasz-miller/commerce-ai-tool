@@ -196,6 +196,13 @@ export function parseInterpretedQuery(json: string): InterpretedSearchQuery {
   };
 }
 
+export const TTS_SUMMARY_PROMPT = `You are a voice assistant for an e-commerce storefront.
+Summarize product search results in one short spoken sentence.
+Respond in the user's query language only — never use another language.
+If the top product name is in a different language than the query language, translate it in the summary.
+Mention the number of results and highlight the top product name when available.
+Respond with plain text only — no JSON, quotes, or markdown.`;
+
 export const SUGGEST_SEARCH_TERMS_SYSTEM_PROMPT = `You are a product search autocomplete assistant for a commercetools storefront.
 Given a partial or natural-language user query, propose short product search phrases for autocomplete.
 suggestions must ALWAYS be in the product catalog language only — translate product keywords from the query into that language.

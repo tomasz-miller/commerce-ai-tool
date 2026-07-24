@@ -1,4 +1,9 @@
-export { isLangfuseEnabled, shouldExposeTraceId, shouldTraceSuggestions } from "./enabled.js";
+export {
+  isLangfuseEnabled,
+  isLangfusePromptsEnabled,
+  shouldExposeTraceId,
+  shouldTraceSuggestions,
+} from "./enabled.js";
 export { redactBinaryInput, redactBase64ImageInput } from "./redact.js";
 export type { RedactedBinaryInput } from "./redact.js";
 export {
