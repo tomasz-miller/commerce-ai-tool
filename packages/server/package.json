@@ -86,7 +86,7 @@
     "@types/supertest": "^6.0.3",
     "@typescript/native": "catalog:",
     "express": "^5.0.1",
-    "next": "^16.2.11",
+    "next": "^16.3.1",
     "supertest": "^7.1.0",
     "tsup": "^8.4.0",
     "vitest": "^3.0.9"

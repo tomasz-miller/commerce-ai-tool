@@ -15,6 +15,7 @@ export function DemoSearch() {
       enableVoice
       enableImageSearch
       enableTts
+      enableCart
       onProductSelect={(product) => {
         console.log("Selected product:", product);
       }}

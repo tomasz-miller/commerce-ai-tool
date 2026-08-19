@@ -93,9 +93,19 @@ Integrate [Langfuse](https://langfuse.com) for every AI step in the search pipel
 
 ## v1.3 — Cart
 
-- [ ] Add to cart via commercetools Cart API
-- [ ] Anonymous and authenticated cart sessions
-- [ ] Cart preview in search results panel
+- [x] Add to cart via commercetools Cart API
+- [x] Anonymous cart sessions
+- [x] Cart preview in search results panel
+
+## v1.4 — GraphQL projections
+
+Keep Product Search API (REST) for search and facets. Use GraphQL only to fetch product card fields after the ID-only search response, to cut payload size and a REST round-trip.
+
+- [ ] GraphQL client for Product Projections (name, image, price, sku) after Product Search API
+
+## v1.5 — Authenticated cart
+
+- [ ] Authenticated cart sessions (customer login + merge)
 
 ## v2.0
 
