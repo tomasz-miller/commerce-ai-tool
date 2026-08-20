@@ -49,34 +49,26 @@ describe("buildSearchKeywordsFromProductCopy", () => {
     });
   });
 
-  it("adds up to two description phrases and dedupes against the name", () => {
+  it("ignores description copy so Suggest stays name-only", () => {
     const result = buildSearchKeywordsFromProductCopy({
       name: { "en-GB": "Wine Glass" },
       description: {
         "en-GB":
-          "Elegant crystal glass for red wine. Perfect for dinner parties. Extra filler sentence ignored.",
+          "The Wine Glass is specifically designed to enhance the experience of tasting.",
       },
     });
 
-    expect(result.status).toBe("ready");
-    if (result.status !== "ready") {
-      return;
-    }
-
-    expect(result.searchKeywords["en-GB"]).toEqual([
-      {
-        text: "Wine Glass",
-        suggestTokenizer: { type: "whitespace" },
+    expect(result).toEqual({
+      status: "ready",
+      searchKeywords: {
+        "en-GB": [
+          {
+            text: "Wine Glass",
+            suggestTokenizer: { type: "whitespace" },
+          },
+        ],
       },
-      {
-        text: "Elegant crystal glass for red wine",
-        suggestTokenizer: { type: "whitespace" },
-      },
-      {
-        text: "Perfect for dinner parties",
-        suggestTokenizer: { type: "whitespace" },
-      },
-    ]);
+    });
   });
 
   it("skips when keywords already exist unless force is set", () => {
@@ -115,22 +107,5 @@ describe("buildSearchKeywordsFromProductCopy", () => {
         description: { "en-GB": "Only description" },
       }),
     ).toEqual({ status: "skip", reason: "empty" });
-  });
-
-  it("ignores stopword-only description fragments", () => {
-    const result = buildSearchKeywordsFromProductCopy({
-      name: { "en-GB": "Mug" },
-      description: { "en-GB": "The and of. Real ceramic mug body." },
-    });
-
-    expect(result.status).toBe("ready");
-    if (result.status !== "ready") {
-      return;
-    }
-
-    expect(result.searchKeywords["en-GB"]?.map((item) => item.text)).toEqual([
-      "Mug",
-      "Real ceramic mug body",
-    ]);
   });
 });

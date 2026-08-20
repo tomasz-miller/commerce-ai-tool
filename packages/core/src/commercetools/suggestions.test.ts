@@ -43,6 +43,27 @@ describe("normalizeSearchSuggestions", () => {
     expect(result).toEqual(["Red Shoes", "Blue Shoes"]);
   });
 
+  it("skips description-like phrases while filling the limit with names", () => {
+    const result = normalizeSearchSuggestions(
+      {
+        "searchKeywords.en": [
+          {
+            text: "The Chianti Wine Glass is specifically designed to enhance the experience of",
+          },
+          { text: "Chianti Wine Glass" },
+          {
+            text: "A tapered champagne glass, also known as a champagne flute, is a type of",
+          },
+          { text: "Sparkle Champagne Glass" },
+        ],
+      },
+      "en",
+      8,
+    );
+
+    expect(result).toEqual(["Chianti Wine Glass", "Sparkle Champagne Glass"]);
+  });
+
   it("returns an empty array when the locale bucket is missing", () => {
     expect(normalizeSearchSuggestions({}, "en", 8)).toEqual([]);
   });

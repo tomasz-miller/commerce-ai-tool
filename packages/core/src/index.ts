@@ -44,6 +44,11 @@ export type {
   LocalizedTextMap,
   WhitespaceSearchKeyword,
 } from "./commercetools/build-search-keywords.js";
+export {
+  isSuggestiblePhrase,
+  SUGGESTION_MAX_LENGTH,
+  SUGGESTION_MAX_WORDS,
+} from "./commercetools/suggestion-quality.js";
 export { createSearchOrchestrator } from "./search/orchestrator.js";
 export type { SearchOrchestrator, SearchOrchestratorDeps } from "./search/orchestrator.js";
 export {

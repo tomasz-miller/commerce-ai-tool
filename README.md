@@ -15,7 +15,7 @@ AI-powered product search plugin for [commercetools](https://commercetools.com) 
 | [`@commerce-ai-tool/react`](./packages/react) | Glass morphism search widget for React / Next.js |
 | [`@commerce-ai-tool/angular`](./packages/angular) | Standalone Angular search component |
 
-## Features (v1.0)
+## Features (v1.4)
 
 - **Text search** — natural language queries interpreted by AI (OpenRouter or AWS Bedrock)
 - **Autocomplete** — optional suggestions while typing (`enableAutocomplete`): commercetools Search Term Suggestions first, with AI catalog-language phrases when Suggest is empty for cross-locale or multi-word queries
@@ -87,7 +87,7 @@ Server env vars (see `apps/demo-next/.env.example`):
 - `CAT_CATALOG_LOCALE` — primary catalog language (e.g. `no` for Norwegian shops)
 - `CAT_DEFAULT_LOCALE` — deprecated alias for `CAT_CATALOG_LOCALE`
 - `CAT_DEFAULT_CURRENCY` — default cart and price currency (e.g. `EUR`)
-- `CAT_DEFAULT_COUNTRY` — ISO country for cart price selection (required when commercetools prices are country-scoped, e.g. `DE`)
+- `CAT_DEFAULT_COUNTRY` — ISO country for cart and product-card price selection (required when commercetools prices are country-scoped, e.g. `DE`)
 - `CAT_STORE_KEY` — reserved for future store-scoped search (not applied until store scope is enabled in core)
 - `CAT_DEBUG=true` — structured console tracing for search and commercetools calls (local/dev)
 - `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` — opt-in [Langfuse](https://langfuse.com) AI observability (both required)
@@ -113,13 +113,15 @@ To backfill keywords for a demo catalog from product name/description:
 # Dry-run (default) — loads apps/demo-next/.env.local when CTP_* is unset
 pnpm seed:search-keywords
 
-# Write keywords (whitespace tokenizer on name + short description phrases)
+# Write keywords (whitespace tokenizer on product names only — re-run with --force after upgrading)
 pnpm seed:search-keywords -- --apply
 ```
 
 Options: `--force` overwrites existing keywords; `--limit N` caps how many products are processed.
 
-Search queries are built in `@commerce-ai-tool/core` (`commercetools/query-builder.ts`): multi-field full-text (`name`, `searchKeywords`, `description`), optional fuzzy name matching, AI `filters` (color, brand, category, price range), and currency-scoped price sorting. Product Projection Search is used automatically when Product Search API is unavailable.
+After changing seed logic, refresh the demo catalog with `pnpm seed:search-keywords -- --apply --force` so old description phrases are removed from `searchKeywords`.
+
+Search queries are built in `@commerce-ai-tool/core` (`commercetools/query-builder.ts`): multi-field full-text (`name`, `searchKeywords`, `description`), optional fuzzy name matching, AI `filters` (color, brand, category, price range), and currency-scoped price sorting. After Product Search returns product IDs (and facets), card fields (`name`, image, price, sku, slug) are hydrated with a narrow commercetools **GraphQL** `products` query — not a full REST Product Projection payload. REST Product Projection Search is used automatically when Product Search API is unavailable (search + cards in one step). GraphQL hydrate failures fall back to REST `productProjections().get()`.
 
 ### Langfuse (AI observability)
 

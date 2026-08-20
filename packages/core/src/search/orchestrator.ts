@@ -89,6 +89,7 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
   configureLangfusePrompts(config.langfuse);
   const limit = config.defaults?.limit ?? 20;
   const currency = config.defaults?.currency ?? "EUR";
+  const country = config.defaults?.country;
   const voiceMode = resolveVoiceMode(config);
   const timeouts = { ...DEFAULT_TIMEOUTS, ...config.timeouts };
   const resultCache = config.cache ? new SearchCache<SearchResult>(config.cache) : null;
@@ -243,7 +244,12 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
         let products = searchResult.projections;
         if (!products) {
           products = await withTimeout(
-            ct.getProductProjections(productIdsFrom(searchResult), locales.catalogLocale, currency),
+            ct.getProductProjections(
+              productIdsFrom(searchResult),
+              locales.catalogLocale,
+              currency,
+              country,
+            ),
             timeouts.commercetoolsMs,
             "ct_projections",
           );

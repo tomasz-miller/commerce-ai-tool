@@ -73,7 +73,7 @@ export interface CommerceAIDefaults {
   storeKey?: string;
   limit?: number;
   currency?: string;
-  /** ISO country code for cart price selection (optional). */
+  /** ISO country code for cart and product-card price selection (optional). */
   country?: string;
 }
 
