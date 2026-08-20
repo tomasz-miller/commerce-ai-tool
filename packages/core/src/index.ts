@@ -8,6 +8,7 @@ export { createAIProvider } from "./ai/factory.js";
 export type { AIProvider } from "./ai/types.js";
 export { createCommercetoolsClient } from "./commercetools/client.js";
 export type { CommercetoolsClient, ProductSearchBuildInput, ProductSearchQueryOptions } from "./commercetools/client.js";
+export { createCartOperations, mapCartToSnapshot, CartAccessDeniedError, CartNotFoundError } from "./commercetools/cart.js";
 export {
   FacetSchemaStore,
   resolveFacetSchema,

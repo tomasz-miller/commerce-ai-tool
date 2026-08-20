@@ -43,6 +43,10 @@ function createMockCommercetoolsClient(
     listProductTypes: vi.fn().mockResolvedValue([]),
     getProductProjections: vi.fn().mockResolvedValue([]),
     suggestSearchTerms: vi.fn().mockResolvedValue(["Red Shoes", "Running Shoes"]),
+    getCart: vi.fn().mockResolvedValue(null),
+    addToCart: vi.fn(),
+    removeLineItem: vi.fn(),
+    changeLineItemQuantity: vi.fn(),
     ...overrides,
   };
 }

@@ -64,6 +64,7 @@ TypeScript 7 ships a native `tsc` (Go) without the JavaScript Compiler API. The 
 
 - **Library packages** (`core`, `server`, `react`, `angular`): `@typescript/native` only.
 - **Root** and **`demo-next`**: both `@typescript/native` and `typescript` (API alias).
+- **Next.js 16.3+**: `demo-next` sets `experimental.useTypeScriptCli: false` so `next build` uses the TypeScript 6 JS API. CLI mode looks for `typescript/bin/tsc`, which `@typescript/typescript6` does not ship (`tsc6` only).
 
 **Declaration emit** — do not use `tsup` `dts: true` (relies on deprecated Compiler API and injects `baseUrl`). Instead:
 

@@ -1,7 +1,12 @@
 "use client";
 
 import { CommerceAISearch } from "@commerce-ai-tool/react";
-import { demoCatalogLocale, demoQueryLocale } from "../lib/search-config";
+import {
+  demoCatalogLocale,
+  demoCountry,
+  demoCurrency,
+  demoQueryLocale,
+} from "../lib/search-config";
 
 export function DemoSearch() {
   return (
@@ -10,11 +15,14 @@ export function DemoSearch() {
       theme="auto"
       catalogLocale={demoCatalogLocale}
       queryLocale={demoQueryLocale}
+      currency={demoCurrency}
+      country={demoCountry}
       enableAutocomplete
       enableFacets
       enableVoice
       enableImageSearch
       enableTts
+      enableCart
       onProductSelect={(product) => {
         console.log("Selected product:", product);
       }}

@@ -1,4 +1,4 @@
-import { logSearchTrace, SearchTimeoutError } from "@commerce-ai-tool/core";
+import { logSearchTrace, SearchTimeoutError, CartAccessDeniedError, CartNotFoundError } from "@commerce-ai-tool/core";
 import type {
   InterpretedSearchFilters,
   SuggestedFacet,
@@ -61,6 +61,14 @@ export function mapRouteError(
 
   if (error instanceof ValidationError) {
     return { message: error.message, status: 400 };
+  }
+
+  if (error instanceof CartNotFoundError) {
+    return { message: error.message, status: 404 };
+  }
+
+  if (error instanceof CartAccessDeniedError) {
+    return { message: error.message, status: 403 };
   }
 
   logServerError(context, error, extra);

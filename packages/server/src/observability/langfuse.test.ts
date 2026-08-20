@@ -135,7 +135,7 @@ describe("route actions with tracing no-op", () => {
       orchestrator: {} as CommerceAIServer["orchestrator"],
       transcribeAudio: vi.fn(),
       synthesizeSpeech: vi.fn().mockResolvedValue(Buffer.from("audio")),
-    } as CommerceAIServer;
+    } as unknown as CommerceAIServer;
 
     const audio = await executeTts(server, "Hello");
     expect(audio.toString()).toBe("audio");
@@ -147,7 +147,7 @@ describe("route actions with tracing no-op", () => {
       orchestrator: {} as CommerceAIServer["orchestrator"],
       transcribeAudio: vi.fn(),
       synthesizeSpeech: vi.fn(),
-    } as CommerceAIServer;
+    } as unknown as CommerceAIServer;
 
     await expect(executeTts(server, "  ")).rejects.toBeInstanceOf(ValidationError);
   });
