@@ -246,6 +246,28 @@ describe("createCartOperations", () => {
     expect(snapshot.version).toBe(2);
   });
 
+  it("sets country on an existing cart before adding a line item", async () => {
+    const existing = createCart();
+    const updated = createCart({ version: 2, country: "DE" });
+    const gateway = createGateway({
+      queryCarts: vi.fn().mockResolvedValue([existing]),
+      updateCart: vi.fn().mockResolvedValue(updated),
+    });
+    const ops = createCartOperations(gateway);
+
+    await ops.addToCart({
+      anonymousId: "anon-1",
+      sku: "SHOE-RED",
+      country: "DE",
+      catalogLocale: "en",
+    });
+
+    expect(gateway.updateCart).toHaveBeenCalledWith("cart-1", 1, [
+      { action: "setCountry", country: "DE" },
+      { action: "addLineItem", sku: "SHOE-RED", quantity: 1 },
+    ]);
+  });
+
   it("retries cart updates after a concurrent modification", async () => {
     const existing = createCart();
     const latest = createCart({ version: 4 });

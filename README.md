@@ -1,6 +1,10 @@
+![Commerce AI Tool](docs/logo.png)
+
 # Commerce AI Tool
 
 AI-powered product search plugin for [commercetools](https://commercetools.com) composable commerce projects. Supports React, Next.js, and Angular with voice, text, and image search.
+
+![Commerce AI Tool search widget with text, voice, and image search](docs/banner.png)
 
 ## Packages
 
@@ -83,7 +87,7 @@ Server env vars (see `apps/demo-next/.env.example`):
 - `CAT_CATALOG_LOCALE` — primary catalog language (e.g. `no` for Norwegian shops)
 - `CAT_DEFAULT_LOCALE` — deprecated alias for `CAT_CATALOG_LOCALE`
 - `CAT_DEFAULT_CURRENCY` — default cart and price currency (e.g. `EUR`)
-- `CAT_DEFAULT_COUNTRY` — optional ISO country for cart price selection
+- `CAT_DEFAULT_COUNTRY` — ISO country for cart price selection (required when commercetools prices are country-scoped, e.g. `DE`)
 - `CAT_STORE_KEY` — reserved for future store-scoped search (not applied until store scope is enabled in core)
 - `CAT_DEBUG=true` — structured console tracing for search and commercetools calls (local/dev)
 - `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` — opt-in [Langfuse](https://langfuse.com) AI observability (both required)

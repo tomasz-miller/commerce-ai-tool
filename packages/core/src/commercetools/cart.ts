@@ -139,6 +139,20 @@ function toLineItemIdentifier(input: ReturnType<typeof resolveLineItemDraft>): {
   };
 }
 
+function addLineItemActions(
+  cart: Cart,
+  input: AddToCartRequest,
+  addAction: CartUpdateAction,
+): CartUpdateAction[] {
+  const country = input.country?.trim();
+  const actions: CartUpdateAction[] = [];
+  if (country && cart.country !== country) {
+    actions.push({ action: "setCountry", country });
+  }
+  actions.push(addAction);
+  return actions;
+}
+
 export class CartNotFoundError extends Error {
   constructor(message = "Cart not found") {
     super(message);
@@ -222,13 +236,16 @@ export function createCartOperations(gateway: CartGateway): CartOperations {
 
       if (input.cartId) {
         const cart = await requireActiveCart(input);
-        const updated = await updateWithRetry(cart, [addAction]);
+        const updated = await updateWithRetry(cart, addLineItemActions(cart, input, addAction));
         return mapCartToSnapshot(updated, locale);
       }
 
       const existing = await findActiveCart(input.anonymousId);
       if (existing) {
-        const updated = await updateWithRetry(existing, [addAction]);
+        const updated = await updateWithRetry(
+          existing,
+          addLineItemActions(existing, input, addAction),
+        );
         return mapCartToSnapshot(updated, locale);
       }
 
@@ -245,7 +262,7 @@ export function createCartOperations(gateway: CartGateway): CartOperations {
         if (!raced) {
           throw error;
         }
-        const updated = await updateWithRetry(raced, [addAction]);
+        const updated = await updateWithRetry(raced, addLineItemActions(raced, input, addAction));
         return mapCartToSnapshot(updated, locale);
       }
     },
