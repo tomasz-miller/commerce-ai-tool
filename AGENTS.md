@@ -43,7 +43,7 @@ Package dependencies: `server`, `react`, `angular` → `core`.
 | Unit tests | Vitest 3 (`packages/**/*.test.ts`) |
 | Lint | ESLint 9 + typescript-eslint |
 | AI | `@openrouter/sdk`, `@aws-sdk/client-bedrock-runtime` |
-| Commerce | `@commercetools/platform-sdk`, `@commercetools/sdk-client-v2` |
+| Commerce | `@commercetools/platform-sdk`, `@commercetools/sdk-client-v2` (REST Product Search + GraphQL card hydrate via `apiRoot.graphql()`) |
 | Voice | `@elevenlabs/elevenlabs-js` (server) |
 | React UI | React ≥ 18, lucide-react |
 | Angular UI | Angular ≥ 17, RxJS ≥ 7 |

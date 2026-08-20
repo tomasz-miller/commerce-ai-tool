@@ -24,6 +24,8 @@ import {
   isProductSearchUnavailable,
   productSearchUnavailableMessage,
 } from "./search-helpers.js";
+import { hydrateProductCards } from "./product-card-hydrate.js";
+import type { GraphQLProductCardsData } from "./graphql-product-cards.js";
 import { logSearchTrace } from "../utils/dev-trace.js";
 import { normalizeSearchSuggestions } from "./suggestions.js";
 
@@ -42,6 +44,7 @@ export interface CommercetoolsClient {
     productIds: string[],
     locale: string,
     currency?: string,
+    country?: string,
   ): Promise<ProductCard[]>;
   suggestSearchTerms(
     prefix: string,
@@ -53,6 +56,8 @@ export interface CommercetoolsClient {
   removeLineItem(input: CartMutationRequest): Promise<CartSnapshot>;
   changeLineItemQuantity(input: UpdateCartQuantityRequest): Promise<CartSnapshot>;
 }
+
+type ProjectApiRoot = ReturnType<ReturnType<typeof createApiBuilderFromCtpClient>["withProjectKey"]>;
 
 export type { ProductSearchBuildInput, ProductSearchQueryOptions } from "./query-builder.js";
 
@@ -164,28 +169,33 @@ export function createCommercetoolsClient(config: CommercetoolsConfig): Commerce
       }
     },
 
-    async getProductProjections(productIds, locale, currency = "EUR") {
-      if (productIds.length === 0) {
-        return [];
-      }
-
-      const where = productIds.map((id) => `"${id}"`).join(",");
-      const response = await apiRoot
-        .productProjections()
-        .get({
-          queryArgs: {
-            where: `id in (${where})`,
-            localeProjection: locale,
-            currency,
+    async getProductProjections(productIds, locale, currency = "EUR", country) {
+      return hydrateProductCards(
+        {
+          async graphql({ query, variables }) {
+            const response = await apiRoot
+              .graphql()
+              .post({
+                body: {
+                  query,
+                  variables,
+                },
+              })
+              .execute();
+            return {
+              data: response.body.data as GraphQLProductCardsData | undefined,
+              errors: response.body.errors,
+            };
           },
-        })
-        .execute();
-
-      const orderMap = new Map(productIds.map((id, index) => [id, index]));
-
-      return (response.body.results ?? [])
-        .map((projection) => mapProjectionToCard(projection, locale, currency))
-        .sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
+          async rest({ productIds: ids, locale: restLocale, currency: restCurrency, country: restCountry }) {
+            return fetchProductCardsViaRest(apiRoot, ids, restLocale, restCurrency, restCountry);
+          },
+        },
+        productIds,
+        locale,
+        currency,
+        country,
+      );
     },
 
     async suggestSearchTerms(prefix, localeOrLocales, limit = 8) {
@@ -228,8 +238,47 @@ export function createCommercetoolsClient(config: CommercetoolsConfig): Commerce
   };
 }
 
+async function fetchProductCardsViaRest(
+  apiRoot: ProjectApiRoot,
+  productIds: string[],
+  locale: string,
+  currency: string,
+  country?: string,
+): Promise<ProductCard[]> {
+  if (productIds.length === 0) {
+    return [];
+  }
+
+  const where = productIds.map((id) => `"${id}"`).join(",");
+  logSearchTrace("commercetools", {
+    api: "productProjections.get",
+    productIds,
+    locale,
+    currency,
+    country: country ?? null,
+  });
+
+  const response = await apiRoot
+    .productProjections()
+    .get({
+      queryArgs: {
+        where: `id in (${where})`,
+        localeProjection: locale,
+        priceCurrency: currency,
+        ...(country ? { priceCountry: country } : {}),
+      },
+    })
+    .execute();
+
+  const orderMap = new Map(productIds.map((id, index) => [id, index]));
+
+  return (response.body.results ?? [])
+    .map((projection) => mapProjectionToCard(projection, locale, currency, country))
+    .sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
+}
+
 async function searchWithProductSearchApi(
-  apiRoot: ReturnType<ReturnType<typeof createApiBuilderFromCtpClient>["withProjectKey"]>,
+  apiRoot: ProjectApiRoot,
   body: ProductSearchRequest,
 ) {
   logSearchTrace("commercetools", { api: "products.search", request: body });
@@ -258,7 +307,7 @@ async function searchWithProductSearchApi(
 }
 
 async function searchWithProductProjectionSearch(
-  apiRoot: ReturnType<ReturnType<typeof createApiBuilderFromCtpClient>["withProjectKey"]>,
+  apiRoot: ProjectApiRoot,
   input: ProductSearchBuildInput,
   currency = "EUR",
   locale = "en",
@@ -313,15 +362,17 @@ function mapProjectionToCard(
       sku?: string;
       images?: Array<{ url: string }>;
       prices?: Array<{
+        country?: string;
         value: { centAmount: number; currencyCode: string; fractionDigits?: number };
       }>;
     };
   },
   locale: string,
   currency: string,
+  country?: string,
 ): ProductCard {
   const variant = projection.masterVariant;
-  const price = variant?.prices?.find((p) => p.value.currencyCode === currency) ?? variant?.prices?.[0];
+  const price = pickProjectionPrice(variant?.prices, currency, country);
   const fractionDigits = price?.value.fractionDigits ?? 2;
   const amount = price ? price.value.centAmount / Math.pow(10, fractionDigits) : undefined;
 
@@ -346,4 +397,37 @@ function mapProjectionToCard(
         }
       : undefined,
   };
+}
+
+function pickProjectionPrice(
+  prices:
+    | Array<{
+        country?: string;
+        value: { centAmount: number; currencyCode: string; fractionDigits?: number };
+      }>
+    | undefined,
+  currency: string,
+  country?: string,
+) {
+  if (!prices?.length) {
+    return undefined;
+  }
+
+  if (country) {
+    const countryMatch = prices.find(
+      (price) => price.value.currencyCode === currency && price.country === country,
+    );
+    if (countryMatch) {
+      return countryMatch;
+    }
+
+    const currencyWithoutCountry = prices.find(
+      (price) => price.value.currencyCode === currency && !price.country,
+    );
+    if (currencyWithoutCountry) {
+      return currencyWithoutCountry;
+    }
+  }
+
+  return prices.find((price) => price.value.currencyCode === currency) ?? prices[0];
 }

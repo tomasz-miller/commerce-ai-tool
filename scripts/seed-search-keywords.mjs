@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Backfill commercetools Product searchKeywords from name/description.
+ * Backfill commercetools Product searchKeywords from product names (Suggest autocomplete).
  *
  * Usage:
  *   pnpm seed:search-keywords

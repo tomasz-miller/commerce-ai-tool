@@ -27,4 +27,6 @@ TypeScript strict, tsup, Vitest, ESLint 9, Turbo 2, pnpm 9.15.9, Node ≥ 24.
 Browser → /api/commerce-ai/* (server) → core → AI + commercetools
 ```
 
+Product cards after Product Search are hydrated via commercetools GraphQL (`products` query for name/image/price/sku).
+
 Never expose API keys in client-side code.
