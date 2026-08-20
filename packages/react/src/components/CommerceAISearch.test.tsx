@@ -1,17 +1,20 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CommerceAISearch } from "./CommerceAISearch.js";
 import { useCommerceAISearch } from "../hooks/useCommerceAISearch.js";
 import { useCameraCapture } from "../hooks/useCameraCapture.js";
+import { useCart } from "../hooks/useCart.js";
 import { useVoiceSearch } from "../hooks/useVoiceSearch.js";
 
 vi.mock("../hooks/useCommerceAISearch.js");
 vi.mock("../hooks/useVoiceSearch.js");
 vi.mock("../hooks/useCameraCapture.js");
+vi.mock("../hooks/useCart.js");
 
 const mockUseCommerceAISearch = vi.mocked(useCommerceAISearch);
 const mockUseVoiceSearch = vi.mocked(useVoiceSearch);
 const mockUseCameraCapture = vi.mocked(useCameraCapture);
+const mockUseCart = vi.mocked(useCart);
 
 const defaultSearchReturn = {
   query: "",
@@ -61,11 +64,28 @@ const defaultCameraReturn = {
   clearError: vi.fn(),
 };
 
+const defaultCartReturn = {
+  cart: null,
+  anonymousId: "anon-1",
+  isLoading: false,
+  isMutating: false,
+  error: null,
+  isCartOpen: false,
+  openCart: vi.fn(),
+  closeCart: vi.fn(),
+  toggleCart: vi.fn(),
+  addToCart: vi.fn(),
+  removeFromCart: vi.fn(),
+  updateQuantity: vi.fn(),
+  refresh: vi.fn(),
+};
+
 describe("CommerceAISearch voice banner", () => {
   beforeEach(() => {
     mockUseCommerceAISearch.mockReturnValue(defaultSearchReturn);
     mockUseVoiceSearch.mockReturnValue(defaultVoiceReturn);
     mockUseCameraCapture.mockReturnValue(defaultCameraReturn);
+    mockUseCart.mockReturnValue(defaultCartReturn);
   });
 
   it("shows voice banner and active search bar while recording", () => {
@@ -121,6 +141,7 @@ describe("CommerceAISearch autocomplete", () => {
     mockUseCommerceAISearch.mockReturnValue(defaultSearchReturn);
     mockUseVoiceSearch.mockReturnValue(defaultVoiceReturn);
     mockUseCameraCapture.mockReturnValue(defaultCameraReturn);
+    mockUseCart.mockReturnValue(defaultCartReturn);
   });
 
   it("shows suggestion errors in the suggestions panel", () => {
@@ -177,6 +198,7 @@ describe("CommerceAISearch camera search", () => {
     mockUseCommerceAISearch.mockReturnValue(defaultSearchReturn);
     mockUseVoiceSearch.mockReturnValue(defaultVoiceReturn);
     mockUseCameraCapture.mockReturnValue(defaultCameraReturn);
+    mockUseCart.mockReturnValue(defaultCartReturn);
   });
 
   it("shows camera button when camera search is enabled", () => {
@@ -218,5 +240,152 @@ describe("CommerceAISearch camera search", () => {
     render(<CommerceAISearch apiBaseUrl="/api/commerce-ai" />);
 
     expect(screen.getByRole("dialog", { name: "Camera capture" })).not.toBeNull();
+  });
+});
+
+describe("CommerceAISearch cart", () => {
+  beforeEach(() => {
+    mockUseCommerceAISearch.mockReturnValue(defaultSearchReturn);
+    mockUseVoiceSearch.mockReturnValue(defaultVoiceReturn);
+    mockUseCameraCapture.mockReturnValue(defaultCameraReturn);
+    mockUseCart.mockReturnValue(defaultCartReturn);
+  });
+
+  it("hides cart controls by default", () => {
+    render(<CommerceAISearch apiBaseUrl="/api/commerce-ai" />);
+
+    expect(screen.queryByRole("button", { name: "Shopping cart" })).toBeNull();
+    expect(mockUseCart).toHaveBeenCalledWith(expect.objectContaining({ enabled: false }));
+  });
+
+  it("shows the cart toggle and add-to-cart actions when enabled", () => {
+    const addToCart = vi.fn();
+    mockUseCart.mockReturnValue({
+      ...defaultCartReturn,
+      addToCart,
+    });
+    mockUseCommerceAISearch.mockReturnValue({
+      ...defaultSearchReturn,
+      query: "glass",
+      hasSearched: true,
+      results: [{ id: "1", name: "Wine Glass", sku: "GLASS-1" }],
+    });
+
+    render(<CommerceAISearch apiBaseUrl="/api/commerce-ai" enableCart currency="EUR" />);
+
+    expect(screen.getByRole("button", { name: "Shopping cart" })).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Add to cart" }));
+    expect(addToCart).toHaveBeenCalledWith({ sku: "GLASS-1" });
+  });
+
+  it("shows an item-count badge on the cart toggle when the cart has items", () => {
+    mockUseCart.mockReturnValue({
+      ...defaultCartReturn,
+      cart: {
+        id: "cart-1",
+        version: 1,
+        lineItems: [],
+        totalPrice: { amount: 0, currency: "EUR", formatted: "€0.00" },
+        totalQuantity: 3,
+      },
+    });
+
+    render(<CommerceAISearch apiBaseUrl="/api/commerce-ai" enableCart />);
+
+    const toggle = screen.getByRole("button", { name: "Shopping cart (3)" });
+    expect(toggle.querySelector(".cat-cart-badge")?.textContent).toBe("3");
+  });
+
+  it("hides the cart badge when the cart is empty", () => {
+    render(<CommerceAISearch apiBaseUrl="/api/commerce-ai" enableCart />);
+
+    const toggle = screen.getByRole("button", { name: "Shopping cart" });
+    expect(toggle.querySelector(".cat-cart-badge")).toBeNull();
+  });
+
+  it("falls back to productId when the card has no sku", () => {
+    const addToCart = vi.fn();
+    mockUseCart.mockReturnValue({
+      ...defaultCartReturn,
+      addToCart,
+    });
+    mockUseCommerceAISearch.mockReturnValue({
+      ...defaultSearchReturn,
+      query: "glass",
+      hasSearched: true,
+      results: [{ id: "1", name: "Wine Glass", variantId: 2 }],
+    });
+
+    render(<CommerceAISearch apiBaseUrl="/api/commerce-ai" enableCart />);
+    fireEvent.click(screen.getByRole("button", { name: "Add to cart" }));
+
+    expect(addToCart).toHaveBeenCalledWith({ productId: "1", variantId: 2 });
+  });
+
+  it("shows added feedback only after a successful add", async () => {
+    const addToCart = vi.fn().mockResolvedValue({
+      id: "cart-1",
+      version: 1,
+      lineItems: [],
+      totalPrice: { amount: 0, currency: "EUR", formatted: "€0.00" },
+      totalQuantity: 1,
+    });
+    mockUseCart.mockReturnValue({
+      ...defaultCartReturn,
+      addToCart,
+    });
+    mockUseCommerceAISearch.mockReturnValue({
+      ...defaultSearchReturn,
+      query: "glass",
+      hasSearched: true,
+      results: [{ id: "1", name: "Wine Glass", sku: "GLASS-1" }],
+    });
+
+    render(<CommerceAISearch apiBaseUrl="/api/commerce-ai" enableCart />);
+    fireEvent.click(screen.getByRole("button", { name: "Add to cart" }));
+
+    expect(await screen.findByRole("button", { name: "Added to cart" })).not.toBeNull();
+  });
+
+  it("does not show added feedback when add to cart fails", async () => {
+    const addToCart = vi.fn().mockResolvedValue(null);
+    mockUseCart.mockReturnValue({
+      ...defaultCartReturn,
+      addToCart,
+    });
+    mockUseCommerceAISearch.mockReturnValue({
+      ...defaultSearchReturn,
+      query: "glass",
+      hasSearched: true,
+      results: [{ id: "1", name: "Wine Glass", sku: "GLASS-1" }],
+    });
+
+    render(<CommerceAISearch apiBaseUrl="/api/commerce-ai" enableCart />);
+    fireEvent.click(screen.getByRole("button", { name: "Add to cart" }));
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByRole("button", { name: "Added to cart" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Add to cart" })).not.toBeNull();
+  });
+
+  it("opens the cart panel when the hook reports it open", () => {
+    mockUseCart.mockReturnValue({
+      ...defaultCartReturn,
+      isCartOpen: true,
+      cart: {
+        id: "cart-1",
+        version: 1,
+        lineItems: [],
+        totalPrice: { amount: 0, currency: "EUR", formatted: "€0.00" },
+        totalQuantity: 0,
+      },
+    });
+
+    render(<CommerceAISearch apiBaseUrl="/api/commerce-ai" enableCart />);
+
+    expect(screen.getByText("Your cart is empty")).not.toBeNull();
   });
 });

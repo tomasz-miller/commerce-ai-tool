@@ -56,6 +56,26 @@ export function createExpressRouter(options: ExpressRouterOptions): Router {
     sendHandlerResponse(res, response);
   });
 
+  router.get(`${basePath}/cart`, async (req, res) => {
+    const response = await handlers.getCart(req);
+    sendHandlerResponse(res, response);
+  });
+
+  router.post(`${basePath}/cart/add`, async (req, res) => {
+    const response = await handlers.addToCart(req);
+    sendHandlerResponse(res, response);
+  });
+
+  router.post(`${basePath}/cart/remove`, async (req, res) => {
+    const response = await handlers.removeFromCart(req);
+    sendHandlerResponse(res, response);
+  });
+
+  router.post(`${basePath}/cart/update-quantity`, async (req, res) => {
+    const response = await handlers.updateCartQuantity(req);
+    sendHandlerResponse(res, response);
+  });
+
   return router;
 }
 

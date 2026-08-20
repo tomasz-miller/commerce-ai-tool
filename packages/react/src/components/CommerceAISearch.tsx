@@ -1,12 +1,14 @@
 import { useCallback, useMemo, useRef, useState } from "react";
-import { Camera, ImageIcon, Mic, Package, Search, SearchX, Square, Volume2 } from "lucide-react";
-import type { CommerceAISearchMessages, ProductCard, ThemeMode } from "@commerce-ai-tool/core";
+import { Camera, Check, ImageIcon, Mic, Package, Search, SearchX, ShoppingCart, Square, Volume2 } from "lucide-react";
+import type { CartSnapshot, CommerceAISearchMessages, ProductCard, ThemeMode } from "@commerce-ai-tool/core";
 import { resolveCommerceAISearchMessages } from "@commerce-ai-tool/core";
 import { useCommerceAISearch } from "../hooks/useCommerceAISearch.js";
 import { useCameraCapture } from "../hooks/useCameraCapture.js";
+import { useCart } from "../hooks/useCart.js";
 import { useRecordingDuration } from "../hooks/useRecordingDuration.js";
 import { useVoiceSearch } from "../hooks/useVoiceSearch.js";
 import { CameraCaptureOverlay } from "./CameraCaptureOverlay.js";
+import { CartPanel } from "./CartPanel.js";
 import { SearchFacets } from "./SearchFacets.js";
 import { VoiceStatusBanner } from "./VoiceStatusBanner.js";
 import type { CameraFacingMode } from "../utils/camera.js";
@@ -33,8 +35,16 @@ export interface CommerceAISearchProps {
   enableCameraSearch?: boolean;
   cameraFacingMode?: CameraFacingMode;
   enableTts?: boolean;
+  /** Enable built-in add-to-cart buttons and cart preview panel. Default false. */
+  enableCart?: boolean;
+  /** Currency for cart creation. Required when `enableCart` is true unless the server has a default. */
+  currency?: string;
+  /** Optional ISO country code used for commercetools price selection. */
+  country?: string;
   className?: string;
   onProductSelect?: (product: ProductCard) => void;
+  /** Fires after every cart fetch or mutation when `enableCart` is true. */
+  onCartChange?: (cart: CartSnapshot | null) => void;
 }
 
 export function CommerceAISearch({
@@ -53,8 +63,12 @@ export function CommerceAISearch({
   enableCameraSearch = true,
   cameraFacingMode = "environment",
   enableTts = true,
+  enableCart = false,
+  currency,
+  country,
   className,
   onProductSelect,
+  onCartChange,
 }: CommerceAISearchProps) {
   const messages = useMemo(
     () =>
@@ -129,6 +143,43 @@ export function CommerceAISearch({
   const recordingDuration = useRecordingDuration(voice.isRecording);
   const showVoiceBanner =
     voice.isRecording || voice.isProcessing || voice.isLoadingTts || Boolean(voice.error);
+
+  const cart = useCart({
+    apiBaseUrl,
+    currency,
+    country,
+    catalogLocale,
+    enabled: enableCart,
+    onCartChange,
+  });
+  const cartQuantity = cart.cart?.totalQuantity ?? 0;
+  const cartBadgeLabel = cartQuantity > 99 ? "99+" : String(cartQuantity);
+  const [addedProductIds, setAddedProductIds] = useState<Record<string, true>>({});
+
+  const handleAddToCart = useCallback(
+    async (product: ProductCard) => {
+      if (!product.sku && !product.id) {
+        return;
+      }
+      const next = await cart.addToCart(
+        product.sku
+          ? { sku: product.sku }
+          : { productId: product.id, variantId: product.variantId },
+      );
+      if (!next) {
+        return;
+      }
+      setAddedProductIds((current) => ({ ...current, [product.id]: true }));
+      window.setTimeout(() => {
+        setAddedProductIds((current) => {
+          const nextAdded = { ...current };
+          delete nextAdded[product.id];
+          return nextAdded;
+        });
+      }, 1200);
+    },
+    [cart.addToCart],
+  );
 
   const displayResults = results;
   const showEmptyResults =
@@ -402,6 +453,28 @@ export function CommerceAISearch({
           </button>
         )}
 
+        {enableCart && (
+          <button
+            type="button"
+            className={`cat-icon-btn cat-cart-toggle ${cart.isCartOpen ? "cat-cart-toggle--open" : ""}`}
+            onClick={cart.toggleCart}
+            aria-label={
+              cartQuantity > 0
+                ? `${messages.cartAriaLabel} (${cartBadgeLabel})`
+                : messages.cartAriaLabel
+            }
+            aria-expanded={cart.isCartOpen}
+            aria-pressed={cart.isCartOpen}
+          >
+            <ShoppingCart size={16} />
+            {cartQuantity > 0 && (
+              <span className="cat-cart-badge" aria-hidden="true">
+                {cartBadgeLabel}
+              </span>
+            )}
+          </button>
+        )}
+
         {showSuggestions && (
           <div
             id="cat-suggestions-listbox"
@@ -486,34 +559,67 @@ export function CommerceAISearch({
           {error && <div className="cat-status cat-status--error">{error}</div>}
 
           {!isLoading &&
-            displayResults.map((product) => (
-              <button
-                key={product.id}
-                type="button"
-                className="cat-result-item"
-                role="option"
-                onClick={() => onProductSelect?.(product)}
-              >
-                {product.imageUrl ? (
-                  <img
-                    src={product.imageUrl}
-                    alt=""
-                    className="cat-result-image"
-                    loading="lazy"
-                  />
-                ) : (
-                  <div className="cat-result-image cat-result-image--placeholder">
-                    <Package size={20} color="var(--cat-text-muted)" />
-                  </div>
-                )}
-                <div className="cat-result-info">
-                  <div className="cat-result-name">{product.name}</div>
-                  {product.price && (
-                    <div className="cat-result-price">{product.price.formatted}</div>
+            displayResults.map((product) => {
+              const canAdd = Boolean(product.sku || product.id);
+              const justAdded = Boolean(addedProductIds[product.id]);
+              const productBody = (
+                <>
+                  {product.imageUrl ? (
+                    <img
+                      src={product.imageUrl}
+                      alt=""
+                      className="cat-result-image"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="cat-result-image cat-result-image--placeholder">
+                      <Package size={20} color="var(--cat-text-muted)" />
+                    </div>
                   )}
+                  <div className="cat-result-info">
+                    <div className="cat-result-name">{product.name}</div>
+                    {product.price && (
+                      <div className="cat-result-price">{product.price.formatted}</div>
+                    )}
+                  </div>
+                </>
+              );
+
+              if (!enableCart) {
+                return (
+                  <button
+                    key={product.id}
+                    type="button"
+                    className="cat-result-item"
+                    role="option"
+                    onClick={() => onProductSelect?.(product)}
+                  >
+                    {productBody}
+                  </button>
+                );
+              }
+
+              return (
+                <div key={product.id} className="cat-result-item cat-result-item--with-cart" role="option">
+                  <button
+                    type="button"
+                    className="cat-result-item__select"
+                    onClick={() => onProductSelect?.(product)}
+                  >
+                    {productBody}
+                  </button>
+                  <button
+                    type="button"
+                    className={`cat-icon-btn cat-result-item__add ${justAdded ? "cat-result-item__add--added" : ""}`}
+                    aria-label={justAdded ? messages.itemAdded : canAdd ? messages.addToCart : messages.unableToAddToCart}
+                    disabled={!canAdd || cart.isMutating}
+                    onClick={() => handleAddToCart(product)}
+                  >
+                    {justAdded ? <Check size={16} /> : <ShoppingCart size={16} />}
+                  </button>
                 </div>
-              </button>
-            ))}
+              );
+            })}
 
           {!isLoading && !error && displayResults.length === 0 && showEmptyResults && (
             <div className="cat-status cat-status--empty" role="status" aria-live="polite">
@@ -529,6 +635,18 @@ export function CommerceAISearch({
             </div>
           )}
         </div>
+      )}
+
+      {enableCart && cart.isCartOpen && (
+        <CartPanel
+          cart={cart.cart}
+          isLoading={cart.isLoading || cart.isMutating}
+          error={cart.error}
+          messages={messages}
+          onClose={cart.closeCart}
+          onRemove={(lineItemId) => void cart.removeFromCart(lineItemId)}
+          onQuantityChange={(lineItemId, quantity) => void cart.updateQuantity(lineItemId, quantity)}
+        />
       )}
     </div>
   );

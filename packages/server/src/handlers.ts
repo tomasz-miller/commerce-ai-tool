@@ -10,7 +10,18 @@ import {
   executeTts,
   mapRouteError,
 } from "./route-actions.js";
+import {
+  executeAddToCart,
+  executeGetCart,
+  executeRemoveFromCart,
+  executeUpdateCartQuantity,
+} from "./cart-actions.js";
 import { parseMultipart, readJsonBody } from "./utils/multipart.js";
+import type {
+  AddToCartRequest,
+  CartMutationRequest,
+  UpdateCartQuantityRequest,
+} from "@commerce-ai-tool/core";
 
 export type { HandlerResponse } from "./handler-response.js";
 
@@ -113,7 +124,63 @@ export function createHandlers(server: CommerceAIServer) {
         return errorResponse(mapped.message, mapped.status);
       }
     },
+
+    async getCart(req: IncomingMessage): Promise<HandlerResponse> {
+      try {
+        const query = parseRequestQuery(req);
+        const result = await executeGetCart(server, {
+          anonymousId: query.anonymousId ?? "",
+          catalogLocale: query.catalogLocale,
+        });
+        return jsonResponse(result);
+      } catch (error) {
+        const mapped = mapRouteError(error, "getCart", "Get cart failed");
+        return errorResponse(mapped.message, mapped.status);
+      }
+    },
+
+    async addToCart(req: IncomingMessage): Promise<HandlerResponse> {
+      try {
+        const body = await readJsonBody<AddToCartRequest>(req);
+        const result = await executeAddToCart(server, body);
+        return jsonResponse(result);
+      } catch (error) {
+        const mapped = mapRouteError(error, "addToCart", "Add to cart failed");
+        return errorResponse(mapped.message, mapped.status);
+      }
+    },
+
+    async removeFromCart(req: IncomingMessage): Promise<HandlerResponse> {
+      try {
+        const body = await readJsonBody<CartMutationRequest>(req);
+        const result = await executeRemoveFromCart(server, body);
+        return jsonResponse(result);
+      } catch (error) {
+        const mapped = mapRouteError(error, "removeFromCart", "Remove from cart failed");
+        return errorResponse(mapped.message, mapped.status);
+      }
+    },
+
+    async updateCartQuantity(req: IncomingMessage): Promise<HandlerResponse> {
+      try {
+        const body = await readJsonBody<UpdateCartQuantityRequest>(req);
+        const result = await executeUpdateCartQuantity(server, body);
+        return jsonResponse(result);
+      } catch (error) {
+        const mapped = mapRouteError(error, "updateCartQuantity", "Update cart quantity failed");
+        return errorResponse(mapped.message, mapped.status);
+      }
+    },
   };
 }
 
 export type CommerceAIHandlers = ReturnType<typeof createHandlers>;
+
+function parseRequestQuery(req: IncomingMessage): Record<string, string> {
+  const query: Record<string, string> = {};
+  const url = new URL(req.url ?? "", "http://localhost");
+  for (const [key, value] of url.searchParams.entries()) {
+    query[key] = value;
+  }
+  return query;
+}

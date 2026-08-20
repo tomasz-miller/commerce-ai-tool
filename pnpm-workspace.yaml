@@ -36,15 +36,15 @@ minimumReleaseAgeExclude:
   - '@typescript/typescript-win32-arm64@7.0.2'
   - '@typescript/typescript-win32-x64@7.0.2'
   - typescript@7.0.2
-  - '@next/env@16.2.11'
-  - '@next/swc-darwin-arm64@16.2.11'
-  - '@next/swc-darwin-x64@16.2.11'
-  - '@next/swc-linux-arm64-gnu@16.2.11'
-  - '@next/swc-linux-arm64-musl@16.2.11'
-  - '@next/swc-linux-x64-gnu@16.2.11'
-  - '@next/swc-linux-x64-musl@16.2.11'
-  - '@next/swc-win32-arm64-msvc@16.2.11'
-  - '@next/swc-win32-x64-msvc@16.2.11'
+  - '@next/env@16.3.1'
+  - '@next/swc-darwin-arm64@16.3.1'
+  - '@next/swc-darwin-x64@16.3.1'
+  - '@next/swc-linux-arm64-gnu@16.3.1'
+  - '@next/swc-linux-arm64-musl@16.3.1'
+  - '@next/swc-linux-x64-gnu@16.3.1'
+  - '@next/swc-linux-x64-musl@16.3.1'
+  - '@next/swc-win32-arm64-msvc@16.3.1'
+  - '@next/swc-win32-x64-msvc@16.3.1'
   - '@opentelemetry/api-logs@0.221.0'
   - '@opentelemetry/configuration@0.221.0'
   - '@opentelemetry/context-async-hooks@2.10.0'
@@ -73,6 +73,6 @@ minimumReleaseAgeExclude:
   - '@opentelemetry/sdk-trace-base@2.10.0'
   - '@opentelemetry/sdk-trace-node@2.10.0'
   - '@opentelemetry/sdk-trace@2.10.0'
-  - next@16.2.11
+  - next@16.3.1
   - react-dom@19.2.8
   - react@19.2.8

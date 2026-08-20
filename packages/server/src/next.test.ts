@@ -1,4 +1,4 @@
-import type { SearchOrchestrator } from "@commerce-ai-tool/core";
+import type { CartSnapshot, CommercetoolsClient, SearchOrchestrator } from "@commerce-ai-tool/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createNextHandlers } from "./next.js";
 import type { CommerceAIServer } from "./server.js";
@@ -8,6 +8,15 @@ vi.mock("./server.js", () => ({
 }));
 
 import { createCommerceAIServer } from "./server.js";
+
+const sampleCart: CartSnapshot = {
+  id: "cart-1",
+  version: 1,
+  anonymousId: "anon-1",
+  lineItems: [],
+  totalPrice: { amount: 0, currency: "EUR", formatted: "€0.00" },
+  totalQuantity: 0,
+};
 
 function createMockServer(): CommerceAIServer {
   return {
@@ -22,6 +31,13 @@ function createMockServer(): CommerceAIServer {
         suggestions: ["Red Shoes"],
       }),
     } as unknown as SearchOrchestrator,
+    commercetools: {
+      getCart: vi.fn().mockResolvedValue(sampleCart),
+      addToCart: vi.fn().mockResolvedValue(sampleCart),
+      removeLineItem: vi.fn().mockResolvedValue(sampleCart),
+      changeLineItemQuantity: vi.fn().mockResolvedValue(sampleCart),
+    } as unknown as CommercetoolsClient,
+    cartDefaults: { currency: "EUR", catalogLocale: "en" },
     transcribeAudio: vi.fn(),
     synthesizeSpeech: vi.fn().mockResolvedValue(Buffer.from("mp3-bytes")),
   };
@@ -85,5 +101,39 @@ describe("createNextHandlers", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ status: "ok" });
+  });
+
+  it("getCart uses shared cart actions", async () => {
+    const server = createMockServer();
+    vi.mocked(createCommerceAIServer).mockReturnValue(server);
+
+    const handlers = createNextHandlers({} as never);
+    const response = await handlers.getCart(
+      new Request("http://localhost/cart?anonymousId=anon-1"),
+    );
+
+    expect(server.commercetools.getCart).toHaveBeenCalledWith("anon-1", "en");
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ cart: sampleCart });
+  });
+
+  it("addToCart uses shared cart actions", async () => {
+    const server = createMockServer();
+    vi.mocked(createCommerceAIServer).mockReturnValue(server);
+
+    const handlers = createNextHandlers({} as never);
+    const response = await handlers.addToCart(
+      new Request("http://localhost/cart/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ anonymousId: "anon-1", sku: "SHOE-RED" }),
+      }),
+    );
+
+    expect(server.commercetools.addToCart).toHaveBeenCalledWith(
+      expect.objectContaining({ anonymousId: "anon-1", sku: "SHOE-RED" }),
+    );
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ cart: sampleCart });
   });
 });

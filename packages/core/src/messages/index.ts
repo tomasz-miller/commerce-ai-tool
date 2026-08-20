@@ -31,6 +31,17 @@ export interface CommerceAISearchMessages {
   clearFilters: string;
   narrowResults: string;
   newSearch: string;
+  addToCart: string;
+  cart: string;
+  emptyCart: string;
+  removeItem: string;
+  total: string;
+  cartAriaLabel: string;
+  itemAdded: string;
+  increaseQuantity: string;
+  decreaseQuantity: string;
+  closeCart: string;
+  unableToAddToCart: string;
 }
 
 export const DEFAULT_COMMERCE_AI_SEARCH_MESSAGES: CommerceAISearchMessages = {
@@ -66,6 +77,17 @@ export const DEFAULT_COMMERCE_AI_SEARCH_MESSAGES: CommerceAISearchMessages = {
   clearFilters: "Clear filters",
   narrowResults: "Narrow your results",
   newSearch: "New search",
+  addToCart: "Add to cart",
+  cart: "Cart",
+  emptyCart: "Your cart is empty",
+  removeItem: "Remove item",
+  total: "Total",
+  cartAriaLabel: "Shopping cart",
+  itemAdded: "Added to cart",
+  increaseQuantity: "Increase quantity",
+  decreaseQuantity: "Decrease quantity",
+  closeCart: "Close cart",
+  unableToAddToCart: "This product cannot be added to the cart",
 };
 
 export function resolveCommerceAISearchMessages(

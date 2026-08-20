@@ -1,6 +1,10 @@
+![Commerce AI Tool](docs/logo.png)
+
 # Commerce AI Tool
 
 AI-powered product search plugin for [commercetools](https://commercetools.com) composable commerce projects. Supports React, Next.js, and Angular with voice, text, and image search.
+
+![Commerce AI Tool search widget with text, voice, and image search](docs/banner.png)
 
 ## Packages
 
@@ -19,6 +23,7 @@ AI-powered product search plugin for [commercetools](https://commercetools.com) 
 - **Image search** — vision AI extracts product attributes from photos
 - **Glass UI** — minimalist design with light / dark / auto theme
 - **Widget i18n** — override English default labels via the `messages` prop
+- **Anonymous cart** — optional add-to-cart and cart preview (`enableCart`), or the exported `useCart` hook for a custom UI
 - **Server-only secrets** — API keys never exposed to the browser
 
 ## Quick start (Next.js)
@@ -55,7 +60,7 @@ const handlers = createNextHandlers(loadConfigFromEnv());
 export const POST = handlers.search;
 ```
 
-See [`apps/demo-next`](./apps/demo-next) for all route handlers (search, suggestions, voice, image, TTS, health).
+See [`apps/demo-next`](./apps/demo-next) for all route handlers (search, suggestions, voice, image, TTS, cart, health).
 
 ### Locale configuration
 
@@ -81,6 +86,8 @@ Server env vars (see `apps/demo-next/.env.example`):
 
 - `CAT_CATALOG_LOCALE` — primary catalog language (e.g. `no` for Norwegian shops)
 - `CAT_DEFAULT_LOCALE` — deprecated alias for `CAT_CATALOG_LOCALE`
+- `CAT_DEFAULT_CURRENCY` — default cart and price currency (e.g. `EUR`)
+- `CAT_DEFAULT_COUNTRY` — ISO country for cart price selection (required when commercetools prices are country-scoped, e.g. `DE`)
 - `CAT_STORE_KEY` — reserved for future store-scoped search (not applied until store scope is enabled in core)
 - `CAT_DEBUG=true` — structured console tracing for search and commercetools calls (local/dev)
 - `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` — opt-in [Langfuse](https://langfuse.com) AI observability (both required)
@@ -160,17 +167,37 @@ export function Search() {
       enableImageSearch
       enableCameraSearch
       enableTts
+      enableCart
       messages={{
         placeholder: "What are you looking for?",
         searching: "Searching...",
       }}
       onProductSelect={(product) => console.log(product)}
+      onCartChange={(cart) => console.log(cart)}
     />
   );
 }
 ```
 
 Image search supports file upload, drag-and-drop, and camera capture (`enableCameraSearch`, default `true`). On mobile, the camera button opens the native camera; on desktop, it shows an in-widget preview. Use `cameraFacingMode` (`"environment"` rear or `"user"` front) when needed.
+
+### Cart (opt-in)
+
+Cart is off by default so existing `onProductSelect` integrations stay unchanged. Product row clicks still fire `onProductSelect` (for example PDP navigation). Add-to-cart is a separate icon on the card.
+
+| Level | How | UI |
+|-------|-----|----|
+| Off (default) | Omit `enableCart` | No cart icon, no add-to-cart buttons |
+| Built-in | `enableCart` | Header cart badge, slide-over preview, add-to-cart on results |
+| Custom | `useCart({ apiBaseUrl })` | Host app owns the cart UI; same `/cart` endpoints |
+
+```tsx
+import { CommerceAISearch, useCart } from "@commerce-ai-tool/react";
+
+const cart = useCart({ apiBaseUrl: "/api/commerce-ai", currency: "EUR" });
+```
+
+Host routes: `GET /cart`, `POST /cart/add`, `POST /cart/remove`, `POST /cart/update-quantity`. Anonymous session id is stored in `localStorage` (`commerce-ai-tool:anonymousId`). Authenticated customer carts are not in this release.
 
 ## Angular
 

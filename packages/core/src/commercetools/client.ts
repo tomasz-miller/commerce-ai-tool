@@ -4,8 +4,16 @@ import {
   type HttpMiddlewareOptions,
 } from "@commercetools/sdk-client-v2";
 import { createApiBuilderFromCtpClient, type ProductSearchRequest } from "@commercetools/platform-sdk";
-import type { CommercetoolsConfig, ProductCard } from "../types/index.js";
+import type {
+  AddToCartRequest,
+  CartMutationRequest,
+  CartSnapshot,
+  CommercetoolsConfig,
+  ProductCard,
+  UpdateCartQuantityRequest,
+} from "../types/index.js";
 import type { ProductTypeForFacets } from "./product-types.js";
+import { createCartOperations } from "./cart.js";
 import {
   buildProductSearchRequest,
   buildProjectionSearchQueryArgs,
@@ -40,6 +48,10 @@ export interface CommercetoolsClient {
     locale: string | string[],
     limit?: number,
   ): Promise<string[]>;
+  getCart(anonymousId: string, locale?: string): Promise<CartSnapshot | null>;
+  addToCart(input: AddToCartRequest): Promise<CartSnapshot>;
+  removeLineItem(input: CartMutationRequest): Promise<CartSnapshot>;
+  changeLineItemQuantity(input: UpdateCartQuantityRequest): Promise<CartSnapshot>;
 }
 
 export type { ProductSearchBuildInput, ProductSearchQueryOptions } from "./query-builder.js";
@@ -75,6 +87,38 @@ export function createCommercetoolsClient(config: CommercetoolsConfig): Commerce
 
   const apiRoot = createApiBuilderFromCtpClient(client).withProjectKey({
     projectKey: config.projectKey,
+  });
+
+  const cart = createCartOperations({
+    async queryCarts(where) {
+      const response = await apiRoot
+        .carts()
+        .get({
+          queryArgs: {
+            where,
+            limit: 1,
+            sort: "lastModifiedAt desc",
+          },
+        })
+        .execute();
+      return response.body.results ?? [];
+    },
+    async getCartById(id) {
+      const response = await apiRoot.carts().withId({ ID: id }).get().execute();
+      return response.body;
+    },
+    async createCart(draft) {
+      const response = await apiRoot.carts().post({ body: draft }).execute();
+      return response.body;
+    },
+    async updateCart(id, version, actions) {
+      const response = await apiRoot
+        .carts()
+        .withId({ ID: id })
+        .post({ body: { version, actions } })
+        .execute();
+      return response.body;
+    },
   });
 
   return {
@@ -176,6 +220,11 @@ export function createCommercetoolsClient(config: CommercetoolsConfig): Commerce
 
       return suggestions;
     },
+
+    getCart: cart.getCart,
+    addToCart: cart.addToCart,
+    removeLineItem: cart.removeLineItem,
+    changeLineItemQuantity: cart.changeLineItemQuantity,
   };
 }
 
@@ -260,6 +309,8 @@ function mapProjectionToCard(
     description?: Record<string, string>;
     slug?: Record<string, string>;
     masterVariant?: {
+      id?: number;
+      sku?: string;
       images?: Array<{ url: string }>;
       prices?: Array<{
         value: { centAmount: number; currencyCode: string; fractionDigits?: number };
@@ -281,6 +332,8 @@ function mapProjectionToCard(
     description:
       projection.description?.[locale] ?? projection.description?.["en"] ?? undefined,
     imageUrl: variant?.images?.[0]?.url,
+    sku: variant?.sku,
+    variantId: variant?.id,
     slug: projection.slug?.[locale] ?? projection.slug?.["en"],
     price: price
       ? {

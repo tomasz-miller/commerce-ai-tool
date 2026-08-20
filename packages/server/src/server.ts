@@ -1,6 +1,7 @@
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
-import type { CommerceAIConfig, VoiceMode } from "@commerce-ai-tool/core";
+import type { CommerceAIConfig, CommercetoolsClient, VoiceMode } from "@commerce-ai-tool/core";
 import {
+  createCommercetoolsClient,
   createSearchOrchestrator,
   isLangfuseEnabled,
   redactBinaryInput,
@@ -10,6 +11,12 @@ import type { SearchOrchestrator } from "@commerce-ai-tool/core";
 
 export interface CommerceAIServer {
   orchestrator: SearchOrchestrator;
+  commercetools: CommercetoolsClient;
+  cartDefaults: {
+    currency: string;
+    country?: string;
+    catalogLocale: string;
+  };
   transcribeAudio(audio: Buffer, mimeType: string): Promise<string>;
   synthesizeSpeech(text: string): Promise<Buffer>;
 }
@@ -24,8 +31,10 @@ export function createCommerceAIServer(options: CommerceAIServerOptions): Commer
   const voiceMode = resolveVoiceMode(config);
   const elevenlabs = config.elevenlabs ? createElevenLabsClient(config.elevenlabs) : null;
 
+  const commercetools = createCommercetoolsClient(config.commercetools);
   const orchestrator = createSearchOrchestrator({
     config,
+    commercetoolsClient: commercetools,
     transcribeAudio:
       voiceMode === "elevenlabs-stt" && elevenlabs
         ? async (audio, mimeType) =>
@@ -37,6 +46,12 @@ export function createCommerceAIServer(options: CommerceAIServerOptions): Commer
 
   return {
     orchestrator,
+    commercetools,
+    cartDefaults: {
+      currency: config.defaults?.currency ?? "EUR",
+      country: config.defaults?.country,
+      catalogLocale: config.defaults?.catalogLocale ?? config.defaults?.locale ?? "en",
+    },
     async transcribeAudio(audio, mimeType) {
       if (!elevenlabs) {
         throw new Error("ElevenLabs is not configured");
@@ -184,6 +199,7 @@ export function loadConfigFromEnv(): CommerceAIConfig {
         process.env.CAT_CATALOG_LOCALE ?? process.env.CAT_DEFAULT_LOCALE ?? "en",
       locale: process.env.CAT_DEFAULT_LOCALE,
       currency: process.env.CAT_DEFAULT_CURRENCY ?? "EUR",
+      country: process.env.CAT_DEFAULT_COUNTRY,
       limit: process.env.CAT_DEFAULT_LIMIT ? Number(process.env.CAT_DEFAULT_LIMIT) : 20,
       storeKey: process.env.CAT_STORE_KEY,
     },

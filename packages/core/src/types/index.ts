@@ -73,6 +73,8 @@ export interface CommerceAIDefaults {
   storeKey?: string;
   limit?: number;
   currency?: string;
+  /** ISO country code for cart price selection (optional). */
+  country?: string;
 }
 
 export interface LangfuseConfig {
@@ -109,12 +111,72 @@ export interface ProductCard {
   name: string;
   description?: string;
   imageUrl?: string;
+  /** SKU of the master variant — used for add-to-cart. */
+  sku?: string;
+  /** Master variant id — fallback when `sku` is missing. */
+  variantId?: number;
   price?: {
     amount: number;
     currency: string;
     formatted: string;
   };
   slug?: string;
+}
+
+export interface MoneyAmount {
+  amount: number;
+  currency: string;
+  formatted: string;
+}
+
+export interface CartLineItemSnapshot {
+  id: string;
+  name: string;
+  sku?: string;
+  productId: string;
+  quantity: number;
+  imageUrl?: string;
+  price?: MoneyAmount;
+}
+
+/** Client-safe cart shape — never the raw commercetools Cart object. */
+export interface CartSnapshot {
+  id: string;
+  version: number;
+  anonymousId?: string;
+  lineItems: CartLineItemSnapshot[];
+  totalPrice: MoneyAmount;
+  totalQuantity: number;
+}
+
+export interface AddToCartRequest {
+  anonymousId: string;
+  sku?: string;
+  productId?: string;
+  variantId?: number;
+  quantity?: number;
+  currency?: string;
+  country?: string;
+  catalogLocale?: string;
+  /** When set, add to this cart instead of looking up by anonymousId. */
+  cartId?: string;
+}
+
+export interface CartMutationRequest {
+  anonymousId: string;
+  lineItemId: string;
+  cartId?: string;
+  cartVersion?: number;
+  catalogLocale?: string;
+}
+
+export interface UpdateCartQuantityRequest extends CartMutationRequest {
+  quantity: number;
+}
+
+export interface GetCartRequest {
+  anonymousId: string;
+  catalogLocale?: string;
 }
 
 export interface SearchMeta {

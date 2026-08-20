@@ -1,7 +1,7 @@
 import { Readable } from "node:stream";
 import type { IncomingMessage } from "node:http";
-import { SearchTimeoutError } from "@commerce-ai-tool/core";
-import type { SearchOrchestrator } from "@commerce-ai-tool/core";
+import { SearchTimeoutError, CartAccessDeniedError, CartNotFoundError } from "@commerce-ai-tool/core";
+import type { CartSnapshot, CommercetoolsClient, SearchOrchestrator } from "@commerce-ai-tool/core";
 import express from "express";
 import request from "supertest";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -15,6 +15,24 @@ import {
   mapRouteError,
   ValidationError,
 } from "./route-actions.js";
+
+const sampleCart: CartSnapshot = {
+  id: "cart-1",
+  version: 2,
+  anonymousId: "anon-1",
+  lineItems: [
+    {
+      id: "li-1",
+      name: "Red Shoe",
+      sku: "SHOE-RED",
+      productId: "p1",
+      quantity: 1,
+      price: { amount: 49.99, currency: "EUR", formatted: "€49.99" },
+    },
+  ],
+  totalPrice: { amount: 49.99, currency: "EUR", formatted: "€49.99" },
+  totalQuantity: 1,
+};
 
 function createMockServer(overrides: Partial<CommerceAIServer> = {}): CommerceAIServer {
   const orchestrator = {
@@ -41,6 +59,13 @@ function createMockServer(overrides: Partial<CommerceAIServer> = {}): CommerceAI
 
   return {
     orchestrator: orchestrator as SearchOrchestrator,
+    commercetools: {
+      getCart: vi.fn().mockResolvedValue(sampleCart),
+      addToCart: vi.fn().mockResolvedValue(sampleCart),
+      removeLineItem: vi.fn().mockResolvedValue(sampleCart),
+      changeLineItemQuantity: vi.fn().mockResolvedValue(sampleCart),
+    } as unknown as CommercetoolsClient,
+    cartDefaults: { currency: "EUR", catalogLocale: "en" },
     transcribeAudio: vi.fn(),
     synthesizeSpeech: vi.fn().mockResolvedValue(Buffer.from("mp3-bytes")),
     ...overrides,
@@ -111,6 +136,28 @@ function createTestApp(handlers: ReturnType<typeof createHandlers>) {
 
   app.post("/tts", async (req, res) => {
     const response = await handlers.tts(req);
+    res.status(response.status);
+    if (response.headers) {
+      for (const [key, value] of Object.entries(response.headers)) {
+        res.setHeader(key, value);
+      }
+    }
+    res.send(response.body);
+  });
+
+  app.get("/cart", async (req, res) => {
+    const response = await handlers.getCart(req);
+    res.status(response.status);
+    if (response.headers) {
+      for (const [key, value] of Object.entries(response.headers)) {
+        res.setHeader(key, value);
+      }
+    }
+    res.send(response.body);
+  });
+
+  app.post("/cart/add", async (req, res) => {
+    const response = await handlers.addToCart(req);
     res.status(response.status);
     if (response.headers) {
       for (const [key, value] of Object.entries(response.headers)) {
@@ -218,6 +265,16 @@ describe("route-actions", () => {
     expect(mapRouteError(new ValidationError("bad input"), "search", "fail")).toEqual({
       message: "bad input",
       status: 400,
+    });
+
+    expect(mapRouteError(new CartNotFoundError(), "removeFromCart", "fail")).toEqual({
+      message: "Cart not found",
+      status: 404,
+    });
+
+    expect(mapRouteError(new CartAccessDeniedError(), "removeFromCart", "fail")).toEqual({
+      message: "Cart does not belong to this session",
+      status: 403,
     });
   });
 });
@@ -355,5 +412,67 @@ describe("createHandlers HTTP", () => {
       "image/jpeg",
       expect.objectContaining({ catalogLocale: "no" }),
     );
+  });
+
+  it("getCart returns the current cart", async () => {
+    const handlers = createHandlers(createMockServer());
+    const req = { url: "/cart?anonymousId=anon-1&catalogLocale=en" } as IncomingMessage;
+    const response = await handlers.getCart(req);
+
+    expect(response.status).toBe(200);
+    expect(JSON.parse(response.body as string)).toEqual({ cart: sampleCart });
+  });
+
+  it("addToCart validates sku or productId", async () => {
+    const handlers = createHandlers(createMockServer());
+    const response = await handlers.addToCart(jsonRequest({ anonymousId: "anon-1" }));
+
+    expect(response.status).toBe(400);
+    expect(JSON.parse(response.body as string)).toEqual({
+      error: "sku or productId is required",
+    });
+  });
+
+  it("express routes handle add to cart", async () => {
+    const server = createMockServer();
+    const app = createTestApp(createHandlers(server));
+
+    const response = await request(app)
+      .post("/cart/add")
+      .send({ anonymousId: "anon-1", sku: "SHOE-RED" })
+      .expect(200);
+
+    expect(response.body).toEqual({ cart: sampleCart });
+    expect(server.commercetools.addToCart).toHaveBeenCalledWith(
+      expect.objectContaining({ anonymousId: "anon-1", sku: "SHOE-RED" }),
+    );
+  });
+
+  it("removeFromCart returns 404 when the cart is missing", async () => {
+    const server = createMockServer();
+    vi.mocked(server.commercetools.removeLineItem).mockRejectedValue(new CartNotFoundError());
+    const handlers = createHandlers(server);
+    const response = await handlers.removeFromCart(
+      jsonRequest({ anonymousId: "anon-1", lineItemId: "li-1" }),
+    );
+
+    expect(response.status).toBe(404);
+    expect(JSON.parse(response.body as string)).toEqual({
+      error: "Cart not found",
+    });
+  });
+
+  it("removeFromCart returns 403 when the cart belongs to another session", async () => {
+    const server = createMockServer();
+    vi.mocked(server.commercetools.removeLineItem).mockRejectedValue(new CartAccessDeniedError());
+    const handlers = createHandlers(server);
+    const response = await handlers.removeFromCart(
+      jsonRequest({ anonymousId: "anon-1", lineItemId: "li-1", cartId: "cart-1" }),
+    );
+
+    expect(response.status).toBe(403);
+    expect(JSON.parse(response.body as string)).toEqual({
+      error: "Cart does not belong to this session",
+    });
   });
 });

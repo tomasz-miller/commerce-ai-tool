@@ -22,6 +22,7 @@ All files under `packages/` and `apps/` must be in **English** (see `english-onl
 - `clean: !process.argv.includes("--watch")` — watch must not wipe dist (avoids monorepo races)
 - `dts: false` in tsup — bundle JS only; emit `.d.ts` with `scripts/emit-package-dts.mjs` (native `tsc`, TypeScript 7)
 - Library packages declare `@typescript/native` only; `typescript` (Compiler API alias) stays on root and `demo-next` until TS 7.1 tooling support
+- Next.js 16.3+ in `demo-next` must set `experimental.useTypeScriptCli: false` — CLI mode requires `typescript/bin/tsc`, which the TS 6 alias does not ship
 
 ## Turbo
 
