@@ -3,6 +3,7 @@ import {
   SUGGESTIONS_MAX_LIMIT,
   SUGGESTIONS_MIN_PREFIX_LENGTH,
 } from "../types/index.js";
+import { isSuggestiblePhrase } from "../commercetools/suggestion-quality.js";
 
 export const SUGGESTIONS_MAX_PREFIX_LENGTH = 64;
 
@@ -81,7 +82,7 @@ export function shouldUseAiSuggestionFallback(
   return localesDiffer || isMultiToken;
 }
 
-/** Trim, drop empties, dedupe case-insensitively, clamp to limit. */
+/** Trim, drop empties / non-suggestible phrases, dedupe case-insensitively, clamp to limit. */
 export function normalizeSuggestionList(suggestions: string[], limit: number): string[] {
   const capped = clampSuggestionsLimit(limit);
   const seen = new Set<string>();
@@ -89,7 +90,7 @@ export function normalizeSuggestionList(suggestions: string[], limit: number): s
 
   for (const raw of suggestions) {
     const text = typeof raw === "string" ? raw.trim().replace(/\s+/g, " ") : "";
-    if (!text) {
+    if (!text || !isSuggestiblePhrase(text)) {
       continue;
     }
 

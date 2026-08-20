@@ -85,4 +85,17 @@ describe("normalizeSuggestionList", () => {
       normalizeSuggestionList([" Wooden Table ", "wooden table", "Wood", ""], 2),
     ).toEqual(["Wooden Table", "Wood"]);
   });
+
+  it("drops description-like suggestions", () => {
+    expect(
+      normalizeSuggestionList(
+        [
+          "Chianti Wine Glass",
+          "The Chianti Wine Glass is specifically designed to enhance the experience of",
+          "Sparkle Champagne Glass",
+        ],
+        8,
+      ),
+    ).toEqual(["Chianti Wine Glass", "Sparkle Champagne Glass"]);
+  });
 });

@@ -101,7 +101,7 @@ Integrate [Langfuse](https://langfuse.com) for every AI step in the search pipel
 
 Keep Product Search API (REST) for search and facets. Use GraphQL only to fetch product card fields after the ID-only search response, to cut payload size and a REST round-trip.
 
-- [ ] GraphQL client for Product Projections (name, image, price, sku) after Product Search API
+- [x] GraphQL client for Product Projections (name, image, price, sku) after Product Search API
 
 ## v1.5 — Authenticated cart
 

@@ -1,4 +1,5 @@
 import type { SuggestionResult } from "@commercetools/platform-sdk";
+import { isSuggestiblePhrase } from "./suggestion-quality.js";
 
 export function normalizeSearchSuggestions(
   result: SuggestionResult,
@@ -14,8 +15,8 @@ export function normalizeSearchSuggestions(
     const suggestions = result[key] ?? [];
 
     for (const suggestion of suggestions) {
-      const text = suggestion.text?.trim();
-      if (!text) {
+      const text = suggestion.text?.trim().replace(/\s+/g, " ");
+      if (!text || !isSuggestiblePhrase(text)) {
         continue;
       }
 
