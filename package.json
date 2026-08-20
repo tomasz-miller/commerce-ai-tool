@@ -29,18 +29,18 @@
     "sync:langfuse-prompts": "pnpm --filter @commerce-ai-tool/core build && node scripts/sync-langfuse-prompts.mjs"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.29.0",
+    "@changesets/cli": "^2.31.1",
     "@commerce-ai-tool/core": "workspace:*",
-    "@eslint/js": "^9.22.0",
-    "@langfuse/client": "^5.9.1",
+    "@eslint/js": "^9.39.5",
+    "@langfuse/client": "^5.10.1",
     "@typescript/native": "catalog:",
-    "eslint": "^9.22.0",
-    "prettier": "^3.5.3",
-    "promptfoo": "^0.120.4",
-    "turbo": "^2.4.4",
+    "eslint": "^9.39.5",
+    "prettier": "^3.9.6",
+    "promptfoo": "^0.120.27",
+    "turbo": "^2.10.11",
     "typescript": "catalog:",
-    "typescript-eslint": "^8.63.0",
-    "vitest": "^3.0.9"
+    "typescript-eslint": "^8.67.0",
+    "vitest": "^3.2.7"
   },
   "packageManager": "pnpm@11.9.0",
   "engines": {
