@@ -1,5 +1,6 @@
 import { logSearchTrace, SearchTimeoutError, CartAccessDeniedError, CartNotFoundError, InvalidCredentialsError } from "@commerce-ai-tool/core";
 import { InvalidCartSessionError } from "./cart-session.js";
+import { TooManyRequestsError } from "./login-rate-limit.js";
 import type {
   InterpretedSearchFilters,
   SuggestedFacet,
@@ -74,6 +75,10 @@ export function mapRouteError(
 
   if (error instanceof InvalidCredentialsError || error instanceof InvalidCartSessionError) {
     return { message: error.message, status: 401 };
+  }
+
+  if (error instanceof TooManyRequestsError) {
+    return { message: error.message, status: 429 };
   }
 
   logServerError(context, error, extra);

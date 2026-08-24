@@ -13,6 +13,7 @@ import request from "supertest";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHandlers } from "./handlers.js";
 import { signCartSession } from "./cart-session.js";
+import { LOGIN_RATE_LIMIT_MESSAGE, TooManyRequestsError } from "./login-rate-limit.js";
 import type { CommerceAIServer } from "./server.js";
 import {
   executeSearch,
@@ -290,6 +291,11 @@ describe("route-actions", () => {
     expect(mapRouteError(new InvalidCredentialsError(), "login", "fail")).toEqual({
       message: "Invalid credentials",
       status: 401,
+    });
+
+    expect(mapRouteError(new TooManyRequestsError(60), "login", "fail")).toEqual({
+      message: LOGIN_RATE_LIMIT_MESSAGE,
+      status: 429,
     });
   });
 });

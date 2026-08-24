@@ -178,7 +178,7 @@ Release (`.github/workflows/release.yml`) is disabled (`workflow_dispatch` only)
 
 - **Guest** — `anonymousId` in `localStorage` (`commerce-ai-tool:anonymousId`); the server looks up the Active cart by `anonymousId`.
 - **Customer** — HMAC session token (`commerce-ai-tool:customerSession`) signed with `CAT_CART_SESSION_SECRET` (falls back to `CTP_CLIENT_SECRET`). A valid token wins over `anonymousId`. `GET /cart` sends it as `x-commerce-ai-cart-session` (never as a query parameter); mutations send `sessionToken` in the JSON body.
-- **Login** — commercetools `POST /{projectKey}/login` with `anonymousCartSignInMode: MergeWithExistingCustomerCart`. A client `cartId` is merged only after the cart is loaded and `cart.anonymousId` matches the request `anonymousId`. Passwords are never logged or sent to Langfuse. Catalog `storeKey` is not applied to login (cart CRUD is project-scoped).
+- **Login** — commercetools `POST /{projectKey}/login` with `anonymousCartSignInMode: MergeWithExistingCustomerCart`. A client `cartId` is merged only after the cart is loaded and `cart.anonymousId` matches the request `anonymousId`. Passwords are never logged or sent to Langfuse. Catalog `storeKey` is not applied to login (cart CRUD is project-scoped). Express `POST /cart/login` is rate-limited (10 attempts / 15 minutes per IP); Next handlers apply the same cap in memory.
 - **Logout** — client drops the token and rotates `anonymousId` (stateless `POST /cart/logout`).
 
 ## Key config files

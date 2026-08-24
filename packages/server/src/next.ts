@@ -26,6 +26,11 @@ import {
   executeUpdateCartQuantity,
 } from "./cart-actions.js";
 import { readCartSessionHeader } from "./cart-session.js";
+import {
+  clientKeyFromWebHeaders,
+  createLoginAttemptLimiter,
+  TooManyRequestsError,
+} from "./login-rate-limit.js";
 import { parseMultipartRequest } from "./utils/multipart.js";
 
 export interface NextHandlers {
@@ -43,6 +48,8 @@ export interface NextHandlers {
   login: (req: Request) => Promise<Response>;
   logout: () => Promise<Response>;
 }
+
+const loginLimiter = createLoginAttemptLimiter();
 
 export function createNextHandlers(config: CommerceAIConfig): NextHandlers {
   const server = createCommerceAIServer({ config });
@@ -193,9 +200,20 @@ export function createNextHandlers(config: CommerceAIConfig): NextHandlers {
 
     login: async (req: Request) => {
       try {
+        loginLimiter.consume(clientKeyFromWebHeaders(req.headers));
         const result = await executeLogin(server, (await req.json()) as CartLoginRequest);
         return Response.json(result);
       } catch (error) {
+        if (error instanceof TooManyRequestsError) {
+          return Response.json(
+            { error: error.message },
+            {
+              status: 429,
+              headers: { "Retry-After": String(error.retryAfterSeconds) },
+            },
+          );
+        }
+
         const mapped = mapRouteError(error, "login", "Login failed");
         return toWebErrorResponse(mapped.message, mapped.status);
       }
