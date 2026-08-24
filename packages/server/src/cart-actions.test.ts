@@ -3,10 +3,13 @@ import { describe, expect, it, vi } from "vitest";
 import {
   executeAddToCart,
   executeGetCart,
+  executeLogin,
+  executeLogout,
   executeRemoveFromCart,
   executeUpdateCartQuantity,
 } from "./cart-actions.js";
 import { ValidationError } from "./route-actions.js";
+import { InvalidCartSessionError, signCartSession } from "./cart-session.js";
 import type { CommerceAIServer } from "./server.js";
 
 const sampleCart: CartSnapshot = {
@@ -23,11 +26,14 @@ function createServer(): CommerceAIServer {
     orchestrator: {} as SearchOrchestrator,
     commercetools: {
       getCart: vi.fn().mockResolvedValue(sampleCart),
+      getCustomerCart: vi.fn().mockResolvedValue(sampleCart),
       addToCart: vi.fn().mockResolvedValue(sampleCart),
       removeLineItem: vi.fn().mockResolvedValue(sampleCart),
       changeLineItemQuantity: vi.fn().mockResolvedValue(sampleCart),
+      loginAndMerge: vi.fn(),
     } as unknown as CommercetoolsClient,
     cartDefaults: { currency: "EUR", country: "DE", catalogLocale: "en" },
+    cartSessionSecret: "test-secret",
     transcribeAudio: vi.fn(),
     synthesizeSpeech: vi.fn(),
   };
@@ -57,6 +63,7 @@ describe("cart-actions", () => {
       country: "DE",
       catalogLocale: "en",
       cartId: undefined,
+      customerId: undefined,
     });
     expect(result).toEqual({ cart: sampleCart });
   });
@@ -106,5 +113,60 @@ describe("cart-actions", () => {
     expect(server.commercetools.changeLineItemQuantity).toHaveBeenCalledWith(
       expect.objectContaining({ quantity: 3, lineItemId: "li-1" }),
     );
+  });
+
+  it("uses the customer cart when a session token is present", async () => {
+    const server = createServer();
+    const sessionToken = signCartSession(
+      { customerId: "cust-1", email: "ada@example.com" },
+      "test-secret",
+    );
+
+    await executeGetCart(server, { sessionToken });
+
+    expect(server.commercetools.getCustomerCart).toHaveBeenCalledWith("cust-1", "en");
+    expect(server.commercetools.getCart).not.toHaveBeenCalled();
+  });
+
+  it("rejects an invalid session token", async () => {
+    await expect(executeGetCart(createServer(), { sessionToken: "nope" })).rejects.toBeInstanceOf(
+      InvalidCartSessionError,
+    );
+  });
+
+  it("logs in, merges the anonymous cart, and returns a session token", async () => {
+    const server = createServer();
+    const customerCart = { ...sampleCart, customerId: "cust-1", anonymousId: undefined };
+    vi.mocked(server.commercetools.loginAndMerge).mockResolvedValue({
+      customer: { id: "cust-1", email: "ada@example.com" },
+      cart: customerCart,
+    });
+
+    const result = await executeLogin(server, {
+      email: "ada@example.com",
+      password: "secret",
+      anonymousId: "anon-1",
+    });
+
+    expect(server.commercetools.loginAndMerge).toHaveBeenCalledWith({
+      email: "ada@example.com",
+      password: "secret",
+      anonymousId: "anon-1",
+      cartId: undefined,
+      catalogLocale: "en",
+    });
+    expect(result.customer).toEqual({ id: "cust-1", email: "ada@example.com" });
+    expect(result.cart).toEqual(customerCart);
+    expect(result.sessionToken).toEqual(expect.any(String));
+  });
+
+  it("rejects login without email or password", async () => {
+    await expect(executeLogin(createServer(), { email: "", password: "x" })).rejects.toBeInstanceOf(
+      ValidationError,
+    );
+  });
+
+  it("logs out without a cart or customer", async () => {
+    await expect(executeLogout()).resolves.toEqual({ cart: null, customer: null });
   });
 });

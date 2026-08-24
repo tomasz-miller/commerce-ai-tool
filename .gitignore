@@ -12,3 +12,5 @@ coverage
 evals/.env
 evals/output
 .promptfoo
+
+.pnpm-store/

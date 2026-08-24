@@ -15,7 +15,7 @@ AI-powered product search plugin for [commercetools](https://commercetools.com) 
 | [`@commerce-ai-tool/react`](./packages/react) | Glass morphism search widget for React / Next.js |
 | [`@commerce-ai-tool/angular`](./packages/angular) | Standalone Angular search component |
 
-## Features (v1.4)
+## Features (v1.5)
 
 - **Text search** — natural language queries interpreted by AI (OpenRouter or AWS Bedrock)
 - **Autocomplete** — optional suggestions while typing (`enableAutocomplete`): commercetools Search Term Suggestions first, with AI catalog-language phrases when Suggest is empty for cross-locale or multi-word queries
@@ -23,7 +23,7 @@ AI-powered product search plugin for [commercetools](https://commercetools.com) 
 - **Image search** — vision AI extracts product attributes from photos
 - **Glass UI** — minimalist design with light / dark / auto theme
 - **Widget i18n** — override English default labels via the `messages` prop
-- **Anonymous cart** — optional add-to-cart and cart preview (`enableCart`), or the exported `useCart` hook for a custom UI
+- **Cart** — optional add-to-cart and cart preview (`enableCart`), or the exported `useCart` hook; guest sign-in merges into the customer cart (v1.5)
 - **Server-only secrets** — API keys never exposed to the browser
 
 ## Quick start (Next.js)
@@ -88,6 +88,7 @@ Server env vars (see `apps/demo-next/.env.example`):
 - `CAT_DEFAULT_LOCALE` — deprecated alias for `CAT_CATALOG_LOCALE`
 - `CAT_DEFAULT_CURRENCY` — default cart and price currency (e.g. `EUR`)
 - `CAT_DEFAULT_COUNTRY` — ISO country for cart and product-card price selection (required when commercetools prices are country-scoped, e.g. `DE`)
+- `CAT_CART_SESSION_SECRET` — HMAC secret for customer cart session tokens (optional; falls back to `CTP_CLIENT_SECRET`. Use a dedicated secret in production)
 - `CAT_STORE_KEY` — reserved for future store-scoped search (not applied until store scope is enabled in core)
 - `CAT_DEBUG=true` — structured console tracing for search and commercetools calls (local/dev)
 - `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` — opt-in [Langfuse](https://langfuse.com) AI observability (both required)
@@ -197,9 +198,11 @@ Cart is off by default so existing `onProductSelect` integrations stay unchanged
 import { CommerceAISearch, useCart } from "@commerce-ai-tool/react";
 
 const cart = useCart({ apiBaseUrl: "/api/commerce-ai", currency: "EUR" });
+await cart.login({ email, password });
+await cart.logout();
 ```
 
-Host routes: `GET /cart`, `POST /cart/add`, `POST /cart/remove`, `POST /cart/update-quantity`. Anonymous session id is stored in `localStorage` (`commerce-ai-tool:anonymousId`). Authenticated customer carts are not in this release.
+Host routes: `GET /cart`, `POST /cart/add`, `POST /cart/remove`, `POST /cart/update-quantity`, `POST /cart/login`, `POST /cart/logout`. Guest carts use `anonymousId` in `localStorage` (`commerce-ai-tool:anonymousId`). After sign-in, the widget stores an HMAC session token (`commerce-ai-tool:customerSession`) and sends it as the `x-commerce-ai-cart-session` header on `GET /cart` and as `sessionToken` in POST bodies; a valid token wins over `anonymousId`. Do not put the session token in query strings. Commercetools login uses `anonymousCartSignInMode: MergeWithExistingCustomerCart` and only merges a client `cartId` that belongs to the current `anonymousId`. `POST /cart/login` is rate-limited (10 attempts per 15 minutes per IP on the Express router; Next handlers use the same in-memory cap). Manual testing needs a Customer account in the commercetools project (do not commit passwords). On logout the token is dropped and a new guest `anonymousId` is created.
 
 ## Angular
 

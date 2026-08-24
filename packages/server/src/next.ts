@@ -1,5 +1,6 @@
 import type {
   AddToCartRequest,
+  CartLoginRequest,
   CartMutationRequest,
   CommerceAIConfig,
   UpdateCartQuantityRequest,
@@ -19,9 +20,17 @@ import {
 import {
   executeAddToCart,
   executeGetCart,
+  executeLogin,
+  executeLogout,
   executeRemoveFromCart,
   executeUpdateCartQuantity,
 } from "./cart-actions.js";
+import { readCartSessionHeader } from "./cart-session.js";
+import {
+  clientKeyFromWebHeaders,
+  createLoginAttemptLimiter,
+  TooManyRequestsError,
+} from "./login-rate-limit.js";
 import { parseMultipartRequest } from "./utils/multipart.js";
 
 export interface NextHandlers {
@@ -36,7 +45,11 @@ export interface NextHandlers {
   addToCart: (req: Request) => Promise<Response>;
   removeFromCart: (req: Request) => Promise<Response>;
   updateCartQuantity: (req: Request) => Promise<Response>;
+  login: (req: Request) => Promise<Response>;
+  logout: () => Promise<Response>;
 }
+
+const loginLimiter = createLoginAttemptLimiter();
 
 export function createNextHandlers(config: CommerceAIConfig): NextHandlers {
   const server = createCommerceAIServer({ config });
@@ -143,6 +156,7 @@ export function createNextHandlers(config: CommerceAIConfig): NextHandlers {
         const result = await executeGetCart(server, {
           anonymousId: url.searchParams.get("anonymousId") ?? "",
           catalogLocale: url.searchParams.get("catalogLocale") ?? undefined,
+          sessionToken: readCartSessionHeader(req.headers),
         });
         return Response.json(result);
       } catch (error) {
@@ -180,6 +194,37 @@ export function createNextHandlers(config: CommerceAIConfig): NextHandlers {
         return Response.json(result);
       } catch (error) {
         const mapped = mapRouteError(error, "updateCartQuantity", "Update cart quantity failed");
+        return toWebErrorResponse(mapped.message, mapped.status);
+      }
+    },
+
+    login: async (req: Request) => {
+      try {
+        loginLimiter.consume(clientKeyFromWebHeaders(req.headers));
+        const result = await executeLogin(server, (await req.json()) as CartLoginRequest);
+        return Response.json(result);
+      } catch (error) {
+        if (error instanceof TooManyRequestsError) {
+          return Response.json(
+            { error: error.message },
+            {
+              status: 429,
+              headers: { "Retry-After": String(error.retryAfterSeconds) },
+            },
+          );
+        }
+
+        const mapped = mapRouteError(error, "login", "Login failed");
+        return toWebErrorResponse(mapped.message, mapped.status);
+      }
+    },
+
+    logout: async () => {
+      try {
+        const result = await executeLogout();
+        return Response.json(result);
+      } catch (error) {
+        const mapped = mapRouteError(error, "logout", "Logout failed");
         return toWebErrorResponse(mapped.message, mapped.status);
       }
     },

@@ -8,8 +8,13 @@ export type {
 } from "./hooks/useCommerceAISearch.js";
 export { useCart } from "./hooks/useCart.js";
 export type { AddToCartItem, UseCartOptions, UseCartReturn } from "./hooks/useCart.js";
+export { CART_SESSION_HEADER } from "@commerce-ai-tool/core";
 export { useVoiceSearch } from "./hooks/useVoiceSearch.js";
 export type { UseVoiceSearchOptions } from "./hooks/useVoiceSearch.js";
 export { useTheme, useResolvedTheme } from "./hooks/useTheme.js";
-export type { CartSnapshot, CommerceAISearchMessages } from "@commerce-ai-tool/core";
+export type {
+  CartSnapshot,
+  CommerceAISearchMessages,
+  CustomerSnapshot,
+} from "@commerce-ai-tool/core";
 export { DEFAULT_COMMERCE_AI_SEARCH_MESSAGES, resolveCommerceAISearchMessages } from "@commerce-ai-tool/core";

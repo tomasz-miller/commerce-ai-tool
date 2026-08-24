@@ -64,7 +64,8 @@
     "@commerce-ai-tool/core": "workspace:*",
     "@elevenlabs/elevenlabs-js": "^2.5.0",
     "busboy": "^1.6.0",
-    "cors": "^2.8.5"
+    "cors": "^2.8.5",
+    "express-rate-limit": "^8.6.2"
   },
   "peerDependencies": {
     "express": "^5.0.0",

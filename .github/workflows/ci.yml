@@ -29,6 +29,8 @@ jobs:
         run: pnpm typecheck
 
       - name: Test
+        # Unit tests only (Vitest). Promptfoo LLM evals and live Langfuse /
+        # OpenRouter / commercetools calls stay local — no API secrets in CI.
         run: pnpm test
 
       - name: Build

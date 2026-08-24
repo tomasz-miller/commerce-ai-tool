@@ -115,15 +115,9 @@ pnpm eval:promptfoo:redteam:generate   # regenerate attack probes (less frequent
 
 Targets `text-search-provider` with built-in plugins `hijacking` and `system-prompt-override`, plus `jailbreak` strategy. Promptfoo may ask for **email verification** on first run (remote attack generation). Optional `REDTEAM_PROVIDER_API_KEY` in `evals/.env` (see `.env.example`).
 
-## GitHub Actions (manual)
+## CI
 
-Workflow [`.github/workflows/evals-promptfoo.yml`](../.github/workflows/evals-promptfoo.yml) runs on **workflow_dispatch** only (not on every PR).
-
-1. Add repository secret **`OPENROUTER_API_KEY`** (Settings → Secrets and variables → Actions).
-2. Optional: **`REDTEAM_PROVIDER_API_KEY`** for redteam attack generation.
-3. Actions → **Promptfoo evals** → choose suite (`text` default; `all` and `redteam` cost more).
-
-Bedrock is **not** used in CI (no AWS secrets). Uploads `.promptfoo/` as an artifact.
+Promptfoo evals (live OpenRouter / Bedrock / Langfuse) are **local only**. GitHub Actions (`ci.yml`) runs deterministic Vitest unit tests and does not call external APIs or require those keys.
 
 ## Assertion types
 
