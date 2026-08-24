@@ -63,7 +63,7 @@ Local [Promptfoo](https://www.promptfoo.dev/) regression tests for AI prompts. C
 
 ### Done (optional CI — phase 5)
 
-- [x] Manual GitHub Actions workflow: `.github/workflows/evals-promptfoo.yml` (OpenRouter only)
+- [x] Promptfoo LLM evals stay local (`pnpm eval:promptfoo`); GitHub CI does not call external APIs
 
 ## v1.2 — Langfuse (AI observability)
 

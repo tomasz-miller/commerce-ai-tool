@@ -112,8 +112,7 @@ Local LLM regression tests live in [`evals/`](evals/). They call the same `creat
 - **Setup:** `cp evals/.env.example evals/.env` and set `OPENROUTER_API_KEY`
 - **Run:** `pnpm eval:promptfoo` and suite-specific `pnpm eval:promptfoo:*` scripts (see [`evals/README.md`](evals/README.md))
 - **Bedrock matrix:** text, image, and voice baseline configs include optional Bedrock columns (`skipIfUnavailable: true` — skipped when `AWS_REGION` is unset)
-- **Optional CI:** GitHub Actions workflow `evals-promptfoo.yml` (manual dispatch; secrets: `OPENROUTER_API_KEY`, optional `REDTEAM_PROVIDER_API_KEY`)
-- **Not in default CI** — requires API key and incurs LLM cost
+- **Local only** — not run in GitHub Actions. Requires `OPENROUTER_API_KEY` (and optional AWS) and incurs LLM cost
 
 Vitest (`pnpm test`) remains mandatory in CI for deterministic parser/builder logic.
 
@@ -153,6 +152,8 @@ Do not finish a task with a failing lint, typecheck, test, or build.
 Workflow `.github/workflows/ci.yml` on every PR/push to `main`:
 
 `lint` → `typecheck` → `test` → `build`
+
+`pnpm test` is Vitest unit tests only. Promptfoo LLM evals and other live calls to OpenRouter, Langfuse, Bedrock, or commercetools are not run in GitHub Actions (no API secrets required).
 
 Release (`.github/workflows/release.yml`) is disabled (`workflow_dispatch` only) until npm is configured.
 
