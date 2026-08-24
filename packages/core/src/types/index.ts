@@ -144,13 +144,37 @@ export interface CartSnapshot {
   id: string;
   version: number;
   anonymousId?: string;
+  customerId?: string;
   lineItems: CartLineItemSnapshot[];
   totalPrice: MoneyAmount;
   totalQuantity: number;
 }
 
+/** Public customer identity — never includes credentials. */
+export interface CustomerSnapshot {
+  id: string;
+  email: string;
+}
+
+/** HMAC cart session header for GET /cart — never send the token in the query string. */
+export const CART_SESSION_HEADER = "x-commerce-ai-cart-session";
+
+export interface CartLoginRequest {
+  email: string;
+  password: string;
+  anonymousId?: string;
+  cartId?: string;
+  catalogLocale?: string;
+}
+
+export interface CartLoginResult {
+  cart: CartSnapshot | null;
+  customer: CustomerSnapshot;
+}
+
 export interface AddToCartRequest {
-  anonymousId: string;
+  anonymousId?: string;
+  customerId?: string;
   sku?: string;
   productId?: string;
   variantId?: number;
@@ -158,16 +182,19 @@ export interface AddToCartRequest {
   currency?: string;
   country?: string;
   catalogLocale?: string;
-  /** When set, add to this cart instead of looking up by anonymousId. */
+  /** When set, add to this cart instead of looking up by anonymousId / customerId. */
   cartId?: string;
+  sessionToken?: string;
 }
 
 export interface CartMutationRequest {
-  anonymousId: string;
+  anonymousId?: string;
+  customerId?: string;
   lineItemId: string;
   cartId?: string;
   cartVersion?: number;
   catalogLocale?: string;
+  sessionToken?: string;
 }
 
 export interface UpdateCartQuantityRequest extends CartMutationRequest {
@@ -175,8 +202,10 @@ export interface UpdateCartQuantityRequest extends CartMutationRequest {
 }
 
 export interface GetCartRequest {
-  anonymousId: string;
+  anonymousId?: string;
+  customerId?: string;
   catalogLocale?: string;
+  sessionToken?: string;
 }
 
 export interface SearchMeta {

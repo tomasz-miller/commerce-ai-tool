@@ -1,11 +1,18 @@
 import { Readable } from "node:stream";
 import type { IncomingMessage } from "node:http";
-import { SearchTimeoutError, CartAccessDeniedError, CartNotFoundError } from "@commerce-ai-tool/core";
+import {
+  CART_SESSION_HEADER,
+  CartAccessDeniedError,
+  CartNotFoundError,
+  InvalidCredentialsError,
+  SearchTimeoutError,
+} from "@commerce-ai-tool/core";
 import type { CartSnapshot, CommercetoolsClient, SearchOrchestrator } from "@commerce-ai-tool/core";
 import express from "express";
 import request from "supertest";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHandlers } from "./handlers.js";
+import { signCartSession } from "./cart-session.js";
 import type { CommerceAIServer } from "./server.js";
 import {
   executeSearch,
@@ -61,11 +68,14 @@ function createMockServer(overrides: Partial<CommerceAIServer> = {}): CommerceAI
     orchestrator: orchestrator as SearchOrchestrator,
     commercetools: {
       getCart: vi.fn().mockResolvedValue(sampleCart),
+      getCustomerCart: vi.fn().mockResolvedValue(sampleCart),
       addToCart: vi.fn().mockResolvedValue(sampleCart),
       removeLineItem: vi.fn().mockResolvedValue(sampleCart),
       changeLineItemQuantity: vi.fn().mockResolvedValue(sampleCart),
+      loginAndMerge: vi.fn(),
     } as unknown as CommercetoolsClient,
     cartDefaults: { currency: "EUR", catalogLocale: "en" },
+    cartSessionSecret: "test-secret",
     transcribeAudio: vi.fn(),
     synthesizeSpeech: vi.fn().mockResolvedValue(Buffer.from("mp3-bytes")),
     ...overrides,
@@ -276,6 +286,11 @@ describe("route-actions", () => {
       message: "Cart does not belong to this session",
       status: 403,
     });
+
+    expect(mapRouteError(new InvalidCredentialsError(), "login", "fail")).toEqual({
+      message: "Invalid credentials",
+      status: 401,
+    });
   });
 });
 
@@ -423,6 +438,22 @@ describe("createHandlers HTTP", () => {
     expect(JSON.parse(response.body as string)).toEqual({ cart: sampleCart });
   });
 
+  it("getCart reads the session from the cart session header", async () => {
+    const server = createMockServer();
+    const token = signCartSession({ customerId: "cust-1", email: "ada@example.com" }, "test-secret");
+    const handlers = createHandlers(server);
+    const req = {
+      url: "/cart",
+      headers: { [CART_SESSION_HEADER]: token },
+    } as unknown as IncomingMessage;
+
+    const response = await handlers.getCart(req);
+
+    expect(server.commercetools.getCustomerCart).toHaveBeenCalledWith("cust-1", "en");
+    expect(server.commercetools.getCart).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+  });
+
   it("addToCart validates sku or productId", async () => {
     const handlers = createHandlers(createMockServer());
     const response = await handlers.addToCart(jsonRequest({ anonymousId: "anon-1" }));
@@ -474,5 +505,33 @@ describe("createHandlers HTTP", () => {
     expect(JSON.parse(response.body as string)).toEqual({
       error: "Cart does not belong to this session",
     });
+  });
+
+  it("login returns a customer session", async () => {
+    const server = createMockServer();
+    vi.mocked(server.commercetools.loginAndMerge).mockResolvedValue({
+      customer: { id: "cust-1", email: "ada@example.com" },
+      cart: sampleCart,
+    });
+    const handlers = createHandlers(server);
+    const response = await handlers.login(
+      jsonRequest({ email: "ada@example.com", password: "secret", anonymousId: "anon-1" }),
+    );
+
+    expect(response.status).toBe(200);
+    const body = JSON.parse(response.body as string) as {
+      customer: { id: string };
+      sessionToken: string;
+    };
+    expect(body.customer.id).toBe("cust-1");
+    expect(body.sessionToken).toEqual(expect.any(String));
+  });
+
+  it("logout clears the cart session", async () => {
+    const handlers = createHandlers(createMockServer());
+    const response = await handlers.logout();
+
+    expect(response.status).toBe(200);
+    expect(JSON.parse(response.body as string)).toEqual({ cart: null, customer: null });
   });
 });

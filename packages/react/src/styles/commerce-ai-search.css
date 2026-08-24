@@ -420,6 +420,8 @@
 }
 
 .cat-cart-panel__items {
+  flex: 1;
+  min-height: 0;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -510,6 +512,93 @@
   border-top: 1px solid var(--cat-glass-border);
   background: var(--cat-input-bg);
   font-size: 0.8125rem;
+}
+
+.cat-cart-panel__auth {
+  padding: 0.75rem 0.875rem;
+  border-bottom: 1px solid var(--cat-glass-border);
+}
+
+.cat-cart-panel__auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.cat-cart-panel__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.cat-cart-panel__label {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--cat-text-muted);
+}
+
+.cat-cart-panel__input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--cat-glass-border);
+  border-radius: 0.5rem;
+  background: var(--cat-input-bg);
+  color: var(--cat-text);
+  font-size: 0.8125rem;
+  outline: none;
+}
+
+.cat-cart-panel__input:focus {
+  border-color: var(--cat-accent);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.cat-cart-panel__input:disabled,
+.cat-cart-panel__submit:disabled,
+.cat-cart-panel__sign-out:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.cat-cart-panel__submit,
+.cat-cart-panel__sign-out {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid transparent;
+  border-radius: 0.5rem;
+  background: var(--cat-accent);
+  color: #fff;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.cat-cart-panel__submit:hover,
+.cat-cart-panel__sign-out:hover {
+  background: var(--cat-accent-hover);
+}
+
+.cat-cart-panel__signed-in {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--cat-text-muted);
+}
+
+.cat-cart-panel__sign-out {
+  flex-shrink: 0;
+  background: transparent;
+  border-color: var(--cat-glass-border);
+  color: var(--cat-text);
+}
+
+.cat-cart-panel__sign-out:hover {
+  background: var(--cat-input-bg);
 }
 
 .cat-status {

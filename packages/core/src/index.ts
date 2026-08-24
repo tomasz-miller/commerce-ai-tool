@@ -1,4 +1,5 @@
 export type * from "./types/index.js";
+export { CART_SESSION_HEADER } from "./types/index.js";
 export {
   DEFAULT_COMMERCE_AI_SEARCH_MESSAGES,
   resolveCommerceAISearchMessages,
@@ -8,7 +9,13 @@ export { createAIProvider } from "./ai/factory.js";
 export type { AIProvider } from "./ai/types.js";
 export { createCommercetoolsClient } from "./commercetools/client.js";
 export type { CommercetoolsClient, ProductSearchBuildInput, ProductSearchQueryOptions } from "./commercetools/client.js";
-export { createCartOperations, mapCartToSnapshot, CartAccessDeniedError, CartNotFoundError } from "./commercetools/cart.js";
+export {
+  createCartOperations,
+  mapCartToSnapshot,
+  CartAccessDeniedError,
+  CartNotFoundError,
+  InvalidCredentialsError,
+} from "./commercetools/cart.js";
 export {
   FacetSchemaStore,
   resolveFacetSchema,

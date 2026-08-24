@@ -1,15 +1,23 @@
 import type {
   AddToCartRequest,
+  CartLoginRequest,
   CartMutationRequest,
   CartSnapshot,
+  CustomerSnapshot,
   GetCartRequest,
   UpdateCartQuantityRequest,
 } from "@commerce-ai-tool/core";
 import type { CommerceAIServer } from "./server.js";
 import { ValidationError } from "./route-actions.js";
+import { signCartSession, verifyCartSession } from "./cart-session.js";
 
 export interface CartResponse {
   cart: CartSnapshot | null;
+}
+
+export interface CartAuthResponse extends CartResponse {
+  customer: CustomerSnapshot | null;
+  sessionToken?: string;
 }
 
 export const ANONYMOUS_ID_MAX_LENGTH = 128;
@@ -20,6 +28,16 @@ function requiredAnonymousId(value: unknown): string {
     throw new ValidationError("anonymousId is too long");
   }
   return anonymousId;
+}
+
+function optionalAnonymousId(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value.trim()) {
+    return undefined;
+  }
+  if (value.trim().length > ANONYMOUS_ID_MAX_LENGTH) {
+    throw new ValidationError("anonymousId is too long");
+  }
+  return value.trim();
 }
 
 function requiredString(value: unknown, field: string): string {
@@ -52,15 +70,34 @@ function resolveLocale(server: CommerceAIServer, catalogLocale?: string): string
   return catalogLocale?.trim() || server.cartDefaults.catalogLocale;
 }
 
+interface ResolvedCartIdentity {
+  anonymousId?: string;
+  customerId?: string;
+}
+
+function resolveCartIdentity(
+  server: CommerceAIServer,
+  sessionToken: unknown,
+  anonymousId: unknown,
+): ResolvedCartIdentity {
+  const token = optionalString(sessionToken);
+  if (token) {
+    const session = verifyCartSession(token, server.cartSessionSecret);
+    return { customerId: session.customerId };
+  }
+
+  return { anonymousId: requiredAnonymousId(anonymousId) };
+}
+
 export async function executeGetCart(
   server: CommerceAIServer,
   body: GetCartRequest,
 ): Promise<CartResponse> {
-  const anonymousId = requiredAnonymousId(body.anonymousId);
-  const cart = await server.commercetools.getCart(
-    anonymousId,
-    resolveLocale(server, body.catalogLocale),
-  );
+  const identity = resolveCartIdentity(server, body.sessionToken, body.anonymousId);
+  const locale = resolveLocale(server, body.catalogLocale);
+  const cart = identity.customerId
+    ? await server.commercetools.getCustomerCart(identity.customerId, locale)
+    : await server.commercetools.getCart(identity.anonymousId ?? "", locale);
   return { cart };
 }
 
@@ -68,7 +105,7 @@ export async function executeAddToCart(
   server: CommerceAIServer,
   body: AddToCartRequest,
 ): Promise<CartResponse> {
-  const anonymousId = requiredAnonymousId(body.anonymousId);
+  const identity = resolveCartIdentity(server, body.sessionToken, body.anonymousId);
   const sku = optionalString(body.sku);
   const productId = optionalString(body.productId);
   if (!sku && !productId) {
@@ -81,7 +118,8 @@ export async function executeAddToCart(
   }
 
   const cart = await server.commercetools.addToCart({
-    anonymousId,
+    anonymousId: identity.anonymousId,
+    customerId: identity.customerId,
     sku,
     productId,
     variantId: body.variantId,
@@ -99,11 +137,12 @@ export async function executeRemoveFromCart(
   server: CommerceAIServer,
   body: CartMutationRequest,
 ): Promise<CartResponse> {
-  const anonymousId = requiredAnonymousId(body.anonymousId);
+  const identity = resolveCartIdentity(server, body.sessionToken, body.anonymousId);
   const lineItemId = requiredString(body.lineItemId, "lineItemId");
 
   const cart = await server.commercetools.removeLineItem({
-    anonymousId,
+    anonymousId: identity.anonymousId,
+    customerId: identity.customerId,
     lineItemId,
     cartId: optionalString(body.cartId),
     cartVersion: body.cartVersion,
@@ -117,7 +156,7 @@ export async function executeUpdateCartQuantity(
   server: CommerceAIServer,
   body: UpdateCartQuantityRequest,
 ): Promise<CartResponse> {
-  const anonymousId = requiredAnonymousId(body.anonymousId);
+  const identity = resolveCartIdentity(server, body.sessionToken, body.anonymousId);
   const lineItemId = requiredString(body.lineItemId, "lineItemId");
   const quantity = optionalNumber(body.quantity);
   if (quantity === undefined || quantity < 0) {
@@ -125,7 +164,8 @@ export async function executeUpdateCartQuantity(
   }
 
   const cart = await server.commercetools.changeLineItemQuantity({
-    anonymousId,
+    anonymousId: identity.anonymousId,
+    customerId: identity.customerId,
     lineItemId,
     quantity,
     cartId: optionalString(body.cartId),
@@ -134,4 +174,36 @@ export async function executeUpdateCartQuantity(
   });
 
   return { cart };
+}
+
+export async function executeLogin(
+  server: CommerceAIServer,
+  body: CartLoginRequest,
+): Promise<CartAuthResponse> {
+  const email = requiredString(body.email, "email");
+  const password = requiredString(body.password, "password");
+  const locale = resolveLocale(server, body.catalogLocale);
+
+  const result = await server.commercetools.loginAndMerge({
+    email,
+    password,
+    anonymousId: optionalAnonymousId(body.anonymousId),
+    cartId: optionalString(body.cartId),
+    catalogLocale: locale,
+  });
+
+  const sessionToken = signCartSession(
+    { customerId: result.customer.id, email: result.customer.email },
+    server.cartSessionSecret,
+  );
+
+  return {
+    cart: result.cart,
+    customer: result.customer,
+    sessionToken,
+  };
+}
+
+export async function executeLogout(): Promise<CartAuthResponse> {
+  return { cart: null, customer: null };
 }

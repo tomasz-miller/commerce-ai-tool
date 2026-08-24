@@ -1,4 +1,5 @@
-import { logSearchTrace, SearchTimeoutError, CartAccessDeniedError, CartNotFoundError } from "@commerce-ai-tool/core";
+import { logSearchTrace, SearchTimeoutError, CartAccessDeniedError, CartNotFoundError, InvalidCredentialsError } from "@commerce-ai-tool/core";
+import { InvalidCartSessionError } from "./cart-session.js";
 import type {
   InterpretedSearchFilters,
   SuggestedFacet,
@@ -69,6 +70,10 @@ export function mapRouteError(
 
   if (error instanceof CartAccessDeniedError) {
     return { message: error.message, status: 403 };
+  }
+
+  if (error instanceof InvalidCredentialsError || error instanceof InvalidCartSessionError) {
+    return { message: error.message, status: 401 };
   }
 
   logServerError(context, error, extra);

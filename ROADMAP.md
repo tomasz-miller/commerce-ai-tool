@@ -1,6 +1,6 @@
 # Roadmap
 
-## v1.0 (current)
+## v1.0
 
 - [x] Product search via commercetools Product Search API
 - [x] AI query interpretation (OpenRouter / AWS Bedrock)
@@ -103,9 +103,9 @@ Keep Product Search API (REST) for search and facets. Use GraphQL only to fetch 
 
 - [x] GraphQL client for Product Projections (name, image, price, sku) after Product Search API
 
-## v1.5 — Authenticated cart
+## v1.5 — Authenticated cart (current)
 
-- [ ] Authenticated cart sessions (customer login + merge)
+- [x] Authenticated cart sessions (customer login + merge)
 
 ## v2.0
 

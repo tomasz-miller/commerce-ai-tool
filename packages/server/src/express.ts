@@ -76,6 +76,16 @@ export function createExpressRouter(options: ExpressRouterOptions): Router {
     sendHandlerResponse(res, response);
   });
 
+  router.post(`${basePath}/cart/login`, async (req, res) => {
+    const response = await handlers.login(req);
+    sendHandlerResponse(res, response);
+  });
+
+  router.post(`${basePath}/cart/logout`, async (_req, res) => {
+    const response = await handlers.logout();
+    sendHandlerResponse(res, response);
+  });
+
   return router;
 }
 

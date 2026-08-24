@@ -42,6 +42,13 @@ export interface CommerceAISearchMessages {
   decreaseQuantity: string;
   closeCart: string;
   unableToAddToCart: string;
+  signIn: string;
+  signOut: string;
+  email: string;
+  password: string;
+  signedInAs: string;
+  invalidCredentials: string;
+  signInFailed: string;
 }
 
 export const DEFAULT_COMMERCE_AI_SEARCH_MESSAGES: CommerceAISearchMessages = {
@@ -88,6 +95,13 @@ export const DEFAULT_COMMERCE_AI_SEARCH_MESSAGES: CommerceAISearchMessages = {
   decreaseQuantity: "Decrease quantity",
   closeCart: "Close cart",
   unableToAddToCart: "This product cannot be added to the cart",
+  signIn: "Sign in",
+  signOut: "Sign out",
+  email: "Email",
+  password: "Password",
+  signedInAs: "Signed in as",
+  invalidCredentials: "Invalid email or password",
+  signInFailed: "Sign in failed",
 };
 
 export function resolveCommerceAISearchMessages(

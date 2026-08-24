@@ -6,6 +6,8 @@ import {
 import { createApiBuilderFromCtpClient, type ProductSearchRequest } from "@commercetools/platform-sdk";
 import type {
   AddToCartRequest,
+  CartLoginRequest,
+  CartLoginResult,
   CartMutationRequest,
   CartSnapshot,
   CommercetoolsConfig,
@@ -52,9 +54,11 @@ export interface CommercetoolsClient {
     limit?: number,
   ): Promise<string[]>;
   getCart(anonymousId: string, locale?: string): Promise<CartSnapshot | null>;
+  getCustomerCart(customerId: string, locale?: string): Promise<CartSnapshot | null>;
   addToCart(input: AddToCartRequest): Promise<CartSnapshot>;
   removeLineItem(input: CartMutationRequest): Promise<CartSnapshot>;
   changeLineItemQuantity(input: UpdateCartQuantityRequest): Promise<CartSnapshot>;
+  loginAndMerge(input: CartLoginRequest): Promise<CartLoginResult>;
 }
 
 type ProjectApiRoot = ReturnType<ReturnType<typeof createApiBuilderFromCtpClient>["withProjectKey"]>;
@@ -123,6 +127,28 @@ export function createCommercetoolsClient(config: CommercetoolsConfig): Commerce
         .post({ body: { version, actions } })
         .execute();
       return response.body;
+    },
+    async loginCustomer(input) {
+      const body = {
+        email: input.email,
+        password: input.password,
+        anonymousCartSignInMode: "MergeWithExistingCustomerCart" as const,
+        ...(input.anonymousId ? { anonymousId: input.anonymousId } : {}),
+        ...(input.anonymousCartId
+          ? { anonymousCart: { typeId: "cart" as const, id: input.anonymousCartId } }
+          : {}),
+      };
+
+      const response = await apiRoot.login().post({ body }).execute();
+      const customer = response.body.customer;
+
+      return {
+        customer: {
+          id: customer.id,
+          email: customer.email ?? "",
+        },
+        cart: response.body.cart,
+      };
     },
   });
 
@@ -232,9 +258,11 @@ export function createCommercetoolsClient(config: CommercetoolsConfig): Commerce
     },
 
     getCart: cart.getCart,
+    getCustomerCart: cart.getCustomerCart,
     addToCart: cart.addToCart,
     removeLineItem: cart.removeLineItem,
     changeLineItemQuantity: cart.changeLineItemQuantity,
+    loginAndMerge: cart.loginAndMerge,
   };
 }
 
