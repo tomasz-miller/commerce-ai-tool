@@ -17,6 +17,7 @@ export interface CommerceAIServer {
     country?: string;
     catalogLocale: string;
   };
+  cartSessionSecret: string;
   transcribeAudio(audio: Buffer, mimeType: string): Promise<string>;
   synthesizeSpeech(text: string): Promise<Buffer>;
 }
@@ -52,6 +53,8 @@ export function createCommerceAIServer(options: CommerceAIServerOptions): Commer
       country: config.defaults?.country,
       catalogLocale: config.defaults?.catalogLocale ?? config.defaults?.locale ?? "en",
     },
+    cartSessionSecret:
+      process.env.CAT_CART_SESSION_SECRET?.trim() || config.commercetools.clientSecret,
     async transcribeAudio(audio, mimeType) {
       if (!elevenlabs) {
         throw new Error("ElevenLabs is not configured");

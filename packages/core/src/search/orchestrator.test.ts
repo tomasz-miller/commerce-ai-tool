@@ -44,11 +44,13 @@ function createMockCommercetoolsClient(
     getProductProjections: vi.fn().mockResolvedValue([]),
     suggestSearchTerms: vi.fn().mockResolvedValue(["Red Shoes", "Running Shoes"]),
     getCart: vi.fn().mockResolvedValue(null),
+    getCustomerCart: vi.fn().mockResolvedValue(null),
     addToCart: vi.fn(),
     removeLineItem: vi.fn(),
     changeLineItemQuantity: vi.fn(),
+    loginAndMerge: vi.fn(),
     ...overrides,
-  };
+  } as CommercetoolsClient;
 }
 
 describe("createSearchOrchestrator.suggestByText", () => {

@@ -6,6 +6,7 @@ export {
 } from "./server.js";
 export { createHandlers, type CommerceAIHandlers } from "./handlers.js";
 export { createNextHandlers, type NextHandlers } from "./next.js";
+export { CART_SESSION_HEADER } from "./cart-session.js";
 export {
   flushLangfuse,
   registerLangfuseFlush,

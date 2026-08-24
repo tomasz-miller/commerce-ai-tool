@@ -8,5 +8,5 @@ export default defineConfig({
   dts: false,
   sourcemap: true,
   clean: !isWatch,
-  external: ["express", "next/server"],
+  external: ["express", "express-rate-limit", "next/server"],
 });

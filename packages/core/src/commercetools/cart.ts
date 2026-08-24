@@ -6,8 +6,11 @@ import type {
 } from "@commercetools/platform-sdk";
 import type {
   AddToCartRequest,
+  CartLoginRequest,
+  CartLoginResult,
   CartMutationRequest,
   CartSnapshot,
+  CustomerSnapshot,
   MoneyAmount,
   UpdateCartQuantityRequest,
 } from "../types/index.js";
@@ -15,18 +18,33 @@ import type {
 export const DEFAULT_CART_CURRENCY = "EUR";
 export const DEFAULT_CART_LOCALE = "en";
 
+export interface CustomerLoginInput {
+  email: string;
+  password: string;
+  anonymousId?: string;
+  anonymousCartId?: string;
+}
+
+export interface CustomerLoginResult {
+  customer: CustomerSnapshot;
+  cart?: Cart;
+}
+
 export interface CartGateway {
   queryCarts(where: string): Promise<Cart[]>;
   getCartById(id: string): Promise<Cart>;
   createCart(draft: CartDraft): Promise<Cart>;
   updateCart(id: string, version: number, actions: CartUpdateAction[]): Promise<Cart>;
+  loginCustomer(input: CustomerLoginInput): Promise<CustomerLoginResult>;
 }
 
 export interface CartOperations {
   getCart(anonymousId: string, locale?: string): Promise<CartSnapshot | null>;
+  getCustomerCart(customerId: string, locale?: string): Promise<CartSnapshot | null>;
   addToCart(input: AddToCartRequest): Promise<CartSnapshot>;
   removeLineItem(input: CartMutationRequest): Promise<CartSnapshot>;
   changeLineItemQuantity(input: UpdateCartQuantityRequest): Promise<CartSnapshot>;
+  loginAndMerge(input: CartLoginRequest): Promise<CartLoginResult>;
 }
 
 export function escapePredicateString(value: string): string {
@@ -35,6 +53,10 @@ export function escapePredicateString(value: string): string {
 
 export function buildAnonymousCartWhere(anonymousId: string): string {
   return `anonymousId="${escapePredicateString(anonymousId)}" and cartState="Active"`;
+}
+
+export function buildCustomerCartWhere(customerId: string): string {
+  return `customerId="${escapePredicateString(customerId)}" and cartState="Active"`;
 }
 
 export function formatMoney(
@@ -86,6 +108,7 @@ export function mapCartToSnapshot(cart: Cart, locale: string): CartSnapshot {
     id: cart.id,
     version: cart.version,
     anonymousId: cart.anonymousId,
+    customerId: cart.customerId,
     lineItems,
     totalPrice: formatMoney(cart.totalPrice, locale),
     totalQuantity,
@@ -167,6 +190,30 @@ export class CartAccessDeniedError extends Error {
   }
 }
 
+export class InvalidCredentialsError extends Error {
+  constructor(message = "Invalid credentials") {
+    super(message);
+    this.name = "InvalidCredentialsError";
+  }
+}
+
+export function isInvalidCredentials(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const candidate = error as {
+    statusCode?: number;
+    body?: { statusCode?: number; errors?: Array<{ code?: string }> };
+  };
+  const status = candidate.statusCode ?? candidate.body?.statusCode;
+  if (status !== 400 && status !== 401) {
+    return false;
+  }
+
+  return candidate.body?.errors?.some((item) => item.code === "InvalidCredentials") ?? status === 401;
+}
+
 export function isConcurrentModification(error: unknown): boolean {
   if (!error || typeof error !== "object") {
     return false;
@@ -181,24 +228,79 @@ export function isConcurrentModification(error: unknown): boolean {
   return candidate.body?.errors?.some((item) => item.code === "ConcurrentModification") ?? false;
 }
 
+function assertCartOwner(
+  cart: Cart,
+  input: { anonymousId?: string; customerId?: string },
+): void {
+  if (input.customerId) {
+    if (cart.customerId !== input.customerId) {
+      throw new CartAccessDeniedError();
+    }
+    return;
+  }
+
+  if (input.anonymousId && cart.anonymousId !== input.anonymousId) {
+    throw new CartAccessDeniedError();
+  }
+}
+
 export function createCartOperations(gateway: CartGateway): CartOperations {
-  async function findActiveCart(anonymousId: string): Promise<Cart | null> {
+  async function findActiveAnonymousCart(anonymousId: string): Promise<Cart | null> {
     const results = await gateway.queryCarts(buildAnonymousCartWhere(anonymousId));
     return results[0] ?? null;
   }
 
+  async function findActiveCustomerCart(customerId: string): Promise<Cart | null> {
+    const results = await gateway.queryCarts(buildCustomerCartWhere(customerId));
+    return results[0] ?? null;
+  }
+
+  async function resolveAnonymousCartIdForLogin(input: {
+    anonymousId?: string;
+    cartId?: string;
+  }): Promise<string | undefined> {
+    if (input.cartId) {
+      if (!input.anonymousId) {
+        throw new CartAccessDeniedError();
+      }
+      const cart = await gateway.getCartById(input.cartId);
+      assertCartOwner(cart, { anonymousId: input.anonymousId });
+      if (cart.cartState !== "Active") {
+        throw new CartAccessDeniedError();
+      }
+      return cart.id;
+    }
+
+    if (input.anonymousId) {
+      const anonymousCart = await findActiveAnonymousCart(input.anonymousId);
+      return anonymousCart?.id;
+    }
+
+    return undefined;
+  }
+
   async function requireActiveCart(
-    input: { anonymousId: string; cartId?: string },
+    input: { anonymousId?: string; customerId?: string; cartId?: string },
   ): Promise<Cart> {
     if (input.cartId) {
       const cart = await gateway.getCartById(input.cartId);
-      if (cart.anonymousId !== input.anonymousId) {
-        throw new CartAccessDeniedError();
+      assertCartOwner(cart, input);
+      return cart;
+    }
+
+    if (input.customerId) {
+      const cart = await findActiveCustomerCart(input.customerId);
+      if (!cart) {
+        throw new CartNotFoundError();
       }
       return cart;
     }
 
-    const cart = await findActiveCart(input.anonymousId);
+    if (!input.anonymousId) {
+      throw new CartNotFoundError();
+    }
+
+    const cart = await findActiveAnonymousCart(input.anonymousId);
     if (!cart) {
       throw new CartNotFoundError();
     }
@@ -221,9 +323,27 @@ export function createCartOperations(gateway: CartGateway): CartOperations {
     }
   }
 
+  async function findExistingCart(input: {
+    anonymousId?: string;
+    customerId?: string;
+  }): Promise<Cart | null> {
+    if (input.customerId) {
+      return findActiveCustomerCart(input.customerId);
+    }
+    if (input.anonymousId) {
+      return findActiveAnonymousCart(input.anonymousId);
+    }
+    return null;
+  }
+
   return {
     async getCart(anonymousId, locale) {
-      const cart = await findActiveCart(anonymousId);
+      const cart = await findActiveAnonymousCart(anonymousId);
+      return cart ? mapCartToSnapshot(cart, resolveCartLocale(locale)) : null;
+    },
+
+    async getCustomerCart(customerId, locale) {
+      const cart = await findActiveCustomerCart(customerId);
       return cart ? mapCartToSnapshot(cart, resolveCartLocale(locale)) : null;
     },
 
@@ -240,7 +360,7 @@ export function createCartOperations(gateway: CartGateway): CartOperations {
         return mapCartToSnapshot(updated, locale);
       }
 
-      const existing = await findActiveCart(input.anonymousId);
+      const existing = await findExistingCart(input);
       if (existing) {
         const updated = await updateWithRetry(
           existing,
@@ -253,12 +373,13 @@ export function createCartOperations(gateway: CartGateway): CartOperations {
         const created = await gateway.createCart({
           currency: input.currency?.trim() || DEFAULT_CART_CURRENCY,
           country: input.country?.trim() || undefined,
-          anonymousId: input.anonymousId,
+          anonymousId: input.customerId ? undefined : input.anonymousId,
+          customerId: input.customerId,
           lineItems: [draft],
         });
         return mapCartToSnapshot(created, locale);
       } catch (error) {
-        const raced = await findActiveCart(input.anonymousId);
+        const raced = await findExistingCart(input);
         if (!raced) {
           throw error;
         }
@@ -287,6 +408,37 @@ export function createCartOperations(gateway: CartGateway): CartOperations {
         },
       ]);
       return mapCartToSnapshot(updated, locale);
+    },
+
+    async loginAndMerge(input) {
+      const locale = resolveCartLocale(input.catalogLocale);
+      const anonymousCartId = await resolveAnonymousCartIdForLogin(input);
+
+      let result: CustomerLoginResult;
+      try {
+        result = await gateway.loginCustomer({
+          email: input.email,
+          password: input.password,
+          anonymousId: input.anonymousId,
+          anonymousCartId,
+        });
+      } catch (error) {
+        if (isInvalidCredentials(error)) {
+          throw new InvalidCredentialsError();
+        }
+        throw error;
+      }
+
+      const cart = result.cart
+        ? mapCartToSnapshot(result.cart, locale)
+        : await findActiveCustomerCart(result.customer.id).then((found) =>
+            found ? mapCartToSnapshot(found, locale) : null,
+          );
+
+      return {
+        customer: result.customer,
+        cart,
+      };
     },
   };
 }

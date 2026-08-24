@@ -112,8 +112,7 @@ Local LLM regression tests live in [`evals/`](evals/). They call the same `creat
 - **Setup:** `cp evals/.env.example evals/.env` and set `OPENROUTER_API_KEY`
 - **Run:** `pnpm eval:promptfoo` and suite-specific `pnpm eval:promptfoo:*` scripts (see [`evals/README.md`](evals/README.md))
 - **Bedrock matrix:** text, image, and voice baseline configs include optional Bedrock columns (`skipIfUnavailable: true` — skipped when `AWS_REGION` is unset)
-- **Optional CI:** GitHub Actions workflow `evals-promptfoo.yml` (manual dispatch; secrets: `OPENROUTER_API_KEY`, optional `REDTEAM_PROVIDER_API_KEY`)
-- **Not in default CI** — requires API key and incurs LLM cost
+- **Local only** — not run in GitHub Actions. Requires `OPENROUTER_API_KEY` (and optional AWS) and incurs LLM cost
 
 Vitest (`pnpm test`) remains mandatory in CI for deterministic parser/builder logic.
 
@@ -154,6 +153,8 @@ Workflow `.github/workflows/ci.yml` on every PR/push to `main`:
 
 `lint` → `typecheck` → `test` → `build`
 
+`pnpm test` is Vitest unit tests only. Promptfoo LLM evals and other live calls to OpenRouter, Langfuse, Bedrock, or commercetools are not run in GitHub Actions (no API secrets required).
+
 Release (`.github/workflows/release.yml`) is disabled (`workflow_dispatch` only) until npm is configured.
 
 ## Typical feature structure
@@ -173,6 +174,13 @@ Release (`.github/workflows/release.yml`) is disabled (`workflow_dispatch` only)
 - Resolver: `packages/core/src/locale/resolve.ts` (`resolveSearchLocales`).
 - Dev tracing: `logSearchTrace` in `packages/core/src/utils/dev-trace.ts` (enabled when `NODE_ENV !== production` or `CAT_DEBUG=true`).
 - Langfuse (opt-in): set `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY`; core wraps AI + commercetools spans under the HTTP request span; autocomplete suggestions are not traced unless `LANGFUSE_TRACE_SUGGESTIONS=true`. Host registers `LangfuseSpanProcessor` (see `apps/demo-next/src/instrumentation.ts` and `@commerce-ai-tool/server/flush`). Complements `CAT_DEBUG`; see README “Langfuse (AI observability)”. Optional managed system prompts: `LANGFUSE_PROMPTS=true` or `CommerceAIConfig.langfuse.promptsEnabled` (applied by `createSearchOrchestrator` via `configureLangfusePrompts`) + `pnpm sync:langfuse-prompts` (default label `staging`; promote with `--label production` after evals). Git catalog remains source of truth / eval fallback (`createEvalAIProvider` forces local prompts).
+
+## Cart session
+
+- **Guest** — `anonymousId` in `localStorage` (`commerce-ai-tool:anonymousId`); the server looks up the Active cart by `anonymousId`.
+- **Customer** — HMAC session token (`commerce-ai-tool:customerSession`) signed with `CAT_CART_SESSION_SECRET` (falls back to `CTP_CLIENT_SECRET`). A valid token wins over `anonymousId`. `GET /cart` sends it as `x-commerce-ai-cart-session` (never as a query parameter); mutations send `sessionToken` in the JSON body.
+- **Login** — commercetools `POST /{projectKey}/login` with `anonymousCartSignInMode: MergeWithExistingCustomerCart`. A client `cartId` is merged only after the cart is loaded and `cart.anonymousId` matches the request `anonymousId`. Passwords are never logged or sent to Langfuse. Catalog `storeKey` is not applied to login (cart CRUD is project-scoped). Express `POST /cart/login` is rate-limited (10 attempts / 15 minutes per IP); Next handlers apply the same cap in memory.
+- **Logout** — client drops the token and rotates `anonymousId` (stateless `POST /cart/logout`).
 
 ## Key config files
 

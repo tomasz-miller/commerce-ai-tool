@@ -67,8 +67,11 @@ const defaultCameraReturn = {
 const defaultCartReturn = {
   cart: null,
   anonymousId: "anon-1",
+  customer: null,
+  isAuthenticated: false,
   isLoading: false,
   isMutating: false,
+  isLoggingIn: false,
   error: null,
   isCartOpen: false,
   openCart: vi.fn(),
@@ -77,6 +80,8 @@ const defaultCartReturn = {
   addToCart: vi.fn(),
   removeFromCart: vi.fn(),
   updateQuantity: vi.fn(),
+  login: vi.fn(),
+  logout: vi.fn(),
   refresh: vi.fn(),
 };
 

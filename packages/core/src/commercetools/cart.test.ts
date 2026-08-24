@@ -2,11 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import type { Cart, CartUpdateAction } from "@commercetools/platform-sdk";
 import {
   buildAnonymousCartWhere,
+  buildCustomerCartWhere,
   CartAccessDeniedError,
   CartNotFoundError,
   createCartOperations,
   escapePredicateString,
   formatMoney,
+  InvalidCredentialsError,
   isConcurrentModification,
   mapCartToSnapshot,
   resolveLineItemDraft,
@@ -78,6 +80,7 @@ function createGateway(overrides: Partial<CartGateway> = {}): CartGateway {
     getCartById: vi.fn().mockResolvedValue(createCart()),
     createCart: vi.fn().mockResolvedValue(createCart()),
     updateCart: vi.fn().mockResolvedValue(createCart({ version: 2 })),
+    loginCustomer: vi.fn(),
     ...overrides,
   };
 }
@@ -90,6 +93,12 @@ describe("cart helpers", () => {
   it("builds an anonymous active-cart where clause", () => {
     expect(buildAnonymousCartWhere("anon-1")).toBe(
       'anonymousId="anon-1" and cartState="Active"',
+    );
+  });
+
+  it("builds a customer active-cart where clause", () => {
+    expect(buildCustomerCartWhere("cust-1")).toBe(
+      'customerId="cust-1" and cartState="Active"',
     );
   });
 
@@ -381,5 +390,175 @@ describe("createCartOperations", () => {
     await expect(ops.addToCart({ anonymousId: "anon-1" })).rejects.toThrow(
       "sku or productId is required",
     );
+  });
+
+  it("creates a customer cart when adding as an authenticated customer", async () => {
+    const created = createCart({ anonymousId: undefined, customerId: "cust-1" });
+    const gateway = createGateway({
+      createCart: vi.fn().mockResolvedValue(created),
+    });
+    const ops = createCartOperations(gateway);
+
+    const snapshot = await ops.addToCart({
+      customerId: "cust-1",
+      sku: "SHOE-RED",
+      catalogLocale: "en",
+    });
+
+    expect(gateway.createCart).toHaveBeenCalledWith({
+      currency: "EUR",
+      country: undefined,
+      anonymousId: undefined,
+      customerId: "cust-1",
+      lineItems: [{ sku: "SHOE-RED", quantity: 1 }],
+    });
+    expect(snapshot.customerId).toBe("cust-1");
+    expect(gateway.queryCarts).toHaveBeenCalledWith(
+      'customerId="cust-1" and cartState="Active"',
+    );
+  });
+
+  it("rejects customer mutations against another customer's cart", async () => {
+    const gateway = createGateway({
+      getCartById: vi.fn().mockResolvedValue(createCart({ customerId: "other" })),
+    });
+    const ops = createCartOperations(gateway);
+
+    await expect(
+      ops.removeLineItem({
+        customerId: "cust-1",
+        cartId: "cart-1",
+        lineItemId: "li-1",
+      }),
+    ).rejects.toBeInstanceOf(CartAccessDeniedError);
+  });
+
+  it("merges an anonymous cart on login when the customer has no cart", async () => {
+    const anonymousCart = createCart({ id: "anon-cart" });
+    const merged = createCart({
+      id: "anon-cart",
+      anonymousId: undefined,
+      customerId: "cust-1",
+    });
+    const gateway = createGateway({
+      queryCarts: vi.fn().mockResolvedValue([anonymousCart]),
+      loginCustomer: vi.fn().mockResolvedValue({
+        customer: { id: "cust-1", email: "ada@example.com" },
+        cart: merged,
+      }),
+    });
+    const ops = createCartOperations(gateway);
+
+    const result = await ops.loginAndMerge({
+      email: "ada@example.com",
+      password: "secret",
+      anonymousId: "anon-1",
+      catalogLocale: "en",
+    });
+
+    expect(gateway.loginCustomer).toHaveBeenCalledWith({
+      email: "ada@example.com",
+      password: "secret",
+      anonymousId: "anon-1",
+      anonymousCartId: "anon-cart",
+    });
+    expect(result.customer).toEqual({ id: "cust-1", email: "ada@example.com" });
+    expect(result.cart?.id).toBe("anon-cart");
+    expect(result.cart?.customerId).toBe("cust-1");
+  });
+
+  it("merges a client cartId only when it belongs to the anonymous session", async () => {
+    const owned = createCart({ id: "anon-cart", anonymousId: "anon-1" });
+    const merged = createCart({ id: "anon-cart", customerId: "cust-1", anonymousId: undefined });
+    const gateway = createGateway({
+      getCartById: vi.fn().mockResolvedValue(owned),
+      loginCustomer: vi.fn().mockResolvedValue({
+        customer: { id: "cust-1", email: "ada@example.com" },
+        cart: merged,
+      }),
+    });
+    const ops = createCartOperations(gateway);
+
+    const result = await ops.loginAndMerge({
+      email: "ada@example.com",
+      password: "secret",
+      anonymousId: "anon-1",
+      cartId: "anon-cart",
+    });
+
+    expect(gateway.getCartById).toHaveBeenCalledWith("anon-cart");
+    expect(gateway.loginCustomer).toHaveBeenCalledWith(
+      expect.objectContaining({ anonymousCartId: "anon-cart", anonymousId: "anon-1" }),
+    );
+    expect(result.cart?.id).toBe("anon-cart");
+  });
+
+  it("rejects a client cartId that does not belong to the anonymous session", async () => {
+    const gateway = createGateway({
+      getCartById: vi.fn().mockResolvedValue(createCart({ id: "other-cart", anonymousId: "other-anon" })),
+      loginCustomer: vi.fn(),
+    });
+    const ops = createCartOperations(gateway);
+
+    await expect(
+      ops.loginAndMerge({
+        email: "ada@example.com",
+        password: "secret",
+        anonymousId: "anon-1",
+        cartId: "other-cart",
+      }),
+    ).rejects.toBeInstanceOf(CartAccessDeniedError);
+    expect(gateway.loginCustomer).not.toHaveBeenCalled();
+  });
+
+  it("rejects a client cartId when anonymousId is missing", async () => {
+    const gateway = createGateway({
+      loginCustomer: vi.fn(),
+    });
+    const ops = createCartOperations(gateway);
+
+    await expect(
+      ops.loginAndMerge({
+        email: "ada@example.com",
+        password: "secret",
+        cartId: "anon-cart",
+      }),
+    ).rejects.toBeInstanceOf(CartAccessDeniedError);
+    expect(gateway.loginCustomer).not.toHaveBeenCalled();
+  });
+
+  it("looks up the customer cart when login returns no cart", async () => {
+    const customerCart = createCart({ id: "cust-cart", customerId: "cust-1" });
+    const gateway = createGateway({
+      loginCustomer: vi.fn().mockResolvedValue({
+        customer: { id: "cust-1", email: "ada@example.com" },
+      }),
+      queryCarts: vi.fn().mockResolvedValue([customerCart]),
+    });
+    const ops = createCartOperations(gateway);
+
+    const result = await ops.loginAndMerge({
+      email: "ada@example.com",
+      password: "secret",
+    });
+
+    expect(gateway.queryCarts).toHaveBeenCalledWith(
+      'customerId="cust-1" and cartState="Active"',
+    );
+    expect(result.cart?.id).toBe("cust-cart");
+  });
+
+  it("throws InvalidCredentialsError when login fails with InvalidCredentials", async () => {
+    const gateway = createGateway({
+      loginCustomer: vi.fn().mockRejectedValue({
+        statusCode: 400,
+        body: { errors: [{ code: "InvalidCredentials" }] },
+      }),
+    });
+    const ops = createCartOperations(gateway);
+
+    await expect(
+      ops.loginAndMerge({ email: "ada@example.com", password: "wrong" }),
+    ).rejects.toBeInstanceOf(InvalidCredentialsError);
   });
 });

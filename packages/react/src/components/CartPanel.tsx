@@ -1,26 +1,64 @@
+import { type FormEvent, useState } from "react";
 import { Minus, Plus, ShoppingBag, Trash2, X } from "lucide-react";
-import type { CartSnapshot, CommerceAISearchMessages } from "@commerce-ai-tool/core";
+import type {
+  CartSnapshot,
+  CommerceAISearchMessages,
+  CustomerSnapshot,
+} from "@commerce-ai-tool/core";
 
 export interface CartPanelProps {
   cart: CartSnapshot | null;
+  customer: CustomerSnapshot | null;
   isLoading: boolean;
+  isLoggingIn: boolean;
   error: string | null;
   messages: CommerceAISearchMessages;
   onClose: () => void;
   onRemove: (lineItemId: string) => void;
   onQuantityChange: (lineItemId: string, quantity: number) => void;
+  onLogin: (input: { email: string; password: string }) => void;
+  onLogout: () => void;
+}
+
+function displayCartError(
+  error: string | null,
+  messages: CommerceAISearchMessages,
+): string | null {
+  if (!error) {
+    return null;
+  }
+  if (error === "Invalid credentials") {
+    return messages.invalidCredentials;
+  }
+  if (error === "Sign in failed" || error === "Login failed") {
+    return messages.signInFailed;
+  }
+  return error;
 }
 
 export function CartPanel({
   cart,
+  customer,
   isLoading,
+  isLoggingIn,
   error,
   messages,
   onClose,
   onRemove,
   onQuantityChange,
+  onLogin,
+  onLogout,
 }: CartPanelProps) {
   const isEmpty = !cart || cart.lineItems.length === 0;
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const visibleError = displayCartError(error, messages);
+
+  function handleLoginSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    onLogin({ email, password });
+    setPassword("");
+  }
 
   return (
     <section className="cat-cart-panel" aria-label={messages.cartAriaLabel}>
@@ -36,11 +74,64 @@ export function CartPanel({
         </button>
       </header>
 
-      {error && (
+      {visibleError && (
         <div className="cat-status cat-status--error" role="alert">
-          {error}
+          {visibleError}
         </div>
       )}
+
+      <div className="cat-cart-panel__auth">
+        {customer ? (
+          <div className="cat-cart-panel__signed-in">
+            <span>
+              {messages.signedInAs} {customer.email}
+            </span>
+            <button
+              type="button"
+              className="cat-cart-panel__sign-out"
+              onClick={onLogout}
+            >
+              {messages.signOut}
+            </button>
+          </div>
+        ) : (
+          <form className="cat-cart-panel__auth-form" onSubmit={handleLoginSubmit}>
+            <label className="cat-cart-panel__field">
+              <span className="cat-cart-panel__label">{messages.email}</span>
+              <input
+                className="cat-cart-panel__input"
+                type="email"
+                name="email"
+                autoComplete="email"
+                required
+                disabled={isLoggingIn}
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+              />
+            </label>
+            <label className="cat-cart-panel__field">
+              <span className="cat-cart-panel__label">{messages.password}</span>
+              <input
+                className="cat-cart-panel__input"
+                type="password"
+                name="password"
+                autoComplete="current-password"
+                required
+                disabled={isLoggingIn}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+            </label>
+            <button
+              type="submit"
+              className="cat-cart-panel__submit"
+              disabled={isLoggingIn}
+            >
+              {messages.signIn}
+            </button>
+          </form>
+        )}
+      </div>
 
       {isEmpty ? (
         <div className="cat-cart-panel__empty">

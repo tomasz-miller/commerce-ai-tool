@@ -1,7 +1,12 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { CartSnapshot } from "@commerce-ai-tool/core";
-import { ANONYMOUS_ID_STORAGE_KEY, useCart } from "./useCart.js";
+import { CART_SESSION_HEADER, type CartSnapshot } from "@commerce-ai-tool/core";
+import {
+  ANONYMOUS_ID_STORAGE_KEY,
+  CUSTOMER_SESSION_STORAGE_KEY,
+  CUSTOMER_STORAGE_KEY,
+  useCart,
+} from "./useCart.js";
 
 const sampleCart = {
   id: "cart-1",
@@ -167,5 +172,138 @@ describe("useCart", () => {
       result.current.closeCart();
     });
     expect(result.current.isCartOpen).toBe(false);
+  });
+
+  it("persists the session token after login and sends it on later requests", async () => {
+    const customer = { id: "cust-1", email: "ada@example.com" };
+    const fetchMock = vi.fn(async (url: string, _init?: RequestInit) => {
+      if (String(url).includes("/cart/login")) {
+        return {
+          ok: true,
+          json: async () => ({
+            cart: { ...sampleCart, customerId: "cust-1", anonymousId: undefined },
+            customer,
+            sessionToken: "sess-1",
+          }),
+        };
+      }
+      return {
+        ok: true,
+        json: async () => ({ cart: sampleCart }),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useCart({ apiBaseUrl: "/api/commerce-ai" }));
+
+    await waitFor(() => {
+      expect(result.current.cart).toEqual(sampleCart);
+    });
+
+    await act(async () => {
+      await result.current.login({ email: "ada@example.com", password: "secret" });
+    });
+
+    expect(window.localStorage.getItem(CUSTOMER_SESSION_STORAGE_KEY)).toBe("sess-1");
+    expect(result.current.customer).toEqual(customer);
+    expect(result.current.isAuthenticated).toBe(true);
+
+    await act(async () => {
+      await result.current.addToCart({ sku: "SHOE-RED" });
+    });
+
+    const addCall = fetchMock.mock.calls.find(([url]) => String(url).includes("/cart/add"));
+    expect(addCall).toBeDefined();
+    const addBody = JSON.parse(String(addCall?.[1]?.body ?? "{}")) as { sessionToken?: string };
+    expect(addBody.sessionToken).toBe("sess-1");
+  });
+
+  it("loads the cart with a stored session token", async () => {
+    window.localStorage.setItem(CUSTOMER_SESSION_STORAGE_KEY, "sess-stored");
+    window.localStorage.setItem(
+      CUSTOMER_STORAGE_KEY,
+      JSON.stringify({ id: "cust-1", email: "ada@example.com" }),
+    );
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ cart: sampleCart }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useCart({ apiBaseUrl: "/api/commerce-ai" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalled();
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    expect(String(url)).not.toContain("sessionToken=");
+    expect(new Headers(init?.headers).get(CART_SESSION_HEADER)).toBe("sess-stored");
+    expect(result.current.isAuthenticated).toBe(true);
+  });
+
+  it("clears the session and rotates anonymousId on 401", async () => {
+    window.localStorage.setItem(CUSTOMER_SESSION_STORAGE_KEY, "sess-expired");
+    window.localStorage.setItem(
+      CUSTOMER_STORAGE_KEY,
+      JSON.stringify({ id: "cust-1", email: "ada@example.com" }),
+    );
+
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (new Headers(init?.headers).get(CART_SESSION_HEADER)) {
+        return {
+          ok: false,
+          status: 401,
+          json: async () => ({ error: "Invalid cart session" }),
+        };
+      }
+      return {
+        ok: true,
+        json: async () => ({ cart: null }),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useCart({ apiBaseUrl: "/api/commerce-ai" }));
+
+    await waitFor(() => {
+      expect(window.localStorage.getItem(CUSTOMER_SESSION_STORAGE_KEY)).toBeNull();
+    });
+
+    expect(result.current.customer).toBeNull();
+    expect(result.current.isAuthenticated).toBe(false);
+    expect(result.current.anonymousId).not.toBe("anon-1");
+    expect(window.localStorage.getItem(ANONYMOUS_ID_STORAGE_KEY)).toBe(result.current.anonymousId);
+  });
+
+  it("clears the session and rotates anonymousId on logout", async () => {
+    window.localStorage.setItem(CUSTOMER_SESSION_STORAGE_KEY, "sess-1");
+    window.localStorage.setItem(
+      CUSTOMER_STORAGE_KEY,
+      JSON.stringify({ id: "cust-1", email: "ada@example.com" }),
+    );
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ cart: null }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useCart({ apiBaseUrl: "/api/commerce-ai" }));
+
+    await waitFor(() => {
+      expect(result.current.isAuthenticated).toBe(true);
+    });
+
+    await act(async () => {
+      await result.current.logout();
+    });
+
+    expect(window.localStorage.getItem(CUSTOMER_SESSION_STORAGE_KEY)).toBeNull();
+    expect(result.current.customer).toBeNull();
+    expect(result.current.isAuthenticated).toBe(false);
+    expect(result.current.anonymousId).not.toBe("anon-1");
+    expect(window.localStorage.getItem(ANONYMOUS_ID_STORAGE_KEY)).toBe(result.current.anonymousId);
   });
 });

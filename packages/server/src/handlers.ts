@@ -13,12 +13,16 @@ import {
 import {
   executeAddToCart,
   executeGetCart,
+  executeLogin,
+  executeLogout,
   executeRemoveFromCart,
   executeUpdateCartQuantity,
 } from "./cart-actions.js";
+import { readCartSessionHeader } from "./cart-session.js";
 import { parseMultipart, readJsonBody } from "./utils/multipart.js";
 import type {
   AddToCartRequest,
+  CartLoginRequest,
   CartMutationRequest,
   UpdateCartQuantityRequest,
 } from "@commerce-ai-tool/core";
@@ -131,6 +135,7 @@ export function createHandlers(server: CommerceAIServer) {
         const result = await executeGetCart(server, {
           anonymousId: query.anonymousId ?? "",
           catalogLocale: query.catalogLocale,
+          sessionToken: readCartSessionHeader(req.headers),
         });
         return jsonResponse(result);
       } catch (error) {
@@ -168,6 +173,27 @@ export function createHandlers(server: CommerceAIServer) {
         return jsonResponse(result);
       } catch (error) {
         const mapped = mapRouteError(error, "updateCartQuantity", "Update cart quantity failed");
+        return errorResponse(mapped.message, mapped.status);
+      }
+    },
+
+    async login(req: IncomingMessage): Promise<HandlerResponse> {
+      try {
+        const body = await readJsonBody<CartLoginRequest>(req);
+        const result = await executeLogin(server, body);
+        return jsonResponse(result);
+      } catch (error) {
+        const mapped = mapRouteError(error, "login", "Login failed");
+        return errorResponse(mapped.message, mapped.status);
+      }
+    },
+
+    async logout(): Promise<HandlerResponse> {
+      try {
+        const result = await executeLogout();
+        return jsonResponse(result);
+      } catch (error) {
+        const mapped = mapRouteError(error, "logout", "Logout failed");
         return errorResponse(mapped.message, mapped.status);
       }
     },

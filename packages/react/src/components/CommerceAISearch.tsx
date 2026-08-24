@@ -640,12 +640,16 @@ export function CommerceAISearch({
       {enableCart && cart.isCartOpen && (
         <CartPanel
           cart={cart.cart}
+          customer={cart.customer}
           isLoading={cart.isLoading || cart.isMutating}
+          isLoggingIn={cart.isLoggingIn}
           error={cart.error}
           messages={messages}
           onClose={cart.closeCart}
           onRemove={(lineItemId) => void cart.removeFromCart(lineItemId)}
           onQuantityChange={(lineItemId, quantity) => void cart.updateQuantity(lineItemId, quantity)}
+          onLogin={(input) => void cart.login(input)}
+          onLogout={() => void cart.logout()}
         />
       )}
     </div>
