@@ -32,7 +32,7 @@ const guestAuth = {
 };
 
 describe("CartPanel", () => {
-  it("renders an empty state and a sign-in form", () => {
+  it("renders an empty state and expands sign-in on demand", () => {
     render(
       <CartPanel
         cart={null}
@@ -47,6 +47,8 @@ describe("CartPanel", () => {
     );
 
     expect(screen.getByText(messages.emptyCart)).not.toBeNull();
+    expect(screen.queryByLabelText(messages.email)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: messages.signInToSyncCart }));
     expect(screen.getByLabelText(messages.email)).not.toBeNull();
     expect(screen.getByLabelText(messages.password)).not.toBeNull();
     expect(screen.getByRole("button", { name: messages.signIn })).not.toBeNull();
@@ -67,9 +69,30 @@ describe("CartPanel", () => {
     );
 
     expect(screen.getByText("Red Shoe")).not.toBeNull();
-    expect(screen.getByText("€49.99")).not.toBeNull();
-    expect(screen.getByText("€99.98")).not.toBeNull();
+    expect(screen.getByText(/€49\.99\s+each/)).not.toBeNull();
+    expect(screen.getAllByText("€99.98")).toHaveLength(2);
     expect(screen.getByText(messages.total)).not.toBeNull();
+    expect(screen.queryByRole("button", { name: messages.checkout })).toBeNull();
+  });
+
+  it("invokes checkout only when the host supplies a callback", () => {
+    const onCheckout = vi.fn();
+    render(
+      <CartPanel
+        cart={cart}
+        isLoading={false}
+        error={null}
+        messages={messages}
+        onClose={vi.fn()}
+        onRemove={vi.fn()}
+        onQuantityChange={vi.fn()}
+        onCheckout={onCheckout}
+        {...guestAuth}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: messages.checkout }));
+    expect(onCheckout).toHaveBeenCalledWith(cart);
   });
 
   it("invokes quantity and remove handlers", () => {
@@ -115,6 +138,7 @@ describe("CartPanel", () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: messages.signInToSyncCart }));
     fireEvent.change(screen.getByLabelText(messages.email), {
       target: { value: "ada@example.com" },
     });

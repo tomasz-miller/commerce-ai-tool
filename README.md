@@ -15,7 +15,7 @@ AI-powered product search plugin for [commercetools](https://commercetools.com) 
 | [`@commerce-ai-tool/react`](./packages/react) | Glass morphism search widget for React / Next.js |
 | [`@commerce-ai-tool/angular`](./packages/angular) | Standalone Angular search component |
 
-## Features (v1.5)
+## Features (v2.0)
 
 - **Text search** — natural language queries interpreted by AI (OpenRouter or AWS Bedrock)
 - **Autocomplete** — optional suggestions while typing (`enableAutocomplete`): commercetools Search Term Suggestions first, with AI catalog-language phrases when Suggest is empty for cross-locale or multi-word queries
@@ -24,6 +24,7 @@ AI-powered product search plugin for [commercetools](https://commercetools.com) 
 - **Glass UI** — minimalist design with light / dark / auto theme
 - **Widget i18n** — override English default labels via the `messages` prop
 - **Cart** — optional add-to-cart and cart preview (`enableCart`), or the exported `useCart` hook; guest sign-in merges into the customer cart (v1.5)
+- **Checkout** — host-owned checkout routes can render `CommerceAICheckout` for addresses, matching delivery methods, and order placement
 - **Server-only secrets** — API keys never exposed to the browser
 
 ## Quick start (Next.js)
@@ -182,7 +183,61 @@ export function Search() {
 }
 ```
 
-Image search supports file upload, drag-and-drop, and camera capture (`enableCameraSearch`, default `true`). On mobile, the camera button opens the native camera; on desktop, it shows an in-widget preview. Use `cameraFacingMode` (`"environment"` rear or `"user"` front) when needed.
+### Search capabilities
+
+Voice, camera, and uploaded-image search are independently configurable in both React and
+Angular. All three are enabled by default, so explicitly disable the controls that the host
+application does not need:
+
+- `enableVoice` controls microphone search.
+- `enableCameraSearch` controls camera capture. On mobile it opens the native camera; on
+  desktop it shows an in-widget preview.
+- `enableImageSearch` controls file upload and drag-and-drop.
+- `enableTts` controls the spoken result summary after voice search; it does not enable the
+  microphone button by itself.
+
+React examples:
+
+```tsx
+// Voice only
+<CommerceAISearch
+  apiBaseUrl="/api/commerce-ai"
+  enableVoice
+  enableCameraSearch={false}
+  enableImageSearch={false}
+/>
+
+// Camera only
+<CommerceAISearch
+  apiBaseUrl="/api/commerce-ai"
+  enableVoice={false}
+  enableCameraSearch
+  enableImageSearch={false}
+/>
+
+// Uploaded image only
+<CommerceAISearch
+  apiBaseUrl="/api/commerce-ai"
+  enableVoice={false}
+  enableCameraSearch={false}
+  enableImageSearch
+/>
+```
+
+The Angular component exposes the same independent inputs:
+
+```html
+<commerce-ai-search
+  apiBaseUrl="/api/commerce-ai"
+  [enableVoice]="false"
+  [enableCameraSearch]="true"
+  [enableImageSearch]="false"
+/>
+```
+
+Use `cameraFacingMode` (`"environment"` rear or `"user"` front) when needed. These flags
+control the built-in widget UI and its interactions; they do not remove or secure host API
+routes.
 
 ### Cart (opt-in)
 
@@ -202,7 +257,31 @@ await cart.login({ email, password });
 await cart.logout();
 ```
 
-Host routes: `GET /cart`, `POST /cart/add`, `POST /cart/remove`, `POST /cart/update-quantity`, `POST /cart/login`, `POST /cart/logout`. Guest carts use `anonymousId` in `localStorage` (`commerce-ai-tool:anonymousId`). After sign-in, the widget stores an HMAC session token (`commerce-ai-tool:customerSession`) and sends it as the `x-commerce-ai-cart-session` header on `GET /cart` and as `sessionToken` in POST bodies; a valid token wins over `anonymousId`. Do not put the session token in query strings. Commercetools login uses `anonymousCartSignInMode: MergeWithExistingCustomerCart` and only merges a client `cartId` that belongs to the current `anonymousId`. `POST /cart/login` is rate-limited (10 attempts per 15 minutes per IP on the Express router; Next handlers use the same in-memory cap). Manual testing needs a Customer account in the commercetools project (do not commit passwords). On logout the token is dropped and a new guest `anonymousId` is created.
+Set `onCheckout` to navigate from the cart panel to a host-owned route:
+
+```tsx
+<CommerceAISearch
+  apiBaseUrl="/api/commerce-ai"
+  enableCart
+  onCheckout={() => router.push("/checkout")}
+/>
+
+// app/checkout/page.tsx (client component)
+<CommerceAICheckout
+  apiBaseUrl="/api/commerce-ai"
+  catalogLocale="en"
+  currency="EUR"
+  country="DE"
+/>
+```
+
+Cart routes: `GET /cart`, `POST /cart/add`, `POST /cart/remove`, `POST /cart/update-quantity`, `POST /cart/login`, and `POST /cart/logout`.
+
+Checkout routes: `POST /cart/addresses`, `GET /cart/shipping-methods`, `POST /cart/shipping-method`, and `POST /cart/order`. The commercetools project must have a Shipping Method with a Zone matching the checkout country. Order creation is rate-limited (20 attempts per 15 minutes per IP on the Express router; Next handlers use the same in-memory cap). When no matching shipping methods exist, checkout still allows placing the order after a successful address step.
+
+Guest carts use `anonymousId` in `localStorage` (`commerce-ai-tool:anonymousId`). After sign-in, the widget stores an HMAC session token (`commerce-ai-tool:customerSession`) and sends it as the `x-commerce-ai-cart-session` header on GET requests and as `sessionToken` in POST bodies; a valid token wins over `anonymousId`. Do not put the session token in query strings. Commercetools login uses `anonymousCartSignInMode: MergeWithExistingCustomerCart` and only merges a client `cartId` that belongs to the current `anonymousId`. `POST /cart/login` is rate-limited (10 attempts per 15 minutes per IP on the Express router; Next handlers use the same in-memory cap). Manual testing needs a Customer account in the commercetools project (do not commit passwords). On logout the token is dropped and a new guest `anonymousId` is created.
+
+v2.0 does not create commercetools Payment resources. Projects that require payment before order creation should connect a PSP in the planned v2.1 payment hooks; do not create dummy successful payments.
 
 ## Angular
 

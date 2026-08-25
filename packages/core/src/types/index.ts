@@ -137,6 +137,27 @@ export interface CartLineItemSnapshot {
   quantity: number;
   imageUrl?: string;
   price?: MoneyAmount;
+  totalPrice?: MoneyAmount;
+}
+
+export interface CheckoutAddress {
+  firstName: string;
+  lastName: string;
+  streetName: string;
+  additionalStreetInfo?: string;
+  postalCode: string;
+  city: string;
+  region?: string;
+  country: string;
+  email?: string;
+  phone?: string;
+}
+
+export interface ShippingMethodSnapshot {
+  id: string;
+  name: string;
+  description?: string;
+  price?: MoneyAmount;
 }
 
 /** Client-safe cart shape — never the raw commercetools Cart object. */
@@ -148,6 +169,17 @@ export interface CartSnapshot {
   lineItems: CartLineItemSnapshot[];
   totalPrice: MoneyAmount;
   totalQuantity: number;
+  shippingAddress?: CheckoutAddress;
+  billingAddress?: CheckoutAddress;
+  shippingMethod?: ShippingMethodSnapshot;
+}
+
+export interface OrderSnapshot {
+  id: string;
+  orderNumber?: string;
+  orderState: string;
+  totalPrice: MoneyAmount;
+  lineItems: CartLineItemSnapshot[];
 }
 
 /** Public customer identity — never includes credentials. */
@@ -206,6 +238,27 @@ export interface GetCartRequest {
   customerId?: string;
   catalogLocale?: string;
   sessionToken?: string;
+}
+
+export interface CheckoutRequest {
+  anonymousId?: string;
+  customerId?: string;
+  cartId?: string;
+  catalogLocale?: string;
+  sessionToken?: string;
+}
+
+export interface SetCartAddressesRequest extends CheckoutRequest {
+  shippingAddress: CheckoutAddress;
+  billingAddress?: CheckoutAddress;
+}
+
+export interface SetShippingMethodRequest extends CheckoutRequest {
+  shippingMethodId: string;
+}
+
+export interface CreateOrderRequest extends CheckoutRequest {
+  orderNumber?: string;
 }
 
 export interface SearchMeta {

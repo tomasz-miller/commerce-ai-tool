@@ -3,6 +3,9 @@ import type {
   CartLoginRequest,
   CartMutationRequest,
   CommerceAIConfig,
+  CreateOrderRequest,
+  SetCartAddressesRequest,
+  SetShippingMethodRequest,
   UpdateCartQuantityRequest,
 } from "@commerce-ai-tool/core";
 import { createHandlers } from "./handlers.js";
@@ -25,10 +28,19 @@ import {
   executeRemoveFromCart,
   executeUpdateCartQuantity,
 } from "./cart-actions.js";
+import {
+  executeCreateOrder,
+  executeGetShippingMethods,
+  executeSetCartAddresses,
+  executeSetShippingMethod,
+} from "./checkout-actions.js";
 import { readCartSessionHeader } from "./cart-session.js";
 import {
   clientKeyFromWebHeaders,
   createLoginAttemptLimiter,
+  ORDER_RATE_LIMIT_MAX_ATTEMPTS,
+  ORDER_RATE_LIMIT_MESSAGE,
+  ORDER_RATE_LIMIT_WINDOW_MS,
   TooManyRequestsError,
 } from "./login-rate-limit.js";
 import { parseMultipartRequest } from "./utils/multipart.js";
@@ -45,11 +57,19 @@ export interface NextHandlers {
   addToCart: (req: Request) => Promise<Response>;
   removeFromCart: (req: Request) => Promise<Response>;
   updateCartQuantity: (req: Request) => Promise<Response>;
+  setCartAddresses: (req: Request) => Promise<Response>;
+  getShippingMethods: (req: Request) => Promise<Response>;
+  setShippingMethod: (req: Request) => Promise<Response>;
+  createOrder: (req: Request) => Promise<Response>;
   login: (req: Request) => Promise<Response>;
   logout: () => Promise<Response>;
 }
 
 const loginLimiter = createLoginAttemptLimiter();
+const orderLimiter = createLoginAttemptLimiter({
+  windowMs: ORDER_RATE_LIMIT_WINDOW_MS,
+  limit: ORDER_RATE_LIMIT_MAX_ATTEMPTS,
+});
 
 export function createNextHandlers(config: CommerceAIConfig): NextHandlers {
   const server = createCommerceAIServer({ config });
@@ -194,6 +214,80 @@ export function createNextHandlers(config: CommerceAIConfig): NextHandlers {
         return Response.json(result);
       } catch (error) {
         const mapped = mapRouteError(error, "updateCartQuantity", "Update cart quantity failed");
+        return toWebErrorResponse(mapped.message, mapped.status);
+      }
+    },
+
+    setCartAddresses: async (req: Request) => {
+      try {
+        const result = await executeSetCartAddresses(
+          server,
+          (await req.json()) as SetCartAddressesRequest,
+        );
+        return Response.json(result);
+      } catch (error) {
+        const mapped = mapRouteError(error, "setCartAddresses", "Set cart addresses failed");
+        return toWebErrorResponse(mapped.message, mapped.status);
+      }
+    },
+
+    getShippingMethods: async (req: Request) => {
+      try {
+        const url = new URL(req.url);
+        const result = await executeGetShippingMethods(server, {
+          anonymousId: url.searchParams.get("anonymousId") ?? undefined,
+          cartId: url.searchParams.get("cartId") ?? undefined,
+          catalogLocale: url.searchParams.get("catalogLocale") ?? undefined,
+          sessionToken: readCartSessionHeader(req.headers),
+        });
+        return Response.json(result);
+      } catch (error) {
+        const mapped = mapRouteError(
+          error,
+          "getShippingMethods",
+          "Get shipping methods failed",
+        );
+        return toWebErrorResponse(mapped.message, mapped.status);
+      }
+    },
+
+    setShippingMethod: async (req: Request) => {
+      try {
+        const result = await executeSetShippingMethod(
+          server,
+          (await req.json()) as SetShippingMethodRequest,
+        );
+        return Response.json(result);
+      } catch (error) {
+        const mapped = mapRouteError(
+          error,
+          "setShippingMethod",
+          "Set shipping method failed",
+        );
+        return toWebErrorResponse(mapped.message, mapped.status);
+      }
+    },
+
+    createOrder: async (req: Request) => {
+      try {
+        orderLimiter.consume(clientKeyFromWebHeaders(req.headers));
+        const result = await executeCreateOrder(
+          server,
+          (await req.json()) as CreateOrderRequest,
+        );
+        return Response.json(result);
+      } catch (error) {
+        if (error instanceof TooManyRequestsError) {
+          return Response.json(
+            { error: ORDER_RATE_LIMIT_MESSAGE },
+            {
+              status: 429,
+              headers: { "Retry-After": String(error.retryAfterSeconds) },
+            },
+          );
+        }
+
+        const mapped = mapRouteError(error, "createOrder", "Create order failed");
         return toWebErrorResponse(mapped.message, mapped.status);
       }
     },

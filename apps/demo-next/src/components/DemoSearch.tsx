@@ -1,6 +1,7 @@
 "use client";
 
 import { CommerceAISearch } from "@commerce-ai-tool/react";
+import { useRouter } from "next/navigation";
 import {
   demoCatalogLocale,
   demoCountry,
@@ -9,6 +10,8 @@ import {
 } from "../lib/search-config";
 
 export function DemoSearch() {
+  const router = useRouter();
+
   return (
     <CommerceAISearch
       apiBaseUrl="/api/commerce-ai"
@@ -23,6 +26,7 @@ export function DemoSearch() {
       enableImageSearch
       enableTts
       enableCart
+      onCheckout={() => router.push("/checkout")}
       onProductSelect={(product) => {
         console.log("Selected product:", product);
       }}

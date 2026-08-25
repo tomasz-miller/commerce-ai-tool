@@ -1,5 +1,7 @@
 export { CommerceAISearch } from "./components/CommerceAISearch.js";
 export type { CommerceAISearchProps, SearchMode } from "./components/CommerceAISearch.js";
+export { CommerceAICheckout } from "./components/CommerceAICheckout.js";
+export type { CommerceAICheckoutProps } from "./components/CommerceAICheckout.js";
 export { useCommerceAISearch } from "./hooks/useCommerceAISearch.js";
 export type {
   SetQueryOptions,
@@ -14,7 +16,10 @@ export type { UseVoiceSearchOptions } from "./hooks/useVoiceSearch.js";
 export { useTheme, useResolvedTheme } from "./hooks/useTheme.js";
 export type {
   CartSnapshot,
+  CheckoutAddress,
   CommerceAISearchMessages,
   CustomerSnapshot,
+  OrderSnapshot,
+  ShippingMethodSnapshot,
 } from "@commerce-ai-tool/core";
 export { DEFAULT_COMMERCE_AI_SEARCH_MESSAGES, resolveCommerceAISearchMessages } from "@commerce-ai-tool/core";

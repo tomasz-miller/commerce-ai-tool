@@ -306,4 +306,133 @@ describe("useCart", () => {
     expect(result.current.anonymousId).not.toBe("anon-1");
     expect(window.localStorage.getItem(ANONYMOUS_ID_STORAGE_KEY)).toBe(result.current.anonymousId);
   });
+
+  it("calls checkout endpoints and clears the ordered cart", async () => {
+    const order = {
+      id: "order-1",
+      orderNumber: "cat-1",
+      orderState: "Open",
+      totalPrice: sampleCart.totalPrice,
+      lineItems: [],
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).includes("/shipping-methods")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            shippingMethods: [{ id: "shipping-1", name: "Standard delivery" }],
+          }),
+        };
+      }
+      if (String(url).endsWith("/order")) {
+        return { ok: true, status: 200, json: async () => ({ order }) };
+      }
+      return { ok: true, status: 200, json: async () => ({ cart: sampleCart }) };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() => useCart({ apiBaseUrl: "/api/commerce-ai" }));
+
+    await waitFor(() => expect(result.current.cart).toEqual(sampleCart));
+    await act(async () => {
+      await result.current.setAddresses({
+        firstName: "Ada",
+        lastName: "Lovelace",
+        streetName: "Main Street",
+        postalCode: "10115",
+        city: "Berlin",
+        country: "DE",
+      });
+      await result.current.getShippingMethods();
+      await result.current.setShippingMethod("shipping-1");
+      await result.current.placeOrder();
+    });
+
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/cart/addresses"))).toBe(true);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/shipping-methods"))).toBe(true);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/shipping-method"))).toBe(true);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith("/cart/order"))).toBe(true);
+    expect(result.current.cart).toBeNull();
+  });
+
+  it("returns null when shipping methods fail to load", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).includes("/shipping-methods")) {
+        return {
+          ok: false,
+          status: 500,
+          json: async () => ({ error: "Shipping methods request failed" }),
+        };
+      }
+      return { ok: true, status: 200, json: async () => ({ cart: sampleCart }) };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() => useCart({ apiBaseUrl: "/api/commerce-ai" }));
+
+    await waitFor(() => expect(result.current.cart).toEqual(sampleCart));
+    let methods: Awaited<ReturnType<typeof result.current.getShippingMethods>> = [];
+    await act(async () => {
+      methods = await result.current.getShippingMethods();
+    });
+
+    expect(methods).toBeNull();
+    expect(result.current.error).toBe("Shipping methods request failed");
+  });
+
+  it("serializes placeOrder behind other cart mutations", async () => {
+    let resolveAddresses: (() => void) | undefined;
+    const addressesGate = new Promise<void>((resolve) => {
+      resolveAddresses = resolve;
+    });
+    const orderStarted = vi.fn();
+    const fetchMock = vi.fn(async (url: string, _init?: RequestInit) => {
+      if (String(url).includes("/addresses")) {
+        await addressesGate;
+        return { ok: true, status: 200, json: async () => ({ cart: sampleCart }) };
+      }
+      if (String(url).endsWith("/order")) {
+        orderStarted();
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            order: {
+              id: "order-1",
+              orderNumber: "cat-1",
+              orderState: "Open",
+              totalPrice: sampleCart.totalPrice,
+              lineItems: [],
+            },
+          }),
+        };
+      }
+      return { ok: true, status: 200, json: async () => ({ cart: sampleCart }) };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() => useCart({ apiBaseUrl: "/api/commerce-ai" }));
+
+    await waitFor(() => expect(result.current.cart).toEqual(sampleCart));
+
+    let addressesPromise!: Promise<unknown>;
+    let orderPromise!: Promise<unknown>;
+    await act(async () => {
+      addressesPromise = result.current.setAddresses({
+        firstName: "Ada",
+        lastName: "Lovelace",
+        streetName: "Main Street",
+        postalCode: "10115",
+        city: "Berlin",
+        country: "DE",
+      });
+      orderPromise = result.current.placeOrder();
+    });
+
+    expect(orderStarted).not.toHaveBeenCalled();
+    resolveAddresses?.();
+    await act(async () => {
+      await addressesPromise;
+      await orderPromise;
+    });
+    expect(orderStarted).toHaveBeenCalledTimes(1);
+  });
 });
