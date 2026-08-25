@@ -144,6 +144,7 @@ Do not finish a task with a failing lint, typecheck, test, or build.
 - **Secrets** server-side only (`loadConfigFromEnv`, `.env.local`)
 - **tsup watch**: `clean: !isWatch` — do not wipe `dist/` in dev (avoids monorepo races)
 - **Turbo `dev`**: libraries wait for `^build` + own `build` before watch
+- Widget modalities are independent: `enableVoice`, `enableCameraSearch`, and `enableImageSearch` must not gate one another
 - Unused variables: `_` prefix or remove import (ESLint rule)
 - Public API changes → update README / CHANGELOG / changeset
 
@@ -181,6 +182,8 @@ Release (`.github/workflows/release.yml`) is disabled (`workflow_dispatch` only)
 - **Customer** — HMAC session token (`commerce-ai-tool:customerSession`) signed with `CAT_CART_SESSION_SECRET` (falls back to `CTP_CLIENT_SECRET`). A valid token wins over `anonymousId`. `GET /cart` sends it as `x-commerce-ai-cart-session` (never as a query parameter); mutations send `sessionToken` in the JSON body.
 - **Login** — commercetools `POST /{projectKey}/login` with `anonymousCartSignInMode: MergeWithExistingCustomerCart`. A client `cartId` is merged only after the cart is loaded and `cart.anonymousId` matches the request `anonymousId`. Passwords are never logged or sent to Langfuse. Catalog `storeKey` is not applied to login (cart CRUD is project-scoped). Express `POST /cart/login` is rate-limited (10 attempts / 15 minutes per IP); Next handlers apply the same cap in memory.
 - **Logout** — client drops the token and rotates `anonymousId` (stateless `POST /cart/logout`).
+- **Checkout** — the widget calls host `onCheckout(cart)`; the host route renders `CommerceAICheckout`. Checkout reuses the cart identity model for `POST /cart/addresses`, `GET /cart/shipping-methods`, `POST /cart/shipping-method`, and `POST /cart/order`. Order creation requires an Active, non-empty cart with a shipping address and a selected matching Shipping Method when methods are available. Express `POST /cart/order` is rate-limited (20 attempts / 15 minutes per IP); Next handlers apply the same cap in memory.
+- **Payments** — v2.0 does not create Payment resources or fake PSP transactions. Payment provider hooks are planned for v2.1.
 
 ## Key config files
 

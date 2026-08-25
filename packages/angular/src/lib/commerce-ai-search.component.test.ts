@@ -28,6 +28,48 @@ describe("CommerceAiSearchComponent", () => {
     expect(fixture.componentInstance.resolvedMessages.placeholder).toBe("What are you looking for?");
   });
 
+  it("configures voice, camera, and image upload independently", async () => {
+    await TestBed.configureTestingModule({
+      imports: [CommerceAiSearchComponent],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(CommerceAiSearchComponent);
+    fixture.componentInstance.enableVoice = false;
+    fixture.componentInstance.enableCameraSearch = true;
+    fixture.componentInstance.enableImageSearch = false;
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[aria-label="Voice search"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[aria-label="Search by camera"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('[aria-label="Search by image"]')).toBeNull();
+  });
+
+  it("ignores image drops when image search is disabled", async () => {
+    const searchByImage = vi.fn().mockResolvedValue({ products: [] });
+
+    await TestBed.configureTestingModule({
+      imports: [CommerceAiSearchComponent],
+      providers: [
+        {
+          provide: CommerceAiApiService,
+          useValue: { suggest: vi.fn(), search: vi.fn(), searchByImage },
+        },
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(CommerceAiSearchComponent);
+    fixture.componentInstance.enableImageSearch = false;
+    fixture.detectChanges();
+
+    const file = new File(["x"], "shoe.png", { type: "image/png" });
+    fixture.componentInstance.onDrop({
+      preventDefault() {},
+      dataTransfer: { files: [file] },
+    } as unknown as DragEvent);
+
+    expect(searchByImage).not.toHaveBeenCalled();
+  });
+
   it("fetches suggestions when autocomplete is enabled", async () => {
     const suggestMock = vi.fn().mockResolvedValue({ suggestions: ["Red Shoes"] });
 

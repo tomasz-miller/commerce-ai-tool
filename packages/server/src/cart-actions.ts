@@ -40,14 +40,14 @@ function optionalAnonymousId(value: unknown): string | undefined {
   return value.trim();
 }
 
-function requiredString(value: unknown, field: string): string {
+export function requiredString(value: unknown, field: string): string {
   if (typeof value !== "string" || !value.trim()) {
     throw new ValidationError(`${field} is required`);
   }
   return value.trim();
 }
 
-function optionalString(value: unknown): string | undefined {
+export function optionalString(value: unknown): string | undefined {
   if (typeof value !== "string") {
     return undefined;
   }
@@ -66,16 +66,16 @@ function optionalNumber(value: unknown): number | undefined {
   return parsed;
 }
 
-function resolveLocale(server: CommerceAIServer, catalogLocale?: string): string {
+export function resolveLocale(server: CommerceAIServer, catalogLocale?: string): string {
   return catalogLocale?.trim() || server.cartDefaults.catalogLocale;
 }
 
-interface ResolvedCartIdentity {
+export interface ResolvedCartIdentity {
   anonymousId?: string;
   customerId?: string;
 }
 
-function resolveCartIdentity(
+export function resolveCartIdentity(
   server: CommerceAIServer,
   sessionToken: unknown,
   anonymousId: unknown,

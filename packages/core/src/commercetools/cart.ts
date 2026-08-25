@@ -10,6 +10,7 @@ import type {
   CartLoginResult,
   CartMutationRequest,
   CartSnapshot,
+  CheckoutAddress,
   CustomerSnapshot,
   MoneyAmount,
   UpdateCartQuantityRequest,
@@ -84,7 +85,10 @@ function localizedValue(
 }
 
 export function mapLineItemToSnapshot(
-  lineItem: Pick<LineItem, "id" | "name" | "productId" | "quantity" | "price" | "variant">,
+  lineItem: Pick<
+    LineItem,
+    "id" | "name" | "productId" | "quantity" | "price" | "totalPrice" | "variant"
+  >,
   locale: string,
 ): CartSnapshot["lineItems"][number] {
   return {
@@ -95,6 +99,33 @@ export function mapLineItemToSnapshot(
     quantity: lineItem.quantity,
     imageUrl: lineItem.variant.images?.[0]?.url,
     price: formatMoney(lineItem.price.value, locale),
+    totalPrice: formatMoney(lineItem.totalPrice, locale),
+  };
+}
+
+function mapAddress(address: Cart["shippingAddress"]): CheckoutAddress | undefined {
+  if (
+    !address?.firstName ||
+    !address.lastName ||
+    !address.streetName ||
+    !address.postalCode ||
+    !address.city ||
+    !address.country
+  ) {
+    return undefined;
+  }
+
+  return {
+    firstName: address.firstName,
+    lastName: address.lastName,
+    streetName: address.streetName,
+    additionalStreetInfo: address.additionalStreetInfo,
+    postalCode: address.postalCode,
+    city: address.city,
+    region: address.region,
+    country: address.country,
+    email: address.email,
+    phone: address.phone,
   };
 }
 
@@ -112,6 +143,15 @@ export function mapCartToSnapshot(cart: Cart, locale: string): CartSnapshot {
     lineItems,
     totalPrice: formatMoney(cart.totalPrice, locale),
     totalQuantity,
+    shippingAddress: mapAddress(cart.shippingAddress),
+    billingAddress: mapAddress(cart.billingAddress),
+    shippingMethod: cart.shippingInfo?.shippingMethod
+      ? {
+          id: cart.shippingInfo.shippingMethod.id,
+          name: cart.shippingInfo.shippingMethodName,
+          price: formatMoney(cart.shippingInfo.price, locale),
+        }
+      : undefined,
   };
 }
 
@@ -228,7 +268,7 @@ export function isConcurrentModification(error: unknown): boolean {
   return candidate.body?.errors?.some((item) => item.code === "ConcurrentModification") ?? false;
 }
 
-function assertCartOwner(
+export function assertCartOwner(
   cart: Cart,
   input: { anonymousId?: string; customerId?: string },
 ): void {

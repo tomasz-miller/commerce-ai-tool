@@ -1,5 +1,14 @@
 import { type FormEvent, useState } from "react";
-import { Minus, Plus, ShoppingBag, Trash2, X } from "lucide-react";
+import {
+  ArrowRight,
+  ChevronDown,
+  Minus,
+  Plus,
+  ShoppingBag,
+  Trash2,
+  UserRound,
+  X,
+} from "lucide-react";
 import type {
   CartSnapshot,
   CommerceAISearchMessages,
@@ -13,11 +22,14 @@ export interface CartPanelProps {
   isLoggingIn: boolean;
   error: string | null;
   messages: CommerceAISearchMessages;
+  /** Locale used when formatting a fallback line total. */
+  catalogLocale?: string;
   onClose: () => void;
   onRemove: (lineItemId: string) => void;
   onQuantityChange: (lineItemId: string, quantity: number) => void;
   onLogin: (input: { email: string; password: string }) => void;
   onLogout: () => void;
+  onCheckout?: (cart: CartSnapshot) => void;
 }
 
 function displayCartError(
@@ -36,6 +48,20 @@ function displayCartError(
   return error;
 }
 
+function formatLineTotal(
+  price: CartSnapshot["lineItems"][number]["price"],
+  quantity: number,
+  locale?: string,
+): string | null {
+  if (!price) {
+    return null;
+  }
+  return new Intl.NumberFormat(locale || undefined, {
+    style: "currency",
+    currency: price.currency,
+  }).format(price.amount * quantity);
+}
+
 export function CartPanel({
   cart,
   customer,
@@ -43,15 +69,18 @@ export function CartPanel({
   isLoggingIn,
   error,
   messages,
+  catalogLocale,
   onClose,
   onRemove,
   onQuantityChange,
   onLogin,
   onLogout,
+  onCheckout,
 }: CartPanelProps) {
   const isEmpty = !cart || cart.lineItems.length === 0;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [isAuthExpanded, setIsAuthExpanded] = useState(false);
   const visibleError = displayCartError(error, messages);
 
   function handleLoginSubmit(event: FormEvent<HTMLFormElement>) {
@@ -61,7 +90,10 @@ export function CartPanel({
   }
 
   return (
-    <section className="cat-cart-panel" aria-label={messages.cartAriaLabel}>
+    <section
+      className={`cat-cart-panel${isEmpty ? "" : " cat-cart-panel--with-items"}`}
+      aria-label={messages.cartAriaLabel}
+    >
       <header className="cat-cart-panel__header">
         <h2 className="cat-cart-panel__title">{messages.cart}</h2>
         <button
@@ -95,41 +127,65 @@ export function CartPanel({
             </button>
           </div>
         ) : (
-          <form className="cat-cart-panel__auth-form" onSubmit={handleLoginSubmit}>
-            <label className="cat-cart-panel__field">
-              <span className="cat-cart-panel__label">{messages.email}</span>
-              <input
-                className="cat-cart-panel__input"
-                type="email"
-                name="email"
-                autoComplete="email"
-                required
-                disabled={isLoggingIn}
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-              />
-            </label>
-            <label className="cat-cart-panel__field">
-              <span className="cat-cart-panel__label">{messages.password}</span>
-              <input
-                className="cat-cart-panel__input"
-                type="password"
-                name="password"
-                autoComplete="current-password"
-                required
-                disabled={isLoggingIn}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-            </label>
+          <>
             <button
-              type="submit"
-              className="cat-cart-panel__submit"
+              type="button"
+              className="cat-cart-panel__auth-toggle"
               disabled={isLoggingIn}
+              aria-expanded={isAuthExpanded}
+              onClick={() => setIsAuthExpanded((expanded) => !expanded)}
             >
-              {messages.signIn}
+              <span className="cat-cart-panel__auth-toggle-copy">
+                <span className="cat-cart-panel__auth-icon" aria-hidden="true">
+                  <UserRound size={14} strokeWidth={1.5} />
+                </span>
+                {messages.signInToSyncCart}
+              </span>
+              <ChevronDown
+                className={isAuthExpanded ? "cat-cart-panel__auth-chevron--open" : ""}
+                size={15}
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
             </button>
-          </form>
+            {isAuthExpanded ? (
+              <form className="cat-cart-panel__auth-form" onSubmit={handleLoginSubmit}>
+                <label className="cat-cart-panel__field">
+                  <span className="cat-cart-panel__label">{messages.email}</span>
+                  <input
+                    className="cat-cart-panel__input"
+                    type="email"
+                    name="email"
+                    autoComplete="email"
+                    required
+                    disabled={isLoggingIn}
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                  />
+                </label>
+                <label className="cat-cart-panel__field">
+                  <span className="cat-cart-panel__label">{messages.password}</span>
+                  <input
+                    className="cat-cart-panel__input"
+                    type="password"
+                    name="password"
+                    autoComplete="current-password"
+                    required
+                    disabled={isLoggingIn}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                  />
+                </label>
+                <button
+                  type="submit"
+                  className="cat-cart-panel__submit"
+                  disabled={isLoggingIn}
+                >
+                  {messages.signIn}
+                </button>
+              </form>
+            ) : null}
+          </>
         )}
       </div>
 
@@ -149,9 +205,15 @@ export function CartPanel({
               )}
               <div className="cat-cart-item__info">
                 <div className="cat-cart-item__name">{item.name}</div>
-                {item.price && (
-                  <div className="cat-cart-item__price">{item.price.formatted}</div>
-                )}
+                {item.price ? (
+                  <div className="cat-cart-item__price">
+                    <span>{item.price.formatted} {messages.each}</span>
+                    <strong>
+                      {item.totalPrice?.formatted ??
+                        formatLineTotal(item.price, item.quantity, catalogLocale)}
+                    </strong>
+                  </div>
+                ) : null}
                 <div className="cat-cart-item__qty">
                   <button
                     type="button"
@@ -190,8 +252,23 @@ export function CartPanel({
 
       {!isEmpty && (
         <footer className="cat-cart-panel__footer">
-          <span>{messages.total}</span>
-          <strong>{cart.totalPrice.formatted}</strong>
+          <div className="cat-cart-panel__total">
+            <span>{messages.total}</span>
+            <strong>{cart.totalPrice.formatted}</strong>
+          </div>
+          {onCheckout ? (
+            <button
+              type="button"
+              className="cat-checkout-cta"
+              disabled={isLoading}
+              onClick={() => onCheckout(cart)}
+            >
+              <span>{messages.checkout}</span>
+              <span className="cat-checkout-cta__icon" aria-hidden="true">
+                <ArrowRight size={15} strokeWidth={1.5} />
+              </span>
+            </button>
+          ) : null}
         </footer>
       )}
     </section>

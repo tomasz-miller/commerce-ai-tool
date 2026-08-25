@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   clientKeyFromWebHeaders,
   createLoginAttemptLimiter,
+  ORDER_RATE_LIMIT_MAX_ATTEMPTS,
+  ORDER_RATE_LIMIT_WINDOW_MS,
   TooManyRequestsError,
 } from "./login-rate-limit.js";
 
@@ -36,6 +38,18 @@ describe("createLoginAttemptLimiter", () => {
     limiter.consume("1.1.1.1");
     expect(() => limiter.consume("2.2.2.2")).not.toThrow();
     expect(() => limiter.consume("1.1.1.1")).toThrow(TooManyRequestsError);
+  });
+
+  it("supports the order rate-limit defaults", () => {
+    const limiter = createLoginAttemptLimiter({
+      windowMs: ORDER_RATE_LIMIT_WINDOW_MS,
+      limit: ORDER_RATE_LIMIT_MAX_ATTEMPTS,
+    });
+
+    for (let i = 0; i < ORDER_RATE_LIMIT_MAX_ATTEMPTS; i += 1) {
+      expect(() => limiter.consume("order-ip")).not.toThrow();
+    }
+    expect(() => limiter.consume("order-ip")).toThrow(TooManyRequestsError);
   });
 });
 
