@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { loadConfigFromEnv } from "./server.js";
 
 const requiredEnv = {
   CTP_PROJECT_KEY: "project",
@@ -28,7 +29,6 @@ describe("loadConfigFromEnv langfuse prompts", () => {
       delete process.env[key];
     }
     process.env.CAT_AI_PROVIDER = "openrouter";
-    vi.resetModules();
   });
 
   afterEach(() => {
@@ -40,17 +40,15 @@ describe("loadConfigFromEnv langfuse prompts", () => {
       }
     }
     previous.clear();
-    vi.resetModules();
   });
 
-  it("maps prompt management env into langfuse config", async () => {
+  it("maps prompt management env into langfuse config", () => {
     process.env.LANGFUSE_PUBLIC_KEY = "pk";
     process.env.LANGFUSE_SECRET_KEY = "sk";
     process.env.LANGFUSE_PROMPTS = "true";
     process.env.LANGFUSE_PROMPT_LABEL = "staging";
     process.env.LANGFUSE_PROMPT_CACHE_TTL_SECONDS = "90";
 
-    const { loadConfigFromEnv } = await import("./server.js");
     const config = loadConfigFromEnv();
 
     expect(config.langfuse).toEqual({
@@ -61,10 +59,9 @@ describe("loadConfigFromEnv langfuse prompts", () => {
     });
   });
 
-  it("ignores invalid prompt cache TTL and leaves prompts disabled by default", async () => {
+  it("ignores invalid prompt cache TTL and leaves prompts disabled by default", () => {
     process.env.LANGFUSE_PROMPT_CACHE_TTL_SECONDS = "nope";
 
-    const { loadConfigFromEnv } = await import("./server.js");
     const config = loadConfigFromEnv();
 
     expect(config.langfuse?.promptCacheTtlSeconds).toBeUndefined();
