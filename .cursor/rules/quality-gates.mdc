@@ -26,3 +26,5 @@ pnpm lint && pnpm typecheck && pnpm test && pnpm build
 - Green monorepo build (including `demo-next`)
 
 Do not finish work with a failing lint, typecheck, test, or build. CI runs the same steps in `.github/workflows/ci.yml`.
+
+**Before every commit:** run the full verification command above and only commit when it passes. Never push a commit that would fail CI.

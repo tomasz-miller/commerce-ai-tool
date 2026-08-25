@@ -129,6 +129,8 @@ Every new feature **must** satisfy:
 
 Do not finish a task with a failing lint, typecheck, test, or build.
 
+**Before every commit:** run `pnpm lint && pnpm typecheck && pnpm test && pnpm build` and only commit when all four pass. Never push a commit that breaks CI.
+
 ## Where to write tests
 
 - Files: `*.test.ts` next to source or in the same directory

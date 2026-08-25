@@ -1,5 +1,15 @@
 import { createNextHandlers, loadConfigFromEnv } from "@commerce-ai-tool/server";
+import type { NextHandlers } from "@commerce-ai-tool/server";
 
-const handlers = createNextHandlers(loadConfigFromEnv());
+let handlers: NextHandlers | null = null;
 
-export const GET = handlers.getShippingMethods;
+function getHandlers(): NextHandlers {
+  if (!handlers) {
+    handlers = createNextHandlers(loadConfigFromEnv());
+  }
+  return handlers;
+}
+
+export async function GET(req: Request) {
+  return getHandlers().getShippingMethods(req);
+}
