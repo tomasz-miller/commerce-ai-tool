@@ -10,12 +10,19 @@ import type {
   CartLoginResult,
   CartMutationRequest,
   CartSnapshot,
+  CheckoutRequest,
   CommercetoolsConfig,
+  CreateOrderRequest,
+  OrderSnapshot,
   ProductCard,
+  SetCartAddressesRequest,
+  SetShippingMethodRequest,
+  ShippingMethodSnapshot,
   UpdateCartQuantityRequest,
 } from "../types/index.js";
 import type { ProductTypeForFacets } from "./product-types.js";
-import { createCartOperations } from "./cart.js";
+import { createCartOperations, type CartGateway } from "./cart.js";
+import { createCheckoutOperations, type CheckoutGateway } from "./checkout.js";
 import {
   buildProductSearchRequest,
   buildProjectionSearchQueryArgs,
@@ -59,6 +66,10 @@ export interface CommercetoolsClient {
   removeLineItem(input: CartMutationRequest): Promise<CartSnapshot>;
   changeLineItemQuantity(input: UpdateCartQuantityRequest): Promise<CartSnapshot>;
   loginAndMerge(input: CartLoginRequest): Promise<CartLoginResult>;
+  setCartAddresses(input: SetCartAddressesRequest): Promise<CartSnapshot>;
+  getShippingMethods(input: CheckoutRequest): Promise<ShippingMethodSnapshot[]>;
+  setShippingMethod(input: SetShippingMethodRequest): Promise<CartSnapshot>;
+  createOrder(input: CreateOrderRequest): Promise<OrderSnapshot>;
 }
 
 type ProjectApiRoot = ReturnType<ReturnType<typeof createApiBuilderFromCtpClient>["withProjectKey"]>;
@@ -98,7 +109,7 @@ export function createCommercetoolsClient(config: CommercetoolsConfig): Commerce
     projectKey: config.projectKey,
   });
 
-  const cart = createCartOperations({
+  const cartGateway: CartGateway & CheckoutGateway = {
     async queryCarts(where) {
       const response = await apiRoot
         .carts()
@@ -150,7 +161,31 @@ export function createCommercetoolsClient(config: CommercetoolsConfig): Commerce
         cart: response.body.cart,
       };
     },
-  });
+    async getShippingMethodsMatchingCart(cartId: string) {
+      const response = await apiRoot
+        .shippingMethods()
+        .matchingCart()
+        .get({ queryArgs: { cartId } })
+        .execute();
+      return response.body.results ?? [];
+    },
+    async createOrderFromCart(input: {
+      cartId: string;
+      version: number;
+      orderNumber: string;
+    }) {
+      const response = await apiRoot.orders().post({
+        body: {
+          cart: { typeId: "cart", id: input.cartId },
+          version: input.version,
+          orderNumber: input.orderNumber,
+        },
+      }).execute();
+      return response.body;
+    },
+  };
+  const cart = createCartOperations(cartGateway);
+  const checkout = createCheckoutOperations(cartGateway);
 
   return {
     async listProductTypes() {
@@ -263,6 +298,10 @@ export function createCommercetoolsClient(config: CommercetoolsConfig): Commerce
     removeLineItem: cart.removeLineItem,
     changeLineItemQuantity: cart.changeLineItemQuantity,
     loginAndMerge: cart.loginAndMerge,
+    setCartAddresses: checkout.setCartAddresses,
+    getShippingMethods: checkout.getShippingMethods,
+    setShippingMethod: checkout.setShippingMethod,
+    createOrder: checkout.createOrder,
   };
 }
 

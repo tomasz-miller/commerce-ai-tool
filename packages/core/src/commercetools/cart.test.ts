@@ -133,6 +133,7 @@ describe("cart helpers", () => {
     });
     expect(snapshot.totalPrice.amount).toBe(99.98);
     expect(snapshot.lineItems[0]?.price?.amount).toBe(49.99);
+    expect(snapshot.lineItems[0]?.totalPrice?.amount).toBe(99.98);
   });
 
   it("detects concurrent modification errors", () => {

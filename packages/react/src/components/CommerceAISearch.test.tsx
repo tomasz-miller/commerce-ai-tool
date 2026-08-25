@@ -80,6 +80,10 @@ const defaultCartReturn = {
   addToCart: vi.fn(),
   removeFromCart: vi.fn(),
   updateQuantity: vi.fn(),
+  setAddresses: vi.fn(),
+  getShippingMethods: vi.fn(),
+  setShippingMethod: vi.fn(),
+  placeOrder: vi.fn(),
   login: vi.fn(),
   logout: vi.fn(),
   refresh: vi.fn(),
@@ -214,12 +218,77 @@ describe("CommerceAISearch camera search", () => {
   });
 
   it("hides camera button when camera search is disabled", () => {
-    render(
-      <CommerceAISearch apiBaseUrl="/api/commerce-ai" enableCameraSearch={false} />,
-    );
+    render(<CommerceAISearch apiBaseUrl="/api/commerce-ai" enableCameraSearch={false} />);
 
     expect(screen.queryByRole("button", { name: "Search by camera" })).toBeNull();
     expect(screen.getByRole("button", { name: "Search by image" })).not.toBeNull();
+  });
+
+  it("configures voice, camera, and image upload independently", () => {
+    const { rerender } = render(
+      <CommerceAISearch
+        apiBaseUrl="/api/commerce-ai"
+        enableVoice
+        enableCameraSearch={false}
+        enableImageSearch={false}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Voice search" })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Search by camera" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Search by image" })).toBeNull();
+
+    rerender(
+      <CommerceAISearch
+        apiBaseUrl="/api/commerce-ai"
+        enableVoice={false}
+        enableCameraSearch
+        enableImageSearch={false}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Voice search" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Search by camera" })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Search by image" })).toBeNull();
+
+    rerender(
+      <CommerceAISearch
+        apiBaseUrl="/api/commerce-ai"
+        enableVoice={false}
+        enableCameraSearch={false}
+        enableImageSearch
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Voice search" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Search by camera" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Search by image" })).not.toBeNull();
+  });
+
+  it("ignores image drops when image search is disabled", () => {
+    const searchByImage = vi.fn();
+    mockUseCommerceAISearch.mockReturnValue({
+      ...defaultSearchReturn,
+      searchByImage,
+    });
+
+    const { container } = render(
+      <CommerceAISearch
+        apiBaseUrl="/api/commerce-ai"
+        enableImageSearch={false}
+        enableCameraSearch={false}
+      />,
+    );
+    const root = container.querySelector(".cat-wrapper");
+    expect(root).not.toBeNull();
+
+    fireEvent.drop(root!, {
+      dataTransfer: {
+        files: [new File(["x"], "shoe.png", { type: "image/png" })],
+      },
+    });
+
+    expect(searchByImage).not.toHaveBeenCalled();
   });
 
   it("opens camera capture when camera button is clicked", () => {

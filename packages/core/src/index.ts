@@ -17,6 +17,16 @@ export {
   InvalidCredentialsError,
 } from "./commercetools/cart.js";
 export {
+  CheckoutIncompleteError,
+  createCheckoutOperations,
+  createCheckoutOrderNumber,
+  mapOrderToSnapshot,
+} from "./commercetools/checkout.js";
+export type {
+  CheckoutGateway,
+  CheckoutOperations,
+} from "./commercetools/checkout.js";
+export {
   FacetSchemaStore,
   resolveFacetSchema,
 } from "./commercetools/product-types.js";

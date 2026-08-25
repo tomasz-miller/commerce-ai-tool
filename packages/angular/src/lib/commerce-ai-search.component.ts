@@ -101,29 +101,30 @@ type SearchMode = "text" | "image" | "voice" | null;
           </button>
         }
 
+        @if (enableCameraSearch) {
+          <button
+            type="button"
+            class="cat-icon-btn"
+            [disabled]="isLoading"
+            aria-label="{{ resolvedMessages.searchByCamera }}"
+            (click)="openCamera()"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
+              <circle cx="12" cy="13" r="3" />
+            </svg>
+          </button>
+          <input
+            #cameraInput
+            type="file"
+            accept="image/*"
+            [attr.capture]="cameraFacingMode"
+            class="cat-hidden-input"
+            (change)="onCameraFileSelected($event)"
+          />
+        }
+
         @if (enableImageSearch) {
-          @if (enableCameraSearch) {
-            <button
-              type="button"
-              class="cat-icon-btn"
-              [disabled]="isLoading"
-              aria-label="{{ resolvedMessages.searchByCamera }}"
-              (click)="openCamera()"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
-                <circle cx="12" cy="13" r="3" />
-              </svg>
-            </button>
-            <input
-              #cameraInput
-              type="file"
-              accept="image/*"
-              [attr.capture]="cameraFacingMode"
-              class="cat-hidden-input"
-              (change)="onCameraFileSelected($event)"
-            />
-          }
           <button
             type="button"
             class="cat-icon-btn"
@@ -350,8 +351,11 @@ export class CommerceAiSearchComponent {
   @Input() messages?: Partial<CommerceAISearchMessages>;
   @Input() enableAutocomplete = false;
   @Input() enableFacets = false;
+  /** Show microphone search controls. */
   @Input() enableVoice = true;
+  /** Show local image upload and drag-and-drop search controls. */
   @Input() enableImageSearch = true;
+  /** Show camera capture search controls independently of image upload. */
   @Input() enableCameraSearch = true;
   @Input() cameraFacingMode: CameraFacingMode = "environment";
   @Input() enableTts = true;
@@ -832,6 +836,9 @@ export class CommerceAiSearchComponent {
   }
 
   onDragOver(event: DragEvent): void {
+    if (!this.enableImageSearch) {
+      return;
+    }
     event.preventDefault();
     this.isDragging = true;
   }
@@ -839,6 +846,9 @@ export class CommerceAiSearchComponent {
   onDrop(event: DragEvent): void {
     event.preventDefault();
     this.isDragging = false;
+    if (!this.enableImageSearch) {
+      return;
+    }
     const file = event.dataTransfer?.files[0];
     if (file) void this.searchByImage(file);
   }

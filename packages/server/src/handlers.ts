@@ -18,12 +18,21 @@ import {
   executeRemoveFromCart,
   executeUpdateCartQuantity,
 } from "./cart-actions.js";
+import {
+  executeCreateOrder,
+  executeGetShippingMethods,
+  executeSetCartAddresses,
+  executeSetShippingMethod,
+} from "./checkout-actions.js";
 import { readCartSessionHeader } from "./cart-session.js";
 import { parseMultipart, readJsonBody } from "./utils/multipart.js";
 import type {
   AddToCartRequest,
   CartLoginRequest,
   CartMutationRequest,
+  CreateOrderRequest,
+  SetCartAddressesRequest,
+  SetShippingMethodRequest,
   UpdateCartQuantityRequest,
 } from "@commerce-ai-tool/core";
 
@@ -173,6 +182,61 @@ export function createHandlers(server: CommerceAIServer) {
         return jsonResponse(result);
       } catch (error) {
         const mapped = mapRouteError(error, "updateCartQuantity", "Update cart quantity failed");
+        return errorResponse(mapped.message, mapped.status);
+      }
+    },
+
+    async setCartAddresses(req: IncomingMessage): Promise<HandlerResponse> {
+      try {
+        const body = await readJsonBody<SetCartAddressesRequest>(req);
+        return jsonResponse(await executeSetCartAddresses(server, body));
+      } catch (error) {
+        const mapped = mapRouteError(error, "setCartAddresses", "Set cart addresses failed");
+        return errorResponse(mapped.message, mapped.status);
+      }
+    },
+
+    async getShippingMethods(req: IncomingMessage): Promise<HandlerResponse> {
+      try {
+        const query = parseRequestQuery(req);
+        return jsonResponse(
+          await executeGetShippingMethods(server, {
+            anonymousId: query.anonymousId,
+            cartId: query.cartId,
+            catalogLocale: query.catalogLocale,
+            sessionToken: readCartSessionHeader(req.headers),
+          }),
+        );
+      } catch (error) {
+        const mapped = mapRouteError(
+          error,
+          "getShippingMethods",
+          "Get shipping methods failed",
+        );
+        return errorResponse(mapped.message, mapped.status);
+      }
+    },
+
+    async setShippingMethod(req: IncomingMessage): Promise<HandlerResponse> {
+      try {
+        const body = await readJsonBody<SetShippingMethodRequest>(req);
+        return jsonResponse(await executeSetShippingMethod(server, body));
+      } catch (error) {
+        const mapped = mapRouteError(
+          error,
+          "setShippingMethod",
+          "Set shipping method failed",
+        );
+        return errorResponse(mapped.message, mapped.status);
+      }
+    },
+
+    async createOrder(req: IncomingMessage): Promise<HandlerResponse> {
+      try {
+        const body = await readJsonBody<CreateOrderRequest>(req);
+        return jsonResponse(await executeCreateOrder(server, body));
+      } catch (error) {
+        const mapped = mapRouteError(error, "createOrder", "Create order failed");
         return errorResponse(mapped.message, mapped.status);
       }
     },

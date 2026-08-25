@@ -36,6 +36,7 @@ export interface CommerceAISearchMessages {
   emptyCart: string;
   removeItem: string;
   total: string;
+  each: string;
   cartAriaLabel: string;
   itemAdded: string;
   increaseQuantity: string;
@@ -43,12 +44,36 @@ export interface CommerceAISearchMessages {
   closeCart: string;
   unableToAddToCart: string;
   signIn: string;
+  signInToSyncCart: string;
   signOut: string;
   email: string;
   password: string;
   signedInAs: string;
   invalidCredentials: string;
   signInFailed: string;
+  checkout: string;
+  checkoutTitle: string;
+  orderSummary: string;
+  shippingAddress: string;
+  billingAddress: string;
+  billingSameAsShipping: string;
+  continueToDelivery: string;
+  shippingMethod: string;
+  selectShippingMethod: string;
+  noShippingMethods: string;
+  placeOrder: string;
+  placingOrder: string;
+  orderPlaced: string;
+  continueShopping: string;
+  checkoutFailed: string;
+  firstName: string;
+  lastName: string;
+  streetName: string;
+  additionalAddress: string;
+  postalCode: string;
+  city: string;
+  region: string;
+  country: string;
 }
 
 export const DEFAULT_COMMERCE_AI_SEARCH_MESSAGES: CommerceAISearchMessages = {
@@ -89,6 +114,7 @@ export const DEFAULT_COMMERCE_AI_SEARCH_MESSAGES: CommerceAISearchMessages = {
   emptyCart: "Your cart is empty",
   removeItem: "Remove item",
   total: "Total",
+  each: "each",
   cartAriaLabel: "Shopping cart",
   itemAdded: "Added to cart",
   increaseQuantity: "Increase quantity",
@@ -96,12 +122,36 @@ export const DEFAULT_COMMERCE_AI_SEARCH_MESSAGES: CommerceAISearchMessages = {
   closeCart: "Close cart",
   unableToAddToCart: "This product cannot be added to the cart",
   signIn: "Sign in",
+  signInToSyncCart: "Sign in to sync your cart",
   signOut: "Sign out",
   email: "Email",
   password: "Password",
   signedInAs: "Signed in as",
   invalidCredentials: "Invalid email or password",
   signInFailed: "Sign in failed",
+  checkout: "Checkout",
+  checkoutTitle: "Complete your order",
+  orderSummary: "Order summary",
+  shippingAddress: "Shipping address",
+  billingAddress: "Billing address",
+  billingSameAsShipping: "Billing address is the same as shipping",
+  continueToDelivery: "Continue to delivery",
+  shippingMethod: "Delivery method",
+  selectShippingMethod: "Select a delivery method",
+  noShippingMethods: "No delivery methods are available for this address",
+  placeOrder: "Place order",
+  placingOrder: "Placing order…",
+  orderPlaced: "Order placed",
+  continueShopping: "Continue shopping",
+  checkoutFailed: "Checkout failed",
+  firstName: "First name",
+  lastName: "Last name",
+  streetName: "Street address",
+  additionalAddress: "Apartment, suite, etc. (optional)",
+  postalCode: "Postal code",
+  city: "City",
+  region: "State or region (optional)",
+  country: "Country",
 };
 
 export function resolveCommerceAISearchMessages(

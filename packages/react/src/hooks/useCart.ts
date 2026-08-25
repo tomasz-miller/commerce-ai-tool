@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CART_SESSION_HEADER, type CartSnapshot, type CustomerSnapshot } from "@commerce-ai-tool/core";
+import {
+  CART_SESSION_HEADER,
+  type CartSnapshot,
+  type CheckoutAddress,
+  type CustomerSnapshot,
+  type OrderSnapshot,
+  type ShippingMethodSnapshot,
+} from "@commerce-ai-tool/core";
 
 export const ANONYMOUS_ID_STORAGE_KEY = "commerce-ai-tool:anonymousId";
 export const CUSTOMER_SESSION_STORAGE_KEY = "commerce-ai-tool:customerSession";
@@ -38,6 +45,14 @@ export interface UseCartReturn {
   addToCart: (item: AddToCartItem) => Promise<CartSnapshot | null>;
   removeFromCart: (lineItemId: string) => Promise<CartSnapshot | null>;
   updateQuantity: (lineItemId: string, quantity: number) => Promise<CartSnapshot | null>;
+  setAddresses: (
+    shippingAddress: CheckoutAddress,
+    billingAddress?: CheckoutAddress,
+  ) => Promise<CartSnapshot | null>;
+  /** Returns matching methods, or `null` when the request failed. */
+  getShippingMethods: () => Promise<ShippingMethodSnapshot[] | null>;
+  setShippingMethod: (shippingMethodId: string) => Promise<CartSnapshot | null>;
+  placeOrder: () => Promise<OrderSnapshot | null>;
   login: (input: { email: string; password: string }) => Promise<CartSnapshot | null>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -47,6 +62,8 @@ interface CartApiBody {
   cart?: CartSnapshot | null;
   customer?: CustomerSnapshot | null;
   sessionToken?: string;
+  shippingMethods?: ShippingMethodSnapshot[];
+  order?: OrderSnapshot;
   error?: string;
 }
 
@@ -164,6 +181,7 @@ export function useCart(options: UseCartOptions): UseCartReturn {
   const cartRef = useRef<CartSnapshot | null>(null);
   const sessionTokenRef = useRef<string | null>(null);
   const mutationChainRef = useRef(Promise.resolve<unknown>(undefined));
+  const orderNumberRef = useRef<string | null>(null);
 
   const applyCart = useCallback((next: CartSnapshot | null) => {
     cartRef.current = next;
@@ -320,6 +338,103 @@ export function useCart(options: UseCartOptions): UseCartReturn {
     [mutate],
   );
 
+  const setAddresses = useCallback(
+    (shippingAddress: CheckoutAddress, billingAddress?: CheckoutAddress) =>
+      mutate("/cart/addresses", { shippingAddress, billingAddress }),
+    [mutate],
+  );
+
+  const getShippingMethods = useCallback(async (): Promise<
+    ShippingMethodSnapshot[] | null
+  > => {
+    if (!enabled || !anonymousId) {
+      return [];
+    }
+    const params = new URLSearchParams();
+    const headers: Record<string, string> = {};
+    const token = sessionTokenRef.current;
+    if (token) {
+      headers[CART_SESSION_HEADER] = token;
+    } else {
+      params.set("anonymousId", anonymousId);
+    }
+    if (cartRef.current?.id) {
+      params.set("cartId", cartRef.current.id);
+    }
+    if (catalogLocale) {
+      params.set("catalogLocale", catalogLocale);
+    }
+
+    setIsMutating(true);
+    setError(null);
+    try {
+      const response = await fetch(
+        `${apiBaseUrl}/cart/shipping-methods?${params.toString()}`,
+        token ? { headers } : undefined,
+      );
+      const body = await parseCartApi(response);
+      return body.shippingMethods ?? [];
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Shipping methods request failed");
+      return null;
+    } finally {
+      setIsMutating(false);
+    }
+  }, [anonymousId, apiBaseUrl, catalogLocale, enabled]);
+
+  const setShippingMethod = useCallback(
+    (shippingMethodId: string) =>
+      mutate("/cart/shipping-method", { shippingMethodId }),
+    [mutate],
+  );
+
+  const placeOrder = useCallback(async (): Promise<OrderSnapshot | null> => {
+    if (!enabled || !anonymousId) {
+      return null;
+    }
+
+    const run = async (): Promise<OrderSnapshot | null> => {
+      if (!cartRef.current) {
+        return null;
+      }
+      orderNumberRef.current ??= `cat-${createAnonymousId()}`;
+      setIsMutating(true);
+      setError(null);
+      try {
+        const response = await fetch(`${apiBaseUrl}/cart/order`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            anonymousId,
+            sessionToken: sessionTokenRef.current ?? undefined,
+            cartId: cartRef.current.id,
+            catalogLocale,
+            orderNumber: orderNumberRef.current,
+          }),
+        });
+        const body = await parseCartApi(response);
+        if (!body.order) {
+          throw new CartRequestError("Order response is missing", response.status);
+        }
+        orderNumberRef.current = null;
+        applyCart(null);
+        return body.order;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Checkout failed");
+        return null;
+      } finally {
+        setIsMutating(false);
+      }
+    };
+
+    const pending = mutationChainRef.current.then(run, run);
+    mutationChainRef.current = pending.then(
+      () => undefined,
+      () => undefined,
+    );
+    return pending;
+  }, [anonymousId, apiBaseUrl, applyCart, catalogLocale, enabled]);
+
   const login = useCallback(
     async (input: { email: string; password: string }) => {
       if (!enabled) {
@@ -392,6 +507,10 @@ export function useCart(options: UseCartOptions): UseCartReturn {
     addToCart,
     removeFromCart,
     updateQuantity,
+    setAddresses,
+    getShippingMethods,
+    setShippingMethod,
+    placeOrder,
     login,
     logout,
     refresh,

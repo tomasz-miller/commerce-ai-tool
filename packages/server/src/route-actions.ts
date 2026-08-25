@@ -1,4 +1,11 @@
-import { logSearchTrace, SearchTimeoutError, CartAccessDeniedError, CartNotFoundError, InvalidCredentialsError } from "@commerce-ai-tool/core";
+import {
+  CartAccessDeniedError,
+  CartNotFoundError,
+  CheckoutIncompleteError,
+  InvalidCredentialsError,
+  logSearchTrace,
+  SearchTimeoutError,
+} from "@commerce-ai-tool/core";
 import { InvalidCartSessionError } from "./cart-session.js";
 import { TooManyRequestsError } from "./login-rate-limit.js";
 import type {
@@ -61,7 +68,7 @@ export function mapRouteError(
     return { message: error.message, status: 504 };
   }
 
-  if (error instanceof ValidationError) {
+  if (error instanceof ValidationError || error instanceof CheckoutIncompleteError) {
     return { message: error.message, status: 400 };
   }
 

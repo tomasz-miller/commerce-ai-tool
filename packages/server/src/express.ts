@@ -9,6 +9,9 @@ import {
   LOGIN_RATE_LIMIT_MAX_ATTEMPTS,
   LOGIN_RATE_LIMIT_MESSAGE,
   LOGIN_RATE_LIMIT_WINDOW_MS,
+  ORDER_RATE_LIMIT_MAX_ATTEMPTS,
+  ORDER_RATE_LIMIT_MESSAGE,
+  ORDER_RATE_LIMIT_WINDOW_MS,
 } from "./login-rate-limit.js";
 import { createCommerceAIServer } from "./server.js";
 
@@ -21,14 +24,28 @@ export interface ExpressRouterOptions {
    * Set `false` only when an upstream gateway already throttles this route.
    */
   loginRateLimit?: false | { windowMs?: number; limit?: number };
+  /**
+   * Rate limit for `POST /cart/order`. Defaults to 20 attempts / 15 minutes per IP.
+   * Set `false` only when an upstream gateway already throttles this route.
+   */
+  orderRateLimit?: false | { windowMs?: number; limit?: number };
 }
 
 export function createExpressRouter(options: ExpressRouterOptions): Router {
-  const { config, basePath = "", corsOrigins, loginRateLimit } = options;
+  const { config, basePath = "", corsOrigins, loginRateLimit, orderRateLimit } = options;
   const server = createCommerceAIServer({ config, corsOrigins });
   const handlers = createHandlers(server);
   const router = Router();
-  const loginLimiter = createLoginRateLimitMiddleware(loginRateLimit);
+  const loginLimiter = createRateLimitMiddleware(loginRateLimit, {
+    windowMs: LOGIN_RATE_LIMIT_WINDOW_MS,
+    limit: LOGIN_RATE_LIMIT_MAX_ATTEMPTS,
+    message: LOGIN_RATE_LIMIT_MESSAGE,
+  });
+  const orderLimiter = createRateLimitMiddleware(orderRateLimit, {
+    windowMs: ORDER_RATE_LIMIT_WINDOW_MS,
+    limit: ORDER_RATE_LIMIT_MAX_ATTEMPTS,
+    message: ORDER_RATE_LIMIT_MESSAGE,
+  });
 
   if (corsOrigins) {
     router.use(cors({ origin: corsOrigins }));
@@ -89,6 +106,26 @@ export function createExpressRouter(options: ExpressRouterOptions): Router {
     sendHandlerResponse(res, response);
   });
 
+  router.post(`${basePath}/cart/addresses`, async (req, res) => {
+    const response = await handlers.setCartAddresses(req);
+    sendHandlerResponse(res, response);
+  });
+
+  router.get(`${basePath}/cart/shipping-methods`, async (req, res) => {
+    const response = await handlers.getShippingMethods(req);
+    sendHandlerResponse(res, response);
+  });
+
+  router.post(`${basePath}/cart/shipping-method`, async (req, res) => {
+    const response = await handlers.setShippingMethod(req);
+    sendHandlerResponse(res, response);
+  });
+
+  router.post(`${basePath}/cart/order`, orderLimiter, async (req, res) => {
+    const response = await handlers.createOrder(req);
+    sendHandlerResponse(res, response);
+  });
+
   router.post(`${basePath}/cart/login`, loginLimiter, async (req, res) => {
     const response = await handlers.login(req);
     sendHandlerResponse(res, response);
@@ -106,18 +143,19 @@ export function mountCommerceAIRoutes(app: Express, options: ExpressRouterOption
   app.use(createExpressRouter(options));
 }
 
-function createLoginRateLimitMiddleware(
-  options: ExpressRouterOptions["loginRateLimit"],
+function createRateLimitMiddleware(
+  options: false | { windowMs?: number; limit?: number } | undefined,
+  defaults: { windowMs: number; limit: number; message: string },
 ): RequestHandler {
   if (options === false) {
     return (_req, _res, next) => next();
   }
 
-  const windowMs = options?.windowMs ?? LOGIN_RATE_LIMIT_WINDOW_MS;
+  const windowMs = options?.windowMs ?? defaults.windowMs;
 
   return rateLimit({
     windowMs,
-    limit: options?.limit ?? LOGIN_RATE_LIMIT_MAX_ATTEMPTS,
+    limit: options?.limit ?? defaults.limit,
     standardHeaders: true,
     legacyHeaders: false,
     // Library hosts may not set `trust proxy`. Use the socket address instead of
@@ -126,7 +164,7 @@ function createLoginRateLimitMiddleware(
     keyGenerator: (req) => ipKeyGenerator(req.ip || req.socket.remoteAddress || "127.0.0.1"),
     handler: (_req, res) => {
       res.setHeader("Retry-After", String(Math.ceil(windowMs / 1000)));
-      res.status(429).json({ error: LOGIN_RATE_LIMIT_MESSAGE });
+      res.status(429).json({ error: defaults.message });
     },
   });
 }

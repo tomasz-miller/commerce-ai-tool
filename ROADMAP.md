@@ -6,6 +6,7 @@
 - [x] AI query interpretation (OpenRouter / AWS Bedrock)
 - [x] Voice search (ElevenLabs STT + TTS)
 - [x] Image search (vision AI)
+- [x] Independently configurable voice, camera, and image-upload controls
 - [x] Glass morphism UI with light / dark / auto theme
 - [x] React, Next.js, and Angular packages
 - [x] Server package (Express + Next.js handlers)
@@ -103,12 +104,29 @@ Keep Product Search API (REST) for search and facets. Use GraphQL only to fetch 
 
 - [x] GraphQL client for Product Projections (name, image, price, sku) after Product Search API
 
-## v1.5 — Authenticated cart (current)
+## v1.5 — Authenticated cart
 
 - [x] Authenticated cart sessions (customer login + merge)
 
-## v2.0
+## v2.0 — Checkout (current)
 
-- [ ] Checkout flow integration
+- [x] Host-owned checkout route with reusable React checkout UI
+- [x] Shipping and billing addresses on the commercetools Cart
+- [x] Matching shipping methods and method selection
+- [x] Order creation from an Active Cart
+
+## v2.1 — Payments
+
 - [ ] Payment provider hooks
+
+## v2.2 — Orders
+
 - [ ] Order confirmation and tracking
+
+## v2.3 — Multi-item shopping missions
+
+- [ ] Detect compound shopping requests and split them into product intents with quantities and filters
+- [ ] Run bounded commercetools searches for each intent in parallel, with partial-result handling
+- [ ] Present grouped product recommendations for each intent
+- [ ] Let users select products and add the requested quantities to the cart
+- [ ] Fall back to standard search when intent decomposition is uncertain

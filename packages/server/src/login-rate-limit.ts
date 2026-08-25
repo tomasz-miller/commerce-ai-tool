@@ -2,6 +2,10 @@ export const LOGIN_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 export const LOGIN_RATE_LIMIT_MAX_ATTEMPTS = 10;
 export const LOGIN_RATE_LIMIT_MESSAGE = "Too many login attempts. Try again later.";
 
+export const ORDER_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+export const ORDER_RATE_LIMIT_MAX_ATTEMPTS = 20;
+export const ORDER_RATE_LIMIT_MESSAGE = "Too many order attempts. Try again later.";
+
 export class TooManyRequestsError extends Error {
   readonly retryAfterSeconds: number;
 

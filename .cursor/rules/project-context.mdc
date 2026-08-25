@@ -29,4 +29,8 @@ Browser → /api/commerce-ai/* (server) → core → AI + commercetools
 
 Product cards after Product Search are hydrated via commercetools GraphQL (`products` query for name/image/price/sku).
 
+React and Angular widgets configure microphone, camera capture, and image upload independently through `enableVoice`, `enableCameraSearch`, and `enableImageSearch`.
+
+Checkout is host-routed: `CommerceAISearch.onCheckout` navigates to a host page that can render `CommerceAICheckout`. Server checkout routes set addresses, list/select matching shipping methods, and create an Order from the Active Cart. v2.0 does not create Payment resources.
+
 Never expose API keys in client-side code.
