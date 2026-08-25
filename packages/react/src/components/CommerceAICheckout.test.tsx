@@ -94,9 +94,11 @@ describe("CommerceAICheckout", () => {
       expect(actions.setShippingMethod).toHaveBeenCalledWith("shipping-1"),
     );
 
-    const placeOrder = await waitFor(() =>
-      screen.getByRole("button", { name: "Place order" }),
-    );
+    const placeOrder = await waitFor(() => {
+      const button = screen.getByRole("button", { name: "Place order" });
+      expect(button.hasAttribute("disabled")).toBe(false);
+      return button;
+    });
     fireEvent.click(placeOrder);
     await waitFor(() => expect(actions.placeOrder).toHaveBeenCalled());
     expect(await screen.findByText("Order placed")).not.toBeNull();
