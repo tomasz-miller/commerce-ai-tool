@@ -238,6 +238,7 @@ export function CommerceAICheckout({
   const [hasLoadedShippingMethods, setHasLoadedShippingMethods] = useState(false);
   const [selectedShippingMethodId, setSelectedShippingMethodId] = useState("");
   const [order, setOrder] = useState<OrderSnapshot | null>(null);
+  const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   function handleAddressSubmit(event: FormEvent<HTMLFormElement>) {
@@ -271,10 +272,15 @@ export function CommerceAICheckout({
 
   function placeOrder() {
     startTransition(async () => {
-      const placed = await cart.placeOrder();
-      if (placed) {
-        setOrder(placed);
-        onOrderPlaced?.(placed);
+      setIsPlacingOrder(true);
+      try {
+        const placed = await cart.placeOrder();
+        if (placed) {
+          setOrder(placed);
+          onOrderPlaced?.(placed);
+        }
+      } finally {
+        setIsPlacingOrder(false);
       }
     });
   }
@@ -430,7 +436,7 @@ export function CommerceAICheckout({
           disabled={!canPlaceOrder}
           onClick={placeOrder}
         >
-          <span>{checkoutBusy ? messages.placingOrder : messages.placeOrder}</span>
+          <span>{isPlacingOrder ? messages.placingOrder : messages.placeOrder}</span>
           <span className="cat-checkout-cta__icon" aria-hidden="true">
             <ArrowRight size={16} strokeWidth={1.5} />
           </span>

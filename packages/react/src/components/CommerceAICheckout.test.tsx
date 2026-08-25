@@ -120,8 +120,11 @@ describe("CommerceAICheckout", () => {
     await waitFor(() =>
       expect(screen.getByText(/No delivery methods are available/)).not.toBeNull(),
     );
-    const placeOrder = screen.getByRole("button", { name: "Place order" });
-    expect(placeOrder.hasAttribute("disabled")).toBe(false);
+    const placeOrder = await waitFor(() => {
+      const button = screen.getByRole("button", { name: "Place order" });
+      expect(button.hasAttribute("disabled")).toBe(false);
+      return button;
+    });
     fireEvent.click(placeOrder);
     await waitFor(() => expect(actions.placeOrder).toHaveBeenCalled());
   });
@@ -141,10 +144,12 @@ describe("CommerceAICheckout", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continue to delivery" }));
 
     await waitFor(() => expect(actions.getShippingMethods).toHaveBeenCalled());
-    expect(screen.queryByText(/No delivery methods are available/)).toBeNull();
-    expect(screen.getByRole("button", { name: "Place order" }).hasAttribute("disabled")).toBe(
-      true,
-    );
+    await waitFor(() => {
+      expect(screen.queryByText(/No delivery methods are available/)).toBeNull();
+      expect(
+        screen.getByRole("button", { name: "Place order" }).hasAttribute("disabled"),
+      ).toBe(true);
+    });
     expect(actions.placeOrder).not.toHaveBeenCalled();
   });
 });
