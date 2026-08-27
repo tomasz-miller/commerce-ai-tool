@@ -1,0 +1,18 @@
+image: node:24
+
+pipelines:
+  branches:
+    main:
+      - step:
+          name: Lint, typecheck, test, build
+          max-time: 15
+          caches:
+            - node
+          script:
+            - corepack enable
+            - corepack prepare pnpm@11.22.0 --activate
+            - pnpm install --frozen-lockfile
+            - pnpm lint
+            - pnpm typecheck
+            - pnpm test
+            - pnpm build
