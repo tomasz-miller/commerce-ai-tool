@@ -1,0 +1,37 @@
+name: Mirror to Bitbucket
+
+on:
+  push:
+  workflow_dispatch:
+
+concurrency:
+  group: mirror-to-bitbucket
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  mirror:
+    name: Push mirror to Bitbucket
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Mirror repository
+        env:
+          BITBUCKET_MIRROR_TOKEN: ${{ secrets.BITBUCKET_MIRROR_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BITBUCKET_MIRROR_TOKEN}" ]; then
+            echo "Missing GitHub secret BITBUCKET_MIRROR_TOKEN" >&2
+            exit 1
+          fi
+
+          repo="${GITHUB_REPOSITORY##*/}"
+          git clone --mirror "https://github.com/${GITHUB_REPOSITORY}.git" mirror.git
+          git -C mirror.git for-each-ref --format='%(refname)' refs/pull | while read -r ref; do
+            git -C mirror.git update-ref -d "$ref"
+          done
+
+          git -C mirror.git push --mirror \
+            "https://x-token-auth:${BITBUCKET_MIRROR_TOKEN}@bitbucket.org/istonecrosscommerce/${repo}.git"
