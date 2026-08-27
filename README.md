@@ -80,8 +80,8 @@ Default OpenRouter models (override with env):
 
 | Variable | Default | Role |
 |----------|---------|------|
-| `OPENROUTER_MODEL` | `z-ai/glm-5.3-flash` | Text interpretation |
-| `OPENROUTER_VISION_MODEL` | `z-ai/glm-5.3-flash` | Image search |
+| `OPENROUTER_MODEL` | `openai/gpt-5.6-luna` | Text interpretation |
+| `OPENROUTER_VISION_MODEL` | `google/gemini-3.7-flash` | Image search |
 | `OPENROUTER_VOICE_MODEL` | `google/gemini-3.7-flash` | Direct audio interpretation |
 
 ### Voice search TTS

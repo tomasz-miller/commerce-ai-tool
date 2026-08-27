@@ -74,7 +74,7 @@ Text and image configs include side-by-side columns:
 
 | Label | Backend | Notes |
 |-------|---------|-------|
-| `openrouter-glm-53-flash` | OpenRouter | Always included |
+| `openrouter-gpt-56-luna` (text) / `openrouter-gemini-37-flash` (image) | OpenRouter | Always included |
 | `bedrock-claude-35-sonnet` | AWS Bedrock | Included only when `AWS_REGION` is set — no Bedrock cells run otherwise |
 
 Voice config adds `baseline-enhance-bedrock` (enhance → interpret on transcript) under the same rule. Audio columns remain OpenRouter-only (`interpretVoiceAudio` is not supported on Bedrock); the default audio column is `gemini-37-flash-audio`.
@@ -104,7 +104,7 @@ pnpm eval:fixtures:images
 pnpm eval:promptfoo:image
 ```
 
-Uses `OPENROUTER_VISION_MODEL` (default: `z-ai/glm-5.3-flash`). Fixtures: [`fixtures/images/`](fixtures/images/).
+Uses `OPENROUTER_VISION_MODEL` (default: `google/gemini-3.7-flash`). Fixtures: [`fixtures/images/`](fixtures/images/).
 
 ### Red teaming
 

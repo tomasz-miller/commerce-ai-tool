@@ -9,7 +9,7 @@ providers:
     label: commerce-text-search
     config:
       provider: openrouter
-      model: z-ai/glm-5.3-flash
+      model: openai/gpt-5.6-luna
 
 redteam:
   purpose: file://redteam/purpose.txt

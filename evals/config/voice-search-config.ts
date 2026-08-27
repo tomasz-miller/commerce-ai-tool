@@ -3,20 +3,20 @@ import { jsonShapeAssertions } from "./assertions.ts";
 
 const OPENROUTER_BASELINE_TEXT = {
   id: "file://providers/voice-baseline-provider.ts",
-  label: "baseline-text-glm-53-flash",
+  label: "baseline-text-gpt-56-luna",
   config: {
     provider: "openrouter",
-    model: "z-ai/glm-5.3-flash",
+    model: "openai/gpt-5.6-luna",
     mode: "text-only",
   },
 } as const;
 
 const OPENROUTER_BASELINE_ENHANCE = {
   id: "file://providers/voice-baseline-provider.ts",
-  label: "baseline-enhance-glm-53-flash",
+  label: "baseline-enhance-gpt-56-luna",
   config: {
     provider: "openrouter",
-    model: "z-ai/glm-5.3-flash",
+    model: "openai/gpt-5.6-luna",
     mode: "enhance-then-interpret",
   },
 } as const;
