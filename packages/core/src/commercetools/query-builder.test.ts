@@ -80,20 +80,27 @@ describe("buildProductSearchRequest", () => {
     });
   });
 
-  it("joins multiple searchTerms into one phrase instead of OR", () => {
+  it("ORs alternative search phrases instead of joining them", () => {
     const body = buildProductSearchRequest({
       interpreted: {
         ...baseInterpreted,
-        searchTerms: ["red", "dress"],
+        searchTerms: ["glasses", "mugs"],
       },
       catalogLocale: "en",
     });
 
-    const orClause = (body.query as {
-      or?: Array<{ fullText?: { value?: string }; fuzzy?: { value?: string } }>;
-    }).or;
-    const values = orClause?.map((clause) => clause.fullText?.value ?? clause.fuzzy?.value);
-    expect(values?.every((value) => value === "red dress")).toBe(true);
+    const outer = body.query as {
+      or?: Array<{
+        or?: Array<{ fullText?: { value?: string }; fuzzy?: { value?: string } }>;
+      }>;
+    };
+    expect(outer.or).toHaveLength(2);
+    const phraseValues = outer.or?.map((phraseQuery) => {
+      const values = phraseQuery.or?.map((clause) => clause.fullText?.value ?? clause.fuzzy?.value);
+      expect(values?.every((value) => value === values[0])).toBe(true);
+      return values?.[0];
+    });
+    expect(phraseValues).toEqual(["glasses", "mugs"]);
   });
 
   it("combines text query and filters with and", () => {
@@ -344,6 +351,18 @@ describe("buildProjectionSearchQueryArgs", () => {
       filter: ['variants.attributes.color.key:"blue"'],
       sort: "price asc",
     });
+  });
+
+  it("uses only the first search phrase for projection search", () => {
+    const args = buildProjectionSearchQueryArgs({
+      interpreted: {
+        searchTerms: ["glasses", "mugs", "cups"],
+        interpretation: "something to drink from",
+      },
+      catalogLocale: "en-GB",
+    });
+
+    expect(args["text.en-GB"]).toBe("glasses");
   });
 
   it("includes store filter when store scope is enabled", () => {

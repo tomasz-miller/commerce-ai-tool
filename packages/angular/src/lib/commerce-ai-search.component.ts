@@ -18,7 +18,13 @@ import type {
   SuggestedFacet,
   ThemeMode,
 } from "@commerce-ai-tool/core";
-import { resolveCommerceAISearchMessages, isFacetFilterSelected, toggleFacetFilter } from "@commerce-ai-tool/core";
+import {
+  hexColorSwatchValue,
+  isColorLikeFacetName,
+  resolveCommerceAISearchMessages,
+  isFacetFilterSelected,
+  toggleFacetFilter,
+} from "@commerce-ai-tool/core";
 import { CommerceAiApiService } from "./commerce-ai-api.service.js";
 import {
   buildCameraConstraints,
@@ -274,7 +280,10 @@ type SearchMode = "text" | "image" | "voice" | null;
                     [attr.aria-pressed]="isFacetSelected(facet.id, bucket.key)"
                     (click)="toggleFacet(facet.id, bucket.key)"
                   >
-                    {{ bucket.label }} {{ bucket.count }}
+                    @if (facetSwatch(facet.id, bucket.key); as swatch) {
+                      <span class="cat-facet-chip__swatch" [style.background-color]="swatch" aria-hidden="true"></span>
+                    }
+                    {{ bucket.label }} <span aria-hidden="true">{{ bucket.count }}</span>
                   </button>
                 }
               </div>
@@ -595,6 +604,10 @@ export class CommerceAiSearchComponent {
 
   isFacetSelected(facetId: string, key: string): boolean {
     return isFacetFilterSelected(this.meta?.appliedFilters ?? {}, facetId, key);
+  }
+
+  facetSwatch(facetId: string, key: string): string | undefined {
+    return isColorLikeFacetName(facetId) ? hexColorSwatchValue(key) : undefined;
   }
 
   get hasAppliedFilters(): boolean {

@@ -44,6 +44,12 @@ export {
   PRICE_FACET_ID,
 } from "./commercetools/facets.js";
 export {
+  formatFacetBucketLabel,
+  hexColorSwatchValue,
+  isColorLikeFacetName,
+  isHexColorFacetKey,
+} from "./commercetools/facet-color.js";
+export {
   buildProductSearchBody,
   buildProductSearchRequest,
   buildProjectionSearchQueryArgs,
@@ -76,6 +82,7 @@ export {
   buildSchemaAwareTextQueryUserMessage,
   buildSuggestSearchTermsUserMessage,
   TTS_SUMMARY_PROMPT,
+  MAX_INTERPRETED_SEARCH_TERMS,
 } from "./prompts/index.js";
 export {
   SYSTEM_PROMPT_NAMES,
@@ -103,9 +110,17 @@ export {
   resolveSuggestLocale,
   resolveSuggestLocales,
   shouldUseAiSuggestionFallback,
+  suggestionPrefixes,
+  suggestionMatchesQueryTokens,
+  filterSuggestionsByQueryTokens,
   AI_SUGGESTION_FALLBACK_MIN_LENGTH,
   SUGGESTIONS_MAX_PREFIX_LENGTH,
 } from "./search/suggestions-input.js";
+export {
+  isLikelyProductQuery,
+  localesShareLanguage,
+  mergeInterpretedSearchTerms,
+} from "./search/query-passthrough.js";
 export { logSearchTrace } from "./utils/dev-trace.js";
 export { SearchTimeoutError } from "./utils/with-timeout.js";
 export {

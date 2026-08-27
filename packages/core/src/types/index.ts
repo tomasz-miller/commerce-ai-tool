@@ -358,6 +358,11 @@ export interface InterpretedSearchFilters {
 }
 
 export interface InterpretedSearchQuery {
+  /**
+   * Catalog-language search phrases. Product Search matches any phrase (OR).
+   * Each element is a complete phrase (e.g. `"red shoes"`), not a split word.
+   * Broad intents may include 3–5 synonym or hyponym phrases.
+   */
   searchTerms: string[];
   filters?: InterpretedSearchFilters;
   suggestedFacets?: SuggestedFacet[];

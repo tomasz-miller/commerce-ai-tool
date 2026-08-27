@@ -111,7 +111,7 @@ export class BedrockProvider implements AIProvider {
     _locales: SearchLocaleContext,
   ): Promise<VoiceAudioInterpretation> {
     throw new Error(
-      "Direct voice audio interpretation requires OpenRouter with an audio-capable model (e.g. google/gemini-2.5-flash)",
+      "Direct voice audio interpretation requires OpenRouter with an audio-capable model (e.g. google/gemini-3.7-flash)",
     );
   }
 

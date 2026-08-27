@@ -4,7 +4,12 @@ import type {
   SearchFacetGroup,
   SuggestedFacet,
 } from "@commerce-ai-tool/core";
-import { isFacetFilterSelected, toggleFacetFilter } from "@commerce-ai-tool/core";
+import {
+  hexColorSwatchValue,
+  isColorLikeFacetName,
+  isFacetFilterSelected,
+  toggleFacetFilter,
+} from "@commerce-ai-tool/core";
 
 interface SearchFacetsProps {
   facets: SearchFacetGroup[];
@@ -50,6 +55,9 @@ export function SearchFacets({
           <div className="cat-facet-group__options">
             {facet.buckets.map((bucket) => {
               const selected = isFacetFilterSelected(filters, facet.id, bucket.key);
+              const swatch = isColorLikeFacetName(facet.id)
+                ? hexColorSwatchValue(bucket.key)
+                : undefined;
               return (
                 <button
                   key={bucket.key}
@@ -58,6 +66,13 @@ export function SearchFacets({
                   aria-pressed={selected}
                   onClick={() => onChange(toggleFacetFilter(filters, facet.id, bucket.key))}
                 >
+                  {swatch ? (
+                    <span
+                      className="cat-facet-chip__swatch"
+                      style={{ backgroundColor: swatch }}
+                      aria-hidden="true"
+                    />
+                  ) : null}
                   {bucket.label} <span aria-hidden="true">{bucket.count}</span>
                 </button>
               );

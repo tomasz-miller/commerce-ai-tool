@@ -19,5 +19,6 @@ Requires built-in `say` and `afconvert` (macOS). On other platforms, record equi
 | `noisy-filler-en.wav` | "um, I want like, red shoes please" | `queryLocale: en`, `catalogLocale: no` |
 | `cheapest-running-shoes-en.wav` | "cheapest running shoes" | `queryLocale: en`, `catalogLocale: no` |
 | `hello-en.wav` | "hello" | `queryLocale: en`, `catalogLocale: no` |
+| `drinkware-pl.wav` | "Miałem w domu grubą imprezę…" | `queryLocale: pl`, `catalogLocale: en-GB` |
 
 Baseline transcript providers use the `transcript` column in [`tests/voice-search.yaml`](../tests/voice-search.yaml); audio providers use `audioFile`.

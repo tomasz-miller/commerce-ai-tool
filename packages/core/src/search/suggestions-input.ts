@@ -82,6 +82,53 @@ export function shouldUseAiSuggestionFallback(
   return localesDiffer || isMultiToken;
 }
 
+/**
+ * Prefixes to send to Search Term Suggestions. Whitespace-tokenized keywords
+ * match a single word prefix (`table` → "Art Deco Coffee Table") but not a
+ * multi-word prefix (`coffee table`). Retry the last token when needed.
+ */
+export function suggestionPrefixes(query: string): string[] {
+  const trimmed = query.trim().replace(/\s+/g, " ");
+  if (!trimmed) {
+    return [];
+  }
+
+  const prefixes = [trimmed];
+  const parts = trimmed.split(" ");
+  const last = parts.at(-1);
+  if (
+    parts.length > 1 &&
+    last &&
+    last.length >= SUGGESTIONS_MIN_PREFIX_LENGTH &&
+    last.toLowerCase() !== trimmed.toLowerCase()
+  ) {
+    prefixes.push(last);
+  }
+
+  return prefixes;
+}
+
+/**
+ * Last-token CT hits must still mention every query token so "red shoes"
+ * does not surface "White Running Shoes".
+ */
+export function suggestionMatchesQueryTokens(suggestion: string, query: string): boolean {
+  const tokens = query
+    .trim()
+    .split(/\s+/)
+    .filter((token) => token.length >= SUGGESTIONS_MIN_PREFIX_LENGTH);
+  if (tokens.length === 0) {
+    return true;
+  }
+
+  const haystack = suggestion.toLowerCase();
+  return tokens.every((token) => haystack.includes(token.toLowerCase()));
+}
+
+export function filterSuggestionsByQueryTokens(suggestions: string[], query: string): string[] {
+  return suggestions.filter((suggestion) => suggestionMatchesQueryTokens(suggestion, query));
+}
+
 /** Trim, drop empties / non-suggestible phrases, dedupe case-insensitively, clamp to limit. */
 export function normalizeSuggestionList(suggestions: string[], limit: number): string[] {
   const capped = clampSuggestionsLimit(limit);

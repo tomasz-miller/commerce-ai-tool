@@ -192,6 +192,9 @@
 }
 
 .cat-facet-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   border: 1px solid var(--cat-border);
   border-radius: 0.5rem;
   background: var(--cat-surface);
@@ -200,6 +203,24 @@
   font: inherit;
   font-size: 0.8rem;
   padding: 0.35rem 0.55rem;
+}
+
+.cat-facet-chip__swatch {
+  width: 0.75rem;
+  height: 0.75rem;
+  flex-shrink: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(26, 26, 46, 0.25);
+}
+
+.cat-root[data-theme="dark"] .cat-facet-chip__swatch {
+  border-color: rgba(240, 240, 245, 0.35);
+}
+
+@media (prefers-color-scheme: dark) {
+  .cat-root[data-theme="auto"] .cat-facet-chip__swatch {
+    border-color: rgba(240, 240, 245, 0.35);
+  }
 }
 
 .cat-facet-chip--selected {

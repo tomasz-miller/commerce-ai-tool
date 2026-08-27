@@ -15,6 +15,7 @@ import { FacetSchemaStore } from "../commercetools/product-types.js";
 import { resolveSearchLocales } from "../locale/resolve.js";
 import { hasSearchableContent } from "../commercetools/query-builder.js";
 import type { ProductSearchBuildInput } from "../commercetools/query-builder.js";
+import { mergeInterpretedSearchTerms } from "./query-passthrough.js";
 import {
   withPipelineSpan,
   withPropagatedAttributes,
@@ -50,6 +51,8 @@ import {
   normalizeSuggestionsPrefix,
   resolveSuggestLocales,
   shouldUseAiSuggestionFallback,
+  suggestionPrefixes,
+  filterSuggestionsByQueryTokens,
 } from "./suggestions-input.js";
 
 export interface SearchOrchestrator {
@@ -158,13 +161,25 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
     offset = 0,
     timer?: ReturnType<typeof createSearchTimer>,
     facetSchema?: ResolvedFacetSchema,
+    originalQuery?: string,
   ): Promise<SearchResult> {
+    const resolved = originalQuery
+      ? mergeInterpretedSearchTerms(originalQuery, interpreted, locales)
+      : interpreted;
+
+    logSearchTrace("ai", {
+      searchTerms: resolved.searchTerms,
+      filters: resolved.filters,
+      interpretation: resolved.interpretation,
+      catalogLocale: locales.catalogLocale,
+    });
+
     const interpretedCacheKey = buildInterpretedSearchCacheKey(
       JSON.stringify({
-        searchTerms: interpreted.searchTerms,
-        sort: interpreted.sort,
-        filters: interpreted.filters,
-        suggestedFacets: interpreted.suggestedFacets,
+        searchTerms: resolved.searchTerms,
+        sort: resolved.sort,
+        filters: resolved.filters,
+        suggestedFacets: resolved.suggestedFacets,
         schemaEtag: facetSchema?.etag ?? null,
         includeFacets: Boolean(facetSchema),
       }),
@@ -187,7 +202,8 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
       );
     }
 
-    if (!hasSearchableContent(interpreted)) {
+    if (!hasSearchableContent(resolved)) {
+      logSearchTrace("skipped", { reason: "no_searchable_content" });
       return {
         products: [],
         meta: {
@@ -197,13 +213,13 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
           locale: locales.catalogLocale,
           catalogLocale: locales.catalogLocale,
           queryLocale: locales.queryLocale,
-          queryInterpretation: interpreted.interpretation,
+          queryInterpretation: resolved.interpretation,
         },
       };
     }
 
     const searchInput: ProductSearchBuildInput = {
-      interpreted,
+      interpreted: resolved,
       catalogLocale: locales.catalogLocale,
       limit: searchLimit,
       offset,
@@ -215,18 +231,11 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
       facetSchema,
     };
 
-    logSearchTrace("ai", {
-      searchTerms: interpreted.searchTerms,
-      filters: interpreted.filters,
-      interpretation: interpreted.interpretation,
-      catalogLocale: locales.catalogLocale,
-    });
-
     return withPipelineSpan(
       "commercetools.search",
       {
         input: {
-          searchTerms: interpreted.searchTerms,
+          searchTerms: resolved.searchTerms,
           catalogLocale: locales.catalogLocale,
           limit: searchLimit,
           offset,
@@ -265,21 +274,21 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
             locale: locales.catalogLocale,
             catalogLocale: locales.catalogLocale,
             queryLocale: locales.queryLocale,
-            queryInterpretation: interpreted.interpretation,
-            searchTerms: interpreted.searchTerms,
-            appliedFilters: interpreted.filters,
-            sort: interpreted.sort,
+            queryInterpretation: resolved.interpretation,
+            searchTerms: resolved.searchTerms,
+            appliedFilters: resolved.filters,
+            sort: resolved.sort,
             ...(facetSchema ? { schemaEtag: facetSchema.etag } : {}),
           },
           ...(facetSchema
             ? {
                 facetSchema: facetSchema.attributes,
-                suggestedFacets: filterFacetSuggestions(interpreted.suggestedFacets, facetSchema),
+                suggestedFacets: filterFacetSuggestions(resolved.suggestedFacets, facetSchema),
                 facets: normalizeProductSearchFacets(
                   searchResult.facets,
                   facetSchema,
-                  interpreted.suggestedFacets,
-                  interpreted.filters,
+                  resolved.suggestedFacets,
+                  resolved.filters,
                 ),
               }
             : {}),
@@ -461,6 +470,7 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
               request.offset ?? 0,
               timer,
               facetSchema,
+              request.query,
             );
             resultCache?.set(`${cacheKey}|${request.offset ?? 0}`, result);
             return withTraceIdMeta(withTimings(result, timer));
@@ -508,7 +518,15 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
 
             const voiceInterpretation = await interpretVoice(audio, mimeType, locales, timer);
             const { transcript, enhancedQuery, ...interpreted } = voiceInterpretation;
-            const result = await executeSearch(interpreted, locales, searchLimit, 0, timer);
+            const result = await executeSearch(
+              interpreted,
+              locales,
+              searchLimit,
+              0,
+              timer,
+              undefined,
+              enhancedQuery || transcript,
+            );
 
             const voiceResult: VoiceSearchResult & { ttsText?: string } = {
               ...result,
@@ -617,11 +635,21 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
         aiEligible,
       });
 
-      let suggestions = await withTimeout(
-        ct.suggestSearchTerms(trimmed, suggestLocales, suggestLimit),
-        timeouts.commercetoolsSuggestMs,
-        "ct_suggest",
-      );
+      let suggestions: string[] = [];
+      const prefixes = suggestionPrefixes(trimmed);
+      for (const [index, prefix] of prefixes.entries()) {
+        const raw = await withTimeout(
+          ct.suggestSearchTerms(prefix, suggestLocales, suggestLimit),
+          timeouts.commercetoolsSuggestMs,
+          "ct_suggest",
+        );
+        const kept =
+          index === 0 ? raw : filterSuggestionsByQueryTokens(raw, trimmed);
+        if (kept.length > 0) {
+          suggestions = kept;
+          break;
+        }
+      }
 
       let aiFallbackUsed = false;
       if (suggestions.length === 0 && aiEligible) {

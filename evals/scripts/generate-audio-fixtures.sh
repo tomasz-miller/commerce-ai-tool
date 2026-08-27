@@ -37,9 +37,11 @@ generate_wav "hello-en.wav" "Samantha" "hello"
 
 if say -v "?" 2>/dev/null | grep -q "Zosia"; then
   generate_wav "tapetkniv-pl.wav" "Zosia" "nóż do tapet"
+  generate_wav "drinkware-pl.wav" "Zosia" "Miałem w domu grubą imprezę, ludzie potłukli mi wszystkie naczynia i nie mam z czego pić. Znajdź coś z czego mógłbym się napić."
 else
-  echo "Polish voice Zosia not found; using Samantha for tapetkniv-pl.wav"
+  echo "Polish voice Zosia not found; using Samantha for Polish fixtures"
   generate_wav "tapetkniv-pl.wav" "Samantha" "nozh do tapet"
+  generate_wav "drinkware-pl.wav" "Samantha" "I had a huge party at home, people broke all my dishes and I have nothing to drink from. Find something I could drink from."
 fi
 
 echo "Audio fixtures written to $OUT_DIR"

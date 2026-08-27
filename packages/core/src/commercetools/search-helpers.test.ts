@@ -39,16 +39,16 @@ describe("extractSearchTerms", () => {
     expect(extractSearchTerms(body)).toEqual({ terms: ["jacket"], locale: "en" });
   });
 
-  it("joins terms from compound query into a single phrase", () => {
+  it("extracts unique phrases from an OR of alternative search terms", () => {
     const body = buildProductSearchRequest({
       interpreted: {
-        searchTerms: ["red", "dress"],
-        interpretation: "red dress",
+        searchTerms: ["glasses", "mugs"],
+        interpretation: "something to drink from",
       },
-      catalogLocale: "de",
+      catalogLocale: "en-GB",
     });
 
-    expect(extractSearchTerms(body)).toEqual({ terms: ["red dress"], locale: "de" });
+    expect(extractSearchTerms(body)).toEqual({ terms: ["glasses", "mugs"], locale: "en-GB" });
   });
 });
 

@@ -16,7 +16,7 @@ export function extractSearchTerms(body: ProductSearchRequest): ExtractedSearchT
   const uniquePhrases = [...new Set(terms.map((term) => term.trim()).filter(Boolean))];
 
   return {
-    terms: uniquePhrases.length > 0 ? [uniquePhrases[0]!] : [],
+    terms: uniquePhrases,
     locale,
   };
 }
