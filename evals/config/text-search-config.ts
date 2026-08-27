@@ -3,10 +3,10 @@ import { jsonShapeAssertions } from "./assertions.ts";
 
 const OPENROUTER_PROVIDER = {
   id: "file://providers/text-search-provider.ts",
-  label: "openrouter-gemini-31-lite",
+  label: "openrouter-glm-53-flash",
   config: {
     provider: "openrouter",
-    model: "google/gemini-3.1-flash-lite-preview",
+    model: "z-ai/glm-5.3-flash",
   },
 } as const;
 

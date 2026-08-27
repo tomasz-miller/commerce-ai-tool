@@ -64,7 +64,6 @@ describe("buildProductCardsGraphQLVariables", () => {
     expect(variables).toEqual({
       where: 'id in ("p1")',
       limit: 1,
-      locale: "en-GB",
       locales: ["en-GB", "en-US", "en"],
       currency: "EUR",
     });
@@ -79,8 +78,10 @@ describe("buildProductCardsGraphQLVariables", () => {
 });
 
 describe("PRODUCT_CARDS_GRAPHQL_QUERY", () => {
-  it("does not use localeProjection with name(locale)", () => {
+  it("uses acceptLanguage only (not locale together with acceptLanguage)", () => {
     expect(PRODUCT_CARDS_GRAPHQL_QUERY).not.toContain("localeProjection");
+    expect(PRODUCT_CARDS_GRAPHQL_QUERY).toContain("name(acceptLanguage: $locales)");
+    expect(PRODUCT_CARDS_GRAPHQL_QUERY).not.toContain("locale: $locale");
     expect(PRODUCT_CARDS_GRAPHQL_QUERY).toContain("nameAllLocales");
   });
 });

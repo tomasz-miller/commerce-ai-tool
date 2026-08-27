@@ -3,20 +3,20 @@ import { jsonShapeAssertions } from "./assertions.ts";
 
 const OPENROUTER_BASELINE_TEXT = {
   id: "file://providers/voice-baseline-provider.ts",
-  label: "baseline-text-gemini-31-lite",
+  label: "baseline-text-glm-53-flash",
   config: {
     provider: "openrouter",
-    model: "google/gemini-3.1-flash-lite-preview",
+    model: "z-ai/glm-5.3-flash",
     mode: "text-only",
   },
 } as const;
 
 const OPENROUTER_BASELINE_ENHANCE = {
   id: "file://providers/voice-baseline-provider.ts",
-  label: "baseline-enhance-gemini-31-lite",
+  label: "baseline-enhance-glm-53-flash",
   config: {
     provider: "openrouter",
-    model: "google/gemini-3.1-flash-lite-preview",
+    model: "z-ai/glm-5.3-flash",
     mode: "enhance-then-interpret",
   },
 } as const;
@@ -31,19 +31,11 @@ const BEDROCK_BASELINE_ENHANCE = {
   },
 } as const;
 
-const GEMINI_25_AUDIO = {
+const GEMINI_37_AUDIO = {
   id: "file://providers/voice-audio-provider.ts",
-  label: "gemini-25-flash-audio",
+  label: "gemini-37-flash-audio",
   config: {
-    voiceModel: "google/gemini-2.5-flash",
-  },
-} as const;
-
-const GEMINI_31_AUDIO = {
-  id: "file://providers/voice-audio-provider.ts",
-  label: "gemini-31-flash-lite-audio",
-  config: {
-    voiceModel: "google/gemini-3.1-flash-lite-preview",
+    voiceModel: "google/gemini-3.7-flash",
   },
 } as const;
 
@@ -55,8 +47,7 @@ export default function voiceSearchConfig() {
       OPENROUTER_BASELINE_TEXT,
       OPENROUTER_BASELINE_ENHANCE,
       ...appendBedrockProvidersIfAvailable([], [BEDROCK_BASELINE_ENHANCE]),
-      GEMINI_25_AUDIO,
-      GEMINI_31_AUDIO,
+      GEMINI_37_AUDIO,
     ],
     defaultTest: {
       assert: [...jsonShapeAssertions],

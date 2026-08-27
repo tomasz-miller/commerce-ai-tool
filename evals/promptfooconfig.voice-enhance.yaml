@@ -6,10 +6,10 @@ prompts:
 
 providers:
   - id: file://providers/voice-enhance-provider.ts
-    label: openrouter-gemini-31-lite
+    label: openrouter-glm-53-flash
     config:
       provider: openrouter
-      model: google/gemini-3.1-flash-lite-preview
+      model: z-ai/glm-5.3-flash
 
 defaultTest:
   assert:

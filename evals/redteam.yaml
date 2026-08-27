@@ -18,7 +18,7 @@ providers:
     label: commerce-text-search
     config:
       provider: openrouter
-      model: google/gemini-3.1-flash-lite-preview
+      model: z-ai/glm-5.3-flash
 redteam:
   purpose: file://redteam/purpose.txt
   injectVar: query

@@ -18,7 +18,7 @@ AI-powered product search plugin for [commercetools](https://commercetools.com) 
 ## Features (v2.0)
 
 - **Text search** — natural language queries interpreted by AI (OpenRouter or AWS Bedrock)
-- **Autocomplete** — optional suggestions while typing (`enableAutocomplete`): commercetools Search Term Suggestions first, with AI catalog-language phrases when Suggest is empty for cross-locale or multi-word queries
+- **Autocomplete** — optional suggestions while typing (`enableAutocomplete`): commercetools Search Term Suggestions first (full prefix, then a last-token retry kept only when the suggestion still contains every query token), with AI catalog-language phrases when nothing remains for cross-locale or multi-word queries
 - **Voice search** — ElevenLabs STT with optional TTS result summary
 - **Image search** — vision AI extracts product attributes from photos
 - **Glass UI** — minimalist design with light / dark / auto theme
@@ -74,6 +74,16 @@ Search uses two locale concepts:
 
 The AI translates `searchTerms` into the catalog language before querying commercetools. Product names in results use `catalogLocale`.
 
+Each `searchTerms` element is a **complete phrase**. Product Search matches **any** phrase (OR). A specific query such as "red shoes" yields one phrase (`["røde sko"]` for a Norwegian catalog). A broad need (something to drink from) yields several synonym or hyponym phrases (`["glasses", "mugs", "cups", "drinkware"]`) so the catalog can match glasses *or* mugs, not a single generic word. REST Product Projection Search accepts only one `text.{locale}` value, so the fallback path sends the **first phrase** only.
+
+Default OpenRouter models (override with env):
+
+| Variable | Default | Role |
+|----------|---------|------|
+| `OPENROUTER_MODEL` | `z-ai/glm-5.3-flash` | Text interpretation |
+| `OPENROUTER_VISION_MODEL` | `z-ai/glm-5.3-flash` | Image search |
+| `OPENROUTER_VOICE_MODEL` | `google/gemini-3.7-flash` | Direct audio interpretation |
+
 ### Voice search TTS
 
 Spoken result summaries are **voice-search only** (text and image search show visual results without TTS).
@@ -105,7 +115,7 @@ Server env vars (see `apps/demo-next/.env.example`):
 - `CAT_FACET_INCLUDE=color,size` / `CAT_FACET_EXCLUDE=internalCode` — restrict discovered attributes
 - `CAT_FACET_MAX_ATTRIBUTES=12` — limit the attribute catalog supplied to the AI
 
-Autocomplete uses commercetools Search Term Suggestions first (indexed `searchKeywords` in `catalogLocale`, plus `queryLocale` when it differs). When Suggest returns nothing for cross-locale or multi-word natural-language input, the server falls back to a lightweight AI call that proposes short **catalog-language** search phrases as suggestions. Set `CAT_CATALOG_LOCALE` to a real project language (for example `en-GB` or `en-US` — not bare `en` unless that locale exists on products).
+Autocomplete uses commercetools Search Term Suggestions first (indexed `searchKeywords` in `catalogLocale`, plus `queryLocale` when it differs). Keywords use a whitespace tokenizer, so `table` matches `Art Deco Coffee Table`, but `coffee table` as a prefix does not — the server then retries the last token and **keeps only hits that still contain every query token** (so `coffee table` does not surface a side table). When nothing remains for cross-locale or multi-word natural-language input, the server falls back to a lightweight AI call that proposes short **catalog-language** search phrases as suggestions. Set `CAT_CATALOG_LOCALE` to a real project language (for example `en-GB` or `en-US` — not bare `en` unless that locale exists on products).
 
 Same-locale single-token prefixes still rely on catalog `searchKeywords` (seed with `pnpm seed:search-keywords` for demos).
 
@@ -123,7 +133,7 @@ Options: `--force` overwrites existing keywords; `--limit N` caps how many produ
 
 After changing seed logic, refresh the demo catalog with `pnpm seed:search-keywords -- --apply --force` so old description phrases are removed from `searchKeywords`.
 
-Search queries are built in `@commerce-ai-tool/core` (`commercetools/query-builder.ts`): multi-field full-text (`name`, `searchKeywords`, `description`), optional fuzzy name matching, AI `filters` (color, brand, category, price range), and currency-scoped price sorting. After Product Search returns product IDs (and facets), card fields (`name`, image, price, sku, slug) are hydrated with a narrow commercetools **GraphQL** `products` query — not a full REST Product Projection payload. REST Product Projection Search is used automatically when Product Search API is unavailable (search + cards in one step). GraphQL hydrate failures fall back to REST `productProjections().get()`.
+Search queries are built in `@commerce-ai-tool/core` (`commercetools/query-builder.ts`): multi-field full-text (`name`, `searchKeywords`, `description`), optional fuzzy name matching, AI `filters` (color, brand, category, price range), and currency-scoped price sorting. Short product-type queries stay searchable even when the model returns no `searchTerms`, but the typed text is passed through **only when `queryLocale` and `catalogLocale` share a language** (Polish input is not injected into an English index). Same-language typed text is OR'd with AI phrases on Product Search. After Product Search returns product IDs (and facets), card fields (`name`, image, price, sku, slug) are hydrated with a narrow commercetools **GraphQL** `products` query — not a full REST Product Projection payload. REST Product Projection Search is used automatically when Product Search API is unavailable (search + cards in one step) and sends only the first `searchTerms` phrase. GraphQL hydrate failures fall back to REST `productProjections().get()`.
 
 ### Langfuse (AI observability)
 
@@ -148,7 +158,7 @@ User-message builders and JSON parsers stay in code — only system prompt text 
 
 ### Faceted search
 
-Set `enableFacets` on the widget to let the search pipeline discover filterable attributes from commercetools Product Types. Only attributes marked `isSearchable` are considered. The AI proposes relevant facets for the initial query; users can refine with facet chips or natural language, such as “height above 10 cm”. The server keeps the schema in a short-lived process cache and exposes `GET /search/facet-schema` for host-app preload.
+Set `enableFacets` on the widget to let the search pipeline discover filterable attributes from commercetools Product Types. Only attributes marked `isSearchable` are considered. The AI proposes relevant facets for the initial query; users can refine with facet chips or natural language, such as “height above 10 cm”. Hex color values (for example `#FFFFFF`) are shown as the nearest CSS color name with a swatch; filters still use the original hex key. The server keeps the schema in a short-lived process cache and exposes `GET /search/facet-schema` for host-app preload.
 
 ### 4. Add the widget
 

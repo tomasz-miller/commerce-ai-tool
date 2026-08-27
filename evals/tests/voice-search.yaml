@@ -84,3 +84,19 @@
         const parsed = JSON.parse(output);
         if (!parsed.transcript) return true;
         return parsed.transcript.toLowerCase().includes('hello');
+
+- description: Polish broad drinkware intent translated to English catalog (multiple phrases)
+  vars:
+    transcript: Miałem w domu grubą imprezę, ludzie potłukli mi wszystkie naczynia i nie mam z czego pić. Znajdź coś z czego mógłbym się napić.
+    audioFile: drinkware-pl.wav
+    queryLocale: pl
+    catalogLocale: en-GB
+  assert:
+    - type: javascript
+      value: JSON.parse(output).searchTerms.length >= 3
+    - type: javascript
+      value: |
+        const terms = JSON.parse(output).searchTerms.join(' ').toLowerCase();
+        const hits = ['glass', 'mug', 'cup', 'tumbler', 'drinkware'].filter((keyword) => terms.includes(keyword));
+        return hits.length >= 2;
+

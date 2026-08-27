@@ -4,15 +4,15 @@ import type { ProductCard } from "../types/index.js";
 export const GRAPHQL_PRODUCT_CARD_CHUNK_SIZE = 100;
 
 /**
- * Card hydrate query — do not use `localeProjection` with `name(locale:)`.
- * CT docs apply localeProjection to `nameAllLocales`; combining both can yield null names.
+ * Card hydrate query — pass only `acceptLanguage` on localized strings
+ * (commercetools rejects `locale` and `acceptLanguage` together).
+ * Do not use `localeProjection` with `name(acceptLanguage:)`.
  */
 export const PRODUCT_CARDS_GRAPHQL_QUERY = `
 query ProductCards(
   $where: String!
   $limit: Int!
-  $locale: Locale!
-  $locales: [Locale!]
+  $locales: [Locale!]!
   $currency: Currency!
   $country: Country
 ) {
@@ -22,9 +22,9 @@ query ProductCards(
       key
       masterData {
         current {
-          name(locale: $locale, acceptLanguage: $locales)
-          description(locale: $locale, acceptLanguage: $locales)
-          slug(locale: $locale, acceptLanguage: $locales)
+          name(acceptLanguage: $locales)
+          description(acceptLanguage: $locales)
+          slug(acceptLanguage: $locales)
           nameAllLocales { locale value }
           descriptionAllLocales { locale value }
           slugAllLocales { locale value }
@@ -88,7 +88,6 @@ export interface GraphQLProductCardsData {
 export interface ProductCardsGraphQLVariables {
   where: string;
   limit: number;
-  locale: string;
   locales: string[];
   currency: string;
   country?: string;
@@ -158,7 +157,6 @@ export function buildProductCardsGraphQLVariables(
   const variables: ProductCardsGraphQLVariables = {
     where: buildProductIdsWhere(productIds),
     limit: productIds.length,
-    locale,
     locales: buildAcceptLanguageLocales(locale),
     currency,
   };

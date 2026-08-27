@@ -7,6 +7,7 @@ import {
   parseInterpretedQuery,
   parseSuggestSearchTerms,
   parseVoiceAudioInterpretation,
+  TEXT_QUERY_SYSTEM_PROMPT,
 } from "./index.js";
 
 describe("formatLocaleContext", () => {
@@ -23,6 +24,13 @@ describe("formatLocaleContext", () => {
     expect(
       formatLocaleContext({ queryLocale: "pl", catalogLocale: "no" }),
     ).toContain("CRITICAL: searchTerms must use only the catalog language (no)");
+  });
+});
+
+describe("TEXT_QUERY_SYSTEM_PROMPT", () => {
+  it("keeps short product-type queries on-topic", () => {
+    expect(TEXT_QUERY_SYSTEM_PROMPT).toContain('query "coffee table"');
+    expect(TEXT_QUERY_SYSTEM_PROMPT).toContain("never return an empty array for a product query");
   });
 });
 
@@ -69,6 +77,17 @@ describe("parseInterpretedQuery", () => {
     expect(result.interpretation).toBe("Looking for Dell laptops");
   });
 
+  it("deduplicates and caps searchTerms", () => {
+    const result = parseInterpretedQuery(
+      JSON.stringify({
+        searchTerms: ["Glasses", "glasses", "mugs", "cups", "tumblers", "drinkware", "steins", "goblets"],
+        interpretation: "something to drink from",
+      }),
+    );
+
+    expect(result.searchTerms).toEqual(["Glasses", "mugs", "cups", "tumblers", "drinkware", "steins"]);
+  });
+
   it("parses standardized filters", () => {
     const result = parseInterpretedQuery(
       JSON.stringify({
@@ -96,6 +115,17 @@ describe("parseInterpretedQuery", () => {
 
   it("throws on invalid response", () => {
     expect(() => parseInterpretedQuery("{}")).toThrow();
+  });
+
+  it("ignores non-string searchTerms entries", () => {
+    const result = parseInterpretedQuery(
+      JSON.stringify({
+        searchTerms: ["coffee table", { phrase: "nope" }, 12, null],
+        interpretation: "tables",
+      }),
+    );
+
+    expect(result.searchTerms).toEqual(["coffee table"]);
   });
 });
 
@@ -202,21 +232,26 @@ describe("buildProductSearchBody", () => {
     });
   });
 
-  it("joins multiple terms into one phrase", () => {
+  it("ORs each search phrase instead of joining them", () => {
     const body = buildProductSearchBody(
       {
-        searchTerms: ["red", "dress"],
-        interpretation: "red dress",
+        searchTerms: ["glasses", "mugs"],
+        interpretation: "something to drink from",
         sort: "relevance",
       },
       "en",
     );
 
-    const orClause = (body.query as {
-      or?: Array<{ fullText?: { value?: string }; fuzzy?: { value?: string } }>;
-    }).or;
-    const values = orClause?.map((clause) => clause.fullText?.value ?? clause.fuzzy?.value);
-    expect(values?.every((value) => value === "red dress")).toBe(true);
+    const outer = body.query as {
+      or?: Array<{
+        or?: Array<{ fullText?: { value?: string }; fuzzy?: { value?: string } }>;
+      }>;
+    };
+    const phraseValues = outer.or?.map((phraseQuery) => {
+      const values = phraseQuery.or?.map((clause) => clause.fullText?.value ?? clause.fuzzy?.value);
+      return values?.[0];
+    });
+    expect(phraseValues).toEqual(["glasses", "mugs"]);
   });
 
   it("includes filter expressions in the query", () => {
