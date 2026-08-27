@@ -361,6 +361,17 @@ pnpm release            # build + publish all packages
 
 Current release workflow (`.github/workflows/release.yml`) publishes automatically on merge to `main` when changesets are present.
 
+## Hosting
+
+GitHub is the source of truth and public portfolio. Columbus keeps a private copy on Bitbucket; push day-to-day work to GitHub (`origin`). CI runs on GitHub Actions and, on `main`, as Bitbucket Pipelines (enable Pipelines on the Bitbucket repository).
+
+| | GitHub | Bitbucket |
+|--|--|--|
+| This repo | [tomasz-miller/commerce-ai-tool](https://github.com/tomasz-miller/commerce-ai-tool) | [istonecrosscommerce/commerce-ai-tool](https://bitbucket.org/istonecrosscommerce/commerce-ai-tool) |
+| zero-to-ct-storefront | [GitHub](https://github.com/tomasz-miller/zero-to-ct-storefront) | [Bitbucket](https://bitbucket.org/istonecrosscommerce/zero-to-ct-storefront) |
+| ct-agentic-connect | [GitHub](https://github.com/tomasz-miller/ct-agentic-connect) | [Bitbucket](https://bitbucket.org/istonecrosscommerce/ct-agentic-connect) |
+| commercetools-agentic-playbook | [GitHub](https://github.com/tomasz-miller/commercetools-agentic-playbook) | [Bitbucket](https://bitbucket.org/istonecrosscommerce/commercetools-agentic-playbook) |
+
 ## License
 
 MIT
