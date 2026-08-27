@@ -136,7 +136,7 @@ describe("createSearchOrchestrator.suggestByText", () => {
       catalogLocale: "en",
     });
 
-    expect(ct.suggestSearchTerms).toHaveBeenCalledOnce();
+    expect(ct.suggestSearchTerms).toHaveBeenCalledTimes(2);
     expect(ai.suggestSearchTerms).toHaveBeenCalledWith(
       "szukam stołu",
       { queryLocale: "pl", catalogLocale: "en" },
@@ -231,6 +231,87 @@ describe("createSearchOrchestrator.suggestByText", () => {
     expect(result.suggestions).toEqual(["Red Shoes", "Running Shoes"]);
     expect(ai.suggestSearchTerms).not.toHaveBeenCalled();
   });
+
+  it("retries the last token when a multi-word prefix has no CT suggestions", async () => {
+    const ct = createMockCommercetoolsClient({
+      suggestSearchTerms: vi
+        .fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          "Art Deco Coffee Table",
+          "Minimalist Modern Side Table",
+          "Modern Gold Coffee Table",
+        ]),
+    });
+    const ai = {
+      interpretTextQuery: vi.fn(),
+      interpretRefineQuery: vi.fn(),
+      interpretImageQuery: vi.fn(),
+      interpretVoiceAudio: vi.fn(),
+      enhanceVoiceTranscript: vi.fn(),
+      suggestSearchTerms: vi.fn(),
+      summarizeVoiceResults: vi.fn(),
+    };
+    const orchestrator = createSearchOrchestrator({
+      config: baseConfig,
+      commercetoolsClient: ct,
+      aiProvider: ai as never,
+    });
+
+    const result = await orchestrator.suggestByText({
+      query: "coffee table",
+      queryLocale: "en",
+      catalogLocale: "en-GB",
+    });
+
+    expect(ct.suggestSearchTerms).toHaveBeenNthCalledWith(1, "coffee table", ["en-GB", "en"], 8);
+    expect(ct.suggestSearchTerms).toHaveBeenNthCalledWith(2, "table", ["en-GB", "en"], 8);
+    expect(ai.suggestSearchTerms).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      suggestions: ["Art Deco Coffee Table", "Modern Gold Coffee Table"],
+    });
+  });
+
+  it("falls back to AI when last-token hits omit earlier query words", async () => {
+    const ct = createMockCommercetoolsClient({
+      suggestSearchTerms: vi
+        .fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce(["White Running Shoes", "Blue Sneakers"]),
+    });
+    const ai = {
+      interpretTextQuery: vi.fn(),
+      interpretRefineQuery: vi.fn(),
+      interpretImageQuery: vi.fn(),
+      interpretVoiceAudio: vi.fn(),
+      enhanceVoiceTranscript: vi.fn(),
+      suggestSearchTerms: vi.fn().mockResolvedValue(["red shoes"]),
+      summarizeVoiceResults: vi.fn(),
+    };
+    const orchestrator = createSearchOrchestrator({
+      config: baseConfig,
+      commercetoolsClient: ct,
+      aiProvider: ai as never,
+    });
+
+    const result = await orchestrator.suggestByText({
+      query: "red shoes",
+      queryLocale: "en",
+      catalogLocale: "en",
+    });
+
+    expect(ct.suggestSearchTerms).toHaveBeenNthCalledWith(1, "red shoes", ["en"], 8);
+    expect(ct.suggestSearchTerms).toHaveBeenNthCalledWith(2, "shoes", ["en"], 8);
+    expect(ai.suggestSearchTerms).toHaveBeenCalledWith(
+      "red shoes",
+      { queryLocale: "en", catalogLocale: "en" },
+      8,
+    );
+    expect(result).toEqual({
+      suggestions: ["red shoes"],
+      aiFallbackUsed: true,
+    });
+  });
 });
 
 describe("createSearchOrchestrator.searchByText facets", () => {
@@ -312,6 +393,123 @@ describe("createSearchOrchestrator.searchByText facets", () => {
     await orchestrator.searchByText({ query: "glasses", includeFacets: true });
 
     expect(searchProducts).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("createSearchOrchestrator.searchByText query passthrough", () => {
+  it("searches the typed query when AI returns no searchTerms", async () => {
+    const searchProducts = vi.fn().mockResolvedValue({
+      productIds: ["p1"],
+      total: 1,
+      projections: [{ id: "p1", name: "Art Deco Coffee Table" }],
+    });
+    const ct = createMockCommercetoolsClient({ searchProducts });
+    const ai = {
+      interpretTextQuery: vi.fn().mockResolvedValue({
+        searchTerms: [],
+        interpretation: "none",
+        filters: {},
+      }),
+      interpretRefineQuery: vi.fn(),
+      interpretImageQuery: vi.fn(),
+      interpretVoiceAudio: vi.fn(),
+      enhanceVoiceTranscript: vi.fn(),
+      suggestSearchTerms: vi.fn(),
+      summarizeVoiceResults: vi.fn(),
+    };
+    const orchestrator = createSearchOrchestrator({
+      config: baseConfig,
+      commercetoolsClient: ct,
+      aiProvider: ai as never,
+    });
+
+    const result = await orchestrator.searchByText({
+      query: "coffee table",
+      queryLocale: "en",
+      catalogLocale: "en-GB",
+    });
+
+    expect(searchProducts).toHaveBeenCalledWith(
+      expect.objectContaining({
+        interpreted: expect.objectContaining({ searchTerms: ["coffee table"] }),
+      }),
+      expect.anything(),
+    );
+    expect(result.meta.searchTerms).toEqual(["coffee table"]);
+  });
+
+  it("prepends the typed query when AI already returned phrases", async () => {
+    const searchProducts = vi.fn().mockResolvedValue({
+      productIds: ["p1"],
+      total: 1,
+      projections: [{ id: "p1", name: "Art Deco Coffee Table" }],
+    });
+    const ct = createMockCommercetoolsClient({ searchProducts });
+    const ai = {
+      interpretTextQuery: vi.fn().mockResolvedValue({
+        searchTerms: ["side table"],
+        interpretation: "tables",
+        filters: {},
+      }),
+      interpretRefineQuery: vi.fn(),
+      interpretImageQuery: vi.fn(),
+      interpretVoiceAudio: vi.fn(),
+      enhanceVoiceTranscript: vi.fn(),
+      suggestSearchTerms: vi.fn(),
+      summarizeVoiceResults: vi.fn(),
+    };
+    const orchestrator = createSearchOrchestrator({
+      config: baseConfig,
+      commercetoolsClient: ct,
+      aiProvider: ai as never,
+    });
+
+    const result = await orchestrator.searchByText({
+      query: "coffee table",
+      queryLocale: "en",
+      catalogLocale: "en-GB",
+    });
+
+    expect(searchProducts).toHaveBeenCalledWith(
+      expect.objectContaining({
+        interpreted: expect.objectContaining({
+          searchTerms: ["coffee table", "side table"],
+        }),
+      }),
+      expect.anything(),
+    );
+    expect(result.meta.searchTerms).toEqual(["coffee table", "side table"]);
+  });
+
+  it("does not search off-topic questions when AI returns no terms", async () => {
+    const searchProducts = vi.fn();
+    const ct = createMockCommercetoolsClient({ searchProducts });
+    const ai = {
+      interpretTextQuery: vi.fn().mockResolvedValue({
+        searchTerms: [],
+        interpretation: "not product search",
+        filters: {},
+      }),
+      interpretRefineQuery: vi.fn(),
+      interpretImageQuery: vi.fn(),
+      interpretVoiceAudio: vi.fn(),
+      enhanceVoiceTranscript: vi.fn(),
+      suggestSearchTerms: vi.fn(),
+      summarizeVoiceResults: vi.fn(),
+    };
+    const orchestrator = createSearchOrchestrator({
+      config: baseConfig,
+      commercetoolsClient: ct,
+      aiProvider: ai as never,
+    });
+
+    await orchestrator.searchByText({
+      query: "explain the difference between RAM and SSD",
+      queryLocale: "en",
+      catalogLocale: "en-GB",
+    });
+
+    expect(searchProducts).not.toHaveBeenCalled();
   });
 });
 

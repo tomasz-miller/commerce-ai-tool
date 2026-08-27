@@ -6,6 +6,8 @@ import {
   resolveSuggestLocale,
   resolveSuggestLocales,
   shouldUseAiSuggestionFallback,
+  suggestionPrefixes,
+  filterSuggestionsByQueryTokens,
   SUGGESTIONS_MAX_PREFIX_LENGTH,
 } from "./suggestions-input.js";
 import {
@@ -76,6 +78,27 @@ describe("shouldUseAiSuggestionFallback", () => {
 
   it("is false for short same-locale single tokens", () => {
     expect(shouldUseAiSuggestionFallback("glas", "en-GB", "en-GB")).toBe(false);
+  });
+});
+
+describe("suggestionPrefixes", () => {
+  it("returns the full query and the last token for multi-word input", () => {
+    expect(suggestionPrefixes("coffee table")).toEqual(["coffee table", "table"]);
+  });
+
+  it("returns only the trimmed query for a single token", () => {
+    expect(suggestionPrefixes("  table  ")).toEqual(["table"]);
+  });
+});
+
+describe("filterSuggestionsByQueryTokens", () => {
+  it("drops last-token hits that omit earlier query words", () => {
+    expect(
+      filterSuggestionsByQueryTokens(
+        ["Art Deco Coffee Table", "Minimalist Modern Side Table", "White Running Shoes"],
+        "coffee table",
+      ),
+    ).toEqual(["Art Deco Coffee Table"]);
   });
 });
 

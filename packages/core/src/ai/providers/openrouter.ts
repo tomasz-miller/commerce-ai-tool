@@ -18,9 +18,9 @@ import { resolveAndLinkSystemPrompt } from "../../prompts/resolve.js";
 import { mimeTypeToAudioFormat, uint8ArrayToBase64 } from "../../utils/audio.js";
 import { buildTtsSummaryUserMessage } from "../../search/voice-tts.js";
 
-const DEFAULT_MODEL = "google/gemini-3.1-flash-lite-preview";
-const DEFAULT_VISION_MODEL = "google/gemini-3.1-flash-lite-preview";
-const DEFAULT_VOICE_MODEL = "google/gemini-2.5-flash";
+const DEFAULT_MODEL = "openai/gpt-5.6-luna";
+const DEFAULT_VISION_MODEL = "google/gemini-3.7-flash";
+const DEFAULT_VOICE_MODEL = "google/gemini-3.7-flash";
 
 export class OpenRouterProvider implements AIProvider {
   private readonly client: OpenRouter;

@@ -5,6 +5,7 @@ import type {
   SearchFacetGroup,
   SuggestedFacet,
 } from "../types/index.js";
+import { formatFacetBucketLabel } from "./facet-color.js";
 
 export const PRICE_FACET_ID = "price";
 export const CATEGORIES_FACET_ID = "categories";
@@ -260,11 +261,11 @@ function normalizeFacetBuckets(record: {
   name?: string;
 }): Array<{ key: string; label: string; count: number }> {
   if (Array.isArray(record.buckets)) {
-    return record.buckets.flatMap((bucket) => normalizeBucket(bucket));
+    return record.buckets.flatMap((bucket) => normalizeBucket(bucket, record.name));
   }
 
   if (Array.isArray(record.terms)) {
-    return record.terms.flatMap((term) => normalizeTermBucket(term));
+    return record.terms.flatMap((term) => normalizeTermBucket(term, record.name));
   }
 
   if (Array.isArray(record.ranges)) {
@@ -274,7 +275,7 @@ function normalizeFacetBuckets(record: {
   return [];
 }
 
-function normalizeBucket(bucket: unknown) {
+function normalizeBucket(bucket: unknown, facetName?: string) {
   if (!bucket || typeof bucket !== "object") {
     return [];
   }
@@ -282,10 +283,10 @@ function normalizeBucket(bucket: unknown) {
   if (typeof record.key !== "string" || typeof record.count !== "number") {
     return [];
   }
-  return [{ key: record.key, label: record.key, count: record.count }];
+  return [{ key: record.key, label: formatFacetBucketLabel(record.key, facetName), count: record.count }];
 }
 
-function normalizeTermBucket(bucket: unknown) {
+function normalizeTermBucket(bucket: unknown, facetName?: string) {
   if (!bucket || typeof bucket !== "object") {
     return [];
   }
@@ -293,7 +294,7 @@ function normalizeTermBucket(bucket: unknown) {
   if (typeof record.term !== "string" || typeof record.count !== "number") {
     return [];
   }
-  return [{ key: record.term, label: record.term, count: record.count }];
+  return [{ key: record.term, label: formatFacetBucketLabel(record.term, facetName), count: record.count }];
 }
 
 function normalizeRangeBucket(bucket: unknown, index: number) {

@@ -52,7 +52,7 @@ describe("hydrateProductCards", () => {
       variables: expect.objectContaining({
         currency: "EUR",
         country: "DE",
-        locale: "en",
+        locales: ["en", "en-GB", "en-US"],
       }),
     });
     expect(transport.rest).not.toHaveBeenCalled();

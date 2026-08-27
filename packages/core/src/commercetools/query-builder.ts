@@ -43,13 +43,36 @@ const TEXT_FIELD_BOOSTS = [
 const SYSTEM_FILTER_KEYS = new Set(["category", "priceMin", "priceMax"]);
 
 export function hasSearchableContent(interpreted: InterpretedSearchQuery): boolean {
-  const phrase = joinSearchTerms(interpreted.searchTerms);
+  const phrases = normalizeSearchPhrases(interpreted.searchTerms);
   const filters = normalizeFilters(interpreted.filters);
-  return phrase.length > 0 || Object.keys(filters).length > 0;
+  return phrases.length > 0 || Object.keys(filters).length > 0;
 }
 
+/** Joins phrases with spaces. Product Search ORs phrases; this is not used for that query. */
 export function joinSearchTerms(searchTerms: string[]): string {
   return searchTerms.map((term) => term.trim()).filter(Boolean).join(" ");
+}
+
+function normalizeSearchPhrases(searchTerms: string[]): string[] {
+  const seen = new Set<string>();
+  const phrases: string[] = [];
+
+  for (const raw of searchTerms) {
+    const phrase = raw.trim().replace(/\s+/g, " ");
+    if (!phrase) {
+      continue;
+    }
+
+    const key = phrase.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    phrases.push(phrase);
+  }
+
+  return phrases;
 }
 
 export function buildProductSearchBody(
@@ -70,11 +93,11 @@ export function buildProductSearchBody(
 
 export function buildProductSearchRequest(input: ProductSearchBuildInput): ProductSearchRequest {
   const { interpreted, catalogLocale, limit = 20, offset = 0, options } = input;
-  const phrase = joinSearchTerms(interpreted.searchTerms);
+  const phrases = normalizeSearchPhrases(interpreted.searchTerms);
   const filters = normalizeFilters(interpreted.filters);
   const enableFuzzy = options?.enableFuzzyName !== false;
 
-  const textQuery = buildTextQuery(phrase, catalogLocale, enableFuzzy);
+  const textQuery = buildPhraseQueries(phrases, catalogLocale, enableFuzzy);
   const filterQuery = buildFilterExpressions(filters, options?.currency, input.facetSchema);
   const storeQuery = buildStoreScopeExpression(options);
 
@@ -103,11 +126,17 @@ export function buildProductSearchRequest(input: ProductSearchBuildInput): Produ
   return request;
 }
 
+/**
+ * Product Projection Search query args. Full-text is a single `text.{locale}`
+ * value — commercetools does not OR multiple phrases here, so only the first
+ * catalog phrase is sent. Product Search remains the multi-phrase path.
+ */
 export function buildProjectionSearchQueryArgs(
   input: ProductSearchBuildInput,
 ): Record<string, string | number | boolean | string[]> {
   const { interpreted, catalogLocale, limit = 20, offset = 0, options } = input;
-  const phrase = joinSearchTerms(interpreted.searchTerms);
+  const phrases = normalizeSearchPhrases(interpreted.searchTerms);
+  const phrase = phrases[0];
   const filters = normalizeFilters(interpreted.filters);
   const textKey = `text.${catalogLocale}`;
 
@@ -146,6 +175,22 @@ export function buildProjectionSearchQueryArgs(
   }
 
   return queryArgs;
+}
+
+function buildPhraseQueries(
+  phrases: string[],
+  catalogLocale: string,
+  enableFuzzy: boolean,
+): SearchExpression | undefined {
+  const queries = phrases
+    .map((phrase) => buildTextQuery(phrase, catalogLocale, enableFuzzy))
+    .filter((query): query is SearchExpression => Boolean(query));
+
+  if (queries.length === 0) {
+    return undefined;
+  }
+
+  return queries.length === 1 ? queries[0] : { or: queries };
 }
 
 function buildTextQuery(

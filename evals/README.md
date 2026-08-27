@@ -11,7 +11,7 @@ Promptfoo helps you practice **test-driven prompt engineering**:
 3. Check outputs with automatic **assertions** (JSON shape, locale rules, sort intent, etc.).
 4. Review results in the terminal or web UI.
 
-This complements Vitest unit tests in `packages/core`: Vitest tests parsers and builders **without** calling an LLM. Promptfoo tests **interpretation quality** (e.g. whether `"red shoes"` with a Norwegian catalog yields Norwegian `searchTerms`).
+This complements Vitest unit tests in `packages/core`: Vitest tests parsers and builders **without** calling an LLM. Promptfoo tests **interpretation quality** (e.g. whether `"red shoes"` with a Norwegian catalog yields Norwegian `searchTerms`, and whether a broad Polish drinkware request yields several English phrases).
 
 ## How this repo uses it
 
@@ -74,10 +74,10 @@ Text and image configs include side-by-side columns:
 
 | Label | Backend | Notes |
 |-------|---------|-------|
-| `openrouter-gemini-31-lite` | OpenRouter | Always included |
+| `openrouter-gpt-56-luna` (text) / `openrouter-gemini-37-flash` (image) | OpenRouter | Always included |
 | `bedrock-claude-35-sonnet` | AWS Bedrock | Included only when `AWS_REGION` is set — no Bedrock cells run otherwise |
 
-Voice config adds `baseline-enhance-bedrock` (enhance → interpret on transcript) under the same rule. Audio columns remain OpenRouter-only (`interpretVoiceAudio` is not supported on Bedrock).
+Voice config adds `baseline-enhance-bedrock` (enhance → interpret on transcript) under the same rule. Audio columns remain OpenRouter-only (`interpretVoiceAudio` is not supported on Bedrock); the default audio column is `gemini-37-flash-audio`.
 
 Configs are TypeScript (`promptfooconfig.ts`, `.image.ts`, `.voice.ts`) so Bedrock provider columns are omitted at load time when AWS is unavailable — not skipped at runtime.
 
@@ -104,7 +104,7 @@ pnpm eval:fixtures:images
 pnpm eval:promptfoo:image
 ```
 
-Uses `OPENROUTER_VISION_MODEL` (default: `google/gemini-3.1-flash-lite-preview`). Fixtures: [`fixtures/images/`](fixtures/images/).
+Uses `OPENROUTER_VISION_MODEL` (default: `google/gemini-3.7-flash`). Fixtures: [`fixtures/images/`](fixtures/images/).
 
 ### Red teaming
 

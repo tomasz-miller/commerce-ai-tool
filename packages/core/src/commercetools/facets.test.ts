@@ -104,6 +104,85 @@ describe("facet helpers", () => {
     expect(isFacetFilterSelected({ priceMax: "50" }, "price", "under-50")).toBe(true);
   });
 
+  it("labels hex color buckets with CSS names while keeping the hex key", () => {
+    expect(
+      normalizeProductSearchFacets(
+        [{ name: "color", buckets: [{ key: "#FFFFFF", count: 2 }] }],
+        schema,
+        [{ name: "color" }],
+      ),
+    ).toEqual([
+      {
+        id: "color",
+        label: "Color",
+        type: "distinct",
+        buckets: [{ key: "#FFFFFF", label: "White", count: 2 }],
+      },
+    ]);
+  });
+
+  it("does not rename hex keys on non-color facets", () => {
+    const skuSchema = {
+      ...schema,
+      attributes: [
+        {
+          name: "sku",
+          label: "SKU",
+          kind: "distinct" as const,
+          attributeType: "text" as const,
+          field: "variants.sku",
+          fieldType: "text",
+        },
+      ],
+    };
+
+    expect(
+      normalizeProductSearchFacets(
+        [{ name: "sku", buckets: [{ key: "#FFFFFF", count: 1 }] }],
+        skuSchema,
+        [{ name: "sku" }],
+      ),
+    ).toEqual([
+      {
+        id: "sku",
+        label: "SKU",
+        type: "distinct",
+        buckets: [{ key: "#FFFFFF", label: "#FFFFFF", count: 1 }],
+      },
+    ]);
+  });
+
+  it("labels hex finish buckets with CSS names while keeping the hex key", () => {
+    const finishSchema = {
+      ...schema,
+      attributes: [
+        {
+          name: "finish-code",
+          label: "Finish",
+          kind: "distinct" as const,
+          attributeType: "enum" as const,
+          field: "variants.attributes.finish-code.key",
+          fieldType: "enum",
+        },
+      ],
+    };
+
+    expect(
+      normalizeProductSearchFacets(
+        [{ name: "finish-code", buckets: [{ key: "#8b4513", count: 3 }] }],
+        finishSchema,
+        [{ name: "finish-code" }],
+      ),
+    ).toEqual([
+      {
+        id: "finish-code",
+        label: "Finish",
+        type: "distinct",
+        buckets: [{ key: "#8b4513", label: "Saddle Brown", count: 3 }],
+      },
+    ]);
+  });
+
   it("maps category chips to the category filter key", () => {
     expect(toggleFacetFilter({}, "categories", "cat-1")).toEqual({ category: "cat-1" });
     expect(isFacetFilterSelected({ category: "cat-1" }, "categories", "cat-1")).toBe(true);
