@@ -23,6 +23,7 @@ import { useCameraCapture } from "../hooks/useCameraCapture.js";
 import { useCart } from "../hooks/useCart.js";
 import { useRecordingDuration } from "../hooks/useRecordingDuration.js";
 import { useVoiceSearch } from "../hooks/useVoiceSearch.js";
+import { ICON_STROKE } from "../icons.js";
 import { CameraCaptureOverlay } from "./CameraCaptureOverlay.js";
 import { CartPanel } from "./CartPanel.js";
 import { SearchFacets } from "./SearchFacets.js";
@@ -372,11 +373,12 @@ export function CommerceAISearch({
         </div>
       )}
 
+      <div className="cat-search-shell">
       <form
         className={`cat-search-bar ${voice.isRecording ? "cat-search-bar--voice-active" : ""}`}
         onSubmit={handleSubmit}
       >
-        <Search size={18} aria-hidden="true" color="var(--cat-text-muted)" />
+        <Search size={18} strokeWidth={ICON_STROKE} aria-hidden="true" color="var(--cat-text-muted)" />
         <div className="cat-search-input-wrap">
           <input
             type="search"
@@ -398,6 +400,7 @@ export function CommerceAISearch({
           />
         </div>
 
+        <div className="cat-search-actions">
         {enableVoice && (
           <button
             type="button"
@@ -407,7 +410,11 @@ export function CommerceAISearch({
             aria-label={voice.isRecording ? messages.stopRecording : messages.voiceSearch}
             aria-pressed={voice.isRecording}
           >
-            {voice.isRecording ? <Square size={16} /> : <Mic size={16} />}
+            {voice.isRecording ? (
+              <Square size={16} strokeWidth={ICON_STROKE} />
+            ) : (
+              <Mic size={16} strokeWidth={ICON_STROKE} />
+            )}
           </button>
         )}
 
@@ -420,7 +427,7 @@ export function CommerceAISearch({
               disabled={isLoading}
               aria-label={messages.searchByCamera}
             >
-              <Camera size={16} />
+              <Camera size={16} strokeWidth={ICON_STROKE} />
             </button>
             <input
               ref={cameraInputRef}
@@ -446,7 +453,7 @@ export function CommerceAISearch({
               disabled={isLoading}
               aria-label={messages.searchByImage}
             >
-              <ImageIcon size={16} />
+              <ImageIcon size={16} strokeWidth={ICON_STROKE} />
             </button>
             <input
               ref={fileInputRef}
@@ -468,9 +475,10 @@ export function CommerceAISearch({
             onClick={() => voice.replayAudioSummary()}
             aria-label={messages.replayVoiceSummary}
           >
-            <Volume2 size={16} />
+            <Volume2 size={16} strokeWidth={ICON_STROKE} />
           </button>
         )}
+        </div>
 
         {enableCart && (
           <button
@@ -485,7 +493,7 @@ export function CommerceAISearch({
             aria-expanded={cart.isCartOpen}
             aria-pressed={cart.isCartOpen}
           >
-            <ShoppingCart size={16} />
+            <ShoppingCart size={16} strokeWidth={ICON_STROKE} />
             {cartQuantity > 0 && (
               <span className="cat-cart-badge" aria-hidden="true">
                 {cartBadgeLabel}
@@ -537,6 +545,7 @@ export function CommerceAISearch({
           </div>
         )}
       </form>
+      </div>
 
       {showVoiceBanner && (
         <VoiceStatusBanner
@@ -573,12 +582,20 @@ export function CommerceAISearch({
       )}
 
       {showResults && (
-        <div className="cat-results" role="listbox" aria-label={messages.searchResultsAriaLabel}>
+        <div
+          className="cat-results"
+          role={!isLoading && displayResults.length > 0 ? "list" : undefined}
+          aria-label={
+            !isLoading && displayResults.length > 0
+              ? messages.searchResultsAriaLabel
+              : undefined
+          }
+        >
           {isLoading && <div className="cat-status">{messages.searching}</div>}
           {error && <div className="cat-status cat-status--error">{error}</div>}
 
           {!isLoading &&
-            displayResults.map((product) => {
+            displayResults.map((product, index) => {
               const canAdd = Boolean(product.sku || product.id);
               const justAdded = Boolean(addedProductIds[product.id]);
               const productBody = (
@@ -592,7 +609,7 @@ export function CommerceAISearch({
                     />
                   ) : (
                     <div className="cat-result-image cat-result-image--placeholder">
-                      <Package size={20} color="var(--cat-text-muted)" />
+                      <Package size={20} strokeWidth={ICON_STROKE} color="var(--cat-text-muted)" />
                     </div>
                   )}
                   <div className="cat-result-info">
@@ -604,55 +621,49 @@ export function CommerceAISearch({
                 </>
               );
 
-              if (!enableCart) {
-                return (
-                  <button
-                    key={product.id}
-                    type="button"
-                    className="cat-result-item"
-                    role="option"
-                    onClick={() => onProductSelect?.(product)}
-                  >
-                    {productBody}
-                  </button>
-                );
-              }
-
               return (
-                <div
+                <article
                   key={product.id}
-                  className="cat-result-item cat-result-item--with-cart"
-                  role="option"
+                  className={`cat-result-card${index === 0 ? " cat-result-card--featured" : ""}`}
+                  role="listitem"
                 >
-                  <button
-                    type="button"
-                    className="cat-result-item__select"
-                    onClick={() => onProductSelect?.(product)}
-                  >
-                    {productBody}
-                  </button>
-                  <button
-                    type="button"
-                    className={`cat-icon-btn cat-result-item__add ${justAdded ? "cat-result-item__add--added" : ""}`}
-                    aria-label={
-                      justAdded
-                        ? messages.itemAdded
-                        : canAdd
-                          ? messages.addToCart
-                          : messages.unableToAddToCart
-                    }
-                    disabled={!canAdd || cart.isMutating}
-                    onClick={() => handleAddToCart(product)}
-                  >
-                    {justAdded ? <Check size={16} /> : <ShoppingCart size={16} />}
-                  </button>
-                </div>
+                  <div className="cat-result-card__core">
+                    <button
+                      type="button"
+                      className="cat-result-card__select"
+                      onClick={() => onProductSelect?.(product)}
+                    >
+                      {productBody}
+                    </button>
+                    {enableCart ? (
+                      <button
+                        type="button"
+                        className={`cat-icon-btn cat-result-card__add ${justAdded ? "cat-result-card__add--added" : ""}`}
+                        aria-label={
+                          justAdded
+                            ? messages.itemAdded
+                            : canAdd
+                              ? messages.addToCart
+                              : messages.unableToAddToCart
+                        }
+                        disabled={!canAdd || cart.isMutating}
+                        onClick={() => handleAddToCart(product)}
+                      >
+                        {justAdded ? (
+                          <Check size={16} strokeWidth={ICON_STROKE} />
+                        ) : (
+                          <ShoppingCart size={16} strokeWidth={ICON_STROKE} />
+                        )}
+                      </button>
+                    ) : null}
+                  </div>
+                </article>
               );
             })}
 
           {!isLoading && !error && displayResults.length === 0 && showEmptyResults && (
             <div className="cat-status cat-status--empty" role="status" aria-live="polite">
-              <SearchX size={18} aria-hidden="true" />
+              <SearchX size={18} strokeWidth={ICON_STROKE} aria-hidden="true" />
               <div className="cat-status__content">
                 <div className="cat-status__title">{messages.noProductsFound}</div>
                 {meta?.queryInterpretation && (

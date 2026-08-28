@@ -15,6 +15,7 @@ import {
   type ThemeMode,
 } from "@commerce-ai-tool/core";
 import { useCart } from "../hooks/useCart.js";
+import { ICON_STROKE } from "../icons.js";
 import "../styles/commerce-ai-search.css";
 
 export interface CommerceAICheckoutProps {
@@ -32,7 +33,50 @@ interface AddressFieldsProps {
   address: CheckoutAddress;
   messages: CommerceAISearchMessages;
   prefix: string;
+  locale?: string;
   onChange: (address: CheckoutAddress) => void;
+}
+
+const CHECKOUT_COUNTRY_CODES = [
+  "AT",
+  "BE",
+  "CH",
+  "CZ",
+  "DE",
+  "DK",
+  "ES",
+  "FI",
+  "FR",
+  "GB",
+  "IE",
+  "IT",
+  "NL",
+  "NO",
+  "PL",
+  "PT",
+  "SE",
+  "US",
+] as const;
+
+function checkoutCountryCodes(selected: string): string[] {
+  const codes = new Set<string>(CHECKOUT_COUNTRY_CODES);
+  const normalized = selected.trim().toUpperCase();
+  if (normalized.length === 2) {
+    codes.add(normalized);
+  }
+  return [...codes].sort();
+}
+
+function countryLabel(code: string, locale = "en"): string {
+  try {
+    return new Intl.DisplayNames([locale, "en"], { type: "region" }).of(code) ?? code;
+  } catch {
+    try {
+      return new Intl.DisplayNames(["en"], { type: "region" }).of(code) ?? code;
+    } catch {
+      return code;
+    }
+  }
 }
 
 function createEmptyAddress(country: string): CheckoutAddress {
@@ -50,6 +94,7 @@ function AddressFields({
   address,
   messages,
   prefix,
+  locale = "en",
   onChange,
 }: AddressFieldsProps) {
   function update(
@@ -131,15 +176,21 @@ function AddressFields({
       </label>
       <label className="cat-checkout__field">
         <span>{messages.country}</span>
-        <input
+        <select
           name={`${prefix}-country`}
           autoComplete="country"
           required
-          minLength={2}
-          maxLength={2}
           value={address.country}
-          onChange={(event) => update("country", event)}
-        />
+          onChange={(event) =>
+            onChange({ ...address, country: event.target.value.toUpperCase() })
+          }
+        >
+          {checkoutCountryCodes(address.country).map((code) => (
+            <option key={code} value={code}>
+              {countryLabel(code, locale)}
+            </option>
+          ))}
+        </select>
       </label>
     </div>
   );
@@ -156,15 +207,24 @@ function OrderSummary({
     <section className="cat-checkout__bezel cat-checkout__summary">
       <div className="cat-checkout__core">
         <div className="cat-checkout__section-heading">
-          <Package size={18} strokeWidth={1.25} aria-hidden="true" />
+          <Package size={18} strokeWidth={ICON_STROKE} aria-hidden="true" />
           <h2>{messages.orderSummary}</h2>
         </div>
         <ul className="cat-checkout__items">
           {cart.lineItems.map((item) => (
             <li className="cat-checkout__item" key={item.id}>
-              <span>
-                {item.name}
-                <small>× {item.quantity}</small>
+              <span className="cat-checkout__item-copy">
+                {item.imageUrl ? (
+                  <img src={item.imageUrl} alt="" className="cat-checkout__item-image" />
+                ) : (
+                  <div className="cat-checkout__item-image cat-checkout__item-image--placeholder">
+                    <Package size={16} strokeWidth={ICON_STROKE} aria-hidden="true" />
+                  </div>
+                )}
+                <span>
+                  {item.name}
+                  <small>× {item.quantity}</small>
+                </span>
               </span>
               <strong>{item.price?.formatted ?? "—"}</strong>
             </li>
@@ -205,7 +265,7 @@ function ShippingMethodCard({
       <span className="cat-checkout__shipping-price">
         {method.price?.formatted ?? ""}
         <span className="cat-checkout__shipping-check" aria-hidden="true">
-          {selected ? <Check size={14} strokeWidth={1.5} /> : null}
+          {selected ? <Check size={14} strokeWidth={ICON_STROKE} /> : null}
         </span>
       </span>
     </button>
@@ -271,8 +331,8 @@ export function CommerceAICheckout({
   }
 
   function placeOrder() {
+    setIsPlacingOrder(true);
     startTransition(async () => {
-      setIsPlacingOrder(true);
       try {
         const placed = await cart.placeOrder();
         if (placed) {
@@ -291,13 +351,13 @@ export function CommerceAICheckout({
         <section className="cat-checkout__success cat-checkout__bezel">
           <div className="cat-checkout__core">
             <span className="cat-checkout__success-icon" aria-hidden="true">
-              <Check size={24} strokeWidth={1.25} />
+              <Check size={24} strokeWidth={ICON_STROKE} />
             </span>
             <p className="cat-checkout__eyebrow">{messages.checkout}</p>
             <h1>{messages.orderPlaced}</h1>
             <strong>{order.orderNumber ?? order.id}</strong>
             <a className="cat-checkout__back" href={continueShoppingHref}>
-              <ArrowLeft size={15} strokeWidth={1.5} aria-hidden="true" />
+              <ArrowLeft size={15} strokeWidth={ICON_STROKE} aria-hidden="true" />
               {messages.continueShopping}
             </a>
           </div>
@@ -309,16 +369,16 @@ export function CommerceAICheckout({
   if (!cart.cart) {
     return (
       <main className="cat-root cat-checkout" data-theme={theme}>
-        <section className="cat-checkout__success cat-checkout__bezel">
+        <section className="cat-checkout__empty cat-checkout__bezel">
           <div className="cat-checkout__core">
-            <Package size={24} strokeWidth={1.25} aria-hidden="true" />
+            <Package size={24} strokeWidth={ICON_STROKE} aria-hidden="true" />
             <h1>
               {cart.isLoading || !cart.anonymousId
                 ? messages.searching
                 : messages.emptyCart}
             </h1>
             <a className="cat-checkout__back" href={continueShoppingHref}>
-              <ArrowLeft size={15} strokeWidth={1.5} aria-hidden="true" />
+              <ArrowLeft size={15} strokeWidth={ICON_STROKE} aria-hidden="true" />
               {messages.continueShopping}
             </a>
           </div>
@@ -327,17 +387,35 @@ export function CommerceAICheckout({
     );
   }
 
-  const checkoutBusy = isPending || cart.isMutating;
+  const checkoutBusy = isPending || cart.isMutating || isPlacingOrder;
   const canPlaceOrder =
     hasLoadedShippingMethods &&
-    (shippingMethods.length === 0 || Boolean(selectedShippingMethodId)) &&
-    !checkoutBusy;
+    (shippingMethods.length === 0 || Boolean(selectedShippingMethodId));
+  const placeOrderHint = !canPlaceOrder
+    ? hasLoadedShippingMethods
+      ? messages.selectDeliveryToContinue
+      : messages.completeAddressToContinue
+    : undefined;
 
   return (
     <main className="cat-root cat-checkout" data-theme={theme}>
       <header className="cat-checkout__intro">
         <p className="cat-checkout__eyebrow">{messages.checkout}</p>
         <h1>{messages.checkoutTitle}</h1>
+        <ol className="cat-checkout__steps">
+          <li
+            className={`cat-checkout__step${hasLoadedShippingMethods ? "" : " cat-checkout__step--current"}`}
+            aria-current={hasLoadedShippingMethods ? undefined : "step"}
+          >
+            {messages.checkoutStepAddress}
+          </li>
+          <li
+            className={`cat-checkout__step${hasLoadedShippingMethods ? " cat-checkout__step--current" : ""}`}
+            aria-current={hasLoadedShippingMethods ? "step" : undefined}
+          >
+            {messages.checkoutStepDelivery}
+          </li>
+        </ol>
       </header>
 
       {cart.error ? (
@@ -356,13 +434,14 @@ export function CommerceAICheckout({
           >
             <div className="cat-checkout__core">
               <div className="cat-checkout__section-heading">
-                <MapPin size={18} strokeWidth={1.25} aria-hidden="true" />
+                <MapPin size={18} strokeWidth={ICON_STROKE} aria-hidden="true" />
                 <h2>{messages.shippingAddress}</h2>
               </div>
               <AddressFields
                 address={shippingAddress}
                 messages={messages}
                 prefix="shipping"
+                locale={catalogLocale}
                 onChange={setShippingAddress}
               />
               <label className="cat-checkout__checkbox">
@@ -380,6 +459,7 @@ export function CommerceAICheckout({
                     address={billingAddress}
                     messages={messages}
                     prefix="billing"
+                    locale={catalogLocale}
                     onChange={setBillingAddress}
                   />
                 </div>
@@ -394,10 +474,11 @@ export function CommerceAICheckout({
             </div>
           </form>
 
+          {hasLoadedShippingMethods ? (
           <section className="cat-checkout__bezel">
             <div className="cat-checkout__core">
               <div className="cat-checkout__section-heading">
-                <Package size={18} strokeWidth={1.25} aria-hidden="true" />
+                <Package size={18} strokeWidth={ICON_STROKE} aria-hidden="true" />
                 <h2>{messages.shippingMethod}</h2>
               </div>
               {shippingMethods.length > 0 ? (
@@ -415,17 +496,14 @@ export function CommerceAICheckout({
                     />
                   ))}
                 </div>
-              ) : hasLoadedShippingMethods ? (
-                <p className="cat-checkout__empty-methods">
-                  {messages.noShippingMethods}
-                </p>
               ) : (
                 <p className="cat-checkout__empty-methods">
-                  {messages.selectShippingMethod}
+                  {messages.noShippingMethods}
                 </p>
               )}
             </div>
           </section>
+          ) : null}
         </div>
       </div>
 
@@ -433,14 +511,21 @@ export function CommerceAICheckout({
         <button
           type="button"
           className="cat-checkout-cta"
-          disabled={!canPlaceOrder}
+          disabled={!canPlaceOrder || checkoutBusy}
           onClick={placeOrder}
+          aria-busy={checkoutBusy && canPlaceOrder ? true : undefined}
+          aria-describedby={placeOrderHint ? "cat-checkout-place-hint" : undefined}
         >
           <span>{isPlacingOrder ? messages.placingOrder : messages.placeOrder}</span>
           <span className="cat-checkout-cta__icon" aria-hidden="true">
-            <ArrowRight size={16} strokeWidth={1.5} />
+            <ArrowRight size={16} strokeWidth={ICON_STROKE} />
           </span>
         </button>
+        {placeOrderHint ? (
+          <p id="cat-checkout-place-hint" className="cat-checkout__place-hint">
+            {placeOrderHint}
+          </p>
+        ) : null}
       </div>
     </main>
   );

@@ -20,6 +20,7 @@ export type {
   CommerceAISearchMessages,
   CustomerSnapshot,
   OrderSnapshot,
+  ProductCard,
   ShippingMethodSnapshot,
 } from "@commerce-ai-tool/core";
 export { DEFAULT_COMMERCE_AI_SEARCH_MESSAGES, resolveCommerceAISearchMessages } from "@commerce-ai-tool/core";

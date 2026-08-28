@@ -10,7 +10,9 @@
   --cat-blur: 20px;
   --cat-radius: 1.25rem;
   --cat-input-bg: rgba(255, 255, 255, 0.35);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --cat-border: var(--cat-glass-border);
+  --cat-surface: var(--cat-input-bg);
+  font-family: var(--cat-font, "Geist", "Plus Jakarta Sans", ui-sans-serif, sans-serif);
   color: var(--cat-text);
   width: 100%;
   max-width: 36rem;

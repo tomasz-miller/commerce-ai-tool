@@ -66,4 +66,42 @@ describe("CameraCaptureOverlay", () => {
     fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
     expect(onDismissError).toHaveBeenCalledTimes(1);
   });
+
+  it("closes on Escape", () => {
+    const onClose = vi.fn();
+
+    render(
+      <CameraCaptureOverlay
+        stream={null}
+        error={null}
+        messages={messages}
+        onCapture={vi.fn()}
+        onClose={onClose}
+        onDismissError={vi.fn()}
+      />,
+    );
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("dismisses a permission error on Escape without closing", () => {
+    const onClose = vi.fn();
+    const onDismissError = vi.fn();
+
+    render(
+      <CameraCaptureOverlay
+        stream={null}
+        error="Camera access denied"
+        messages={messages}
+        onCapture={vi.fn()}
+        onClose={onClose}
+        onDismissError={onDismissError}
+      />,
+    );
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onDismissError).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
+  });
 });

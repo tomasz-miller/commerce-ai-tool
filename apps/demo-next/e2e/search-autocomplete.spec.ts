@@ -55,7 +55,7 @@ test("autocomplete selects a suggestion and shows search results", async ({ page
 
   await suggestions.getByRole("option", { name: "Red Shoes" }).click();
 
-  const results = page.getByRole("listbox", { name: "Search results" });
+  const results = page.getByRole("list", { name: "Search results" });
   await expect(results).toBeVisible();
-  await expect(results.getByRole("option", { name: "Red Shoes" })).toBeVisible();
+  await expect(results.getByRole("button", { name: "Red Shoes" })).toBeVisible();
 });

@@ -1,6 +1,6 @@
 {
   "name": "commerce-ai-tool",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "private": true,
   "description": "AI-powered commercetools search plugin for React, Next.js, and Angular",
   "license": "MIT",
