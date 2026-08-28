@@ -61,6 +61,10 @@ export interface CommerceAISearchMessages {
   shippingMethod: string;
   selectShippingMethod: string;
   noShippingMethods: string;
+  completeAddressToContinue: string;
+  selectDeliveryToContinue: string;
+  checkoutStepAddress: string;
+  checkoutStepDelivery: string;
   placeOrder: string;
   placingOrder: string;
   orderPlaced: string;
@@ -139,6 +143,10 @@ export const DEFAULT_COMMERCE_AI_SEARCH_MESSAGES: CommerceAISearchMessages = {
   shippingMethod: "Delivery method",
   selectShippingMethod: "Select a delivery method",
   noShippingMethods: "No delivery methods are available for this address",
+  completeAddressToContinue: "Add a shipping address to continue",
+  selectDeliveryToContinue: "Select a delivery method to continue",
+  checkoutStepAddress: "Address",
+  checkoutStepDelivery: "Delivery",
   placeOrder: "Place order",
   placingOrder: "Placing order…",
   orderPlaced: "Order placed",

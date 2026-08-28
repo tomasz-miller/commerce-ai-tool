@@ -3,6 +3,7 @@ import {
   ArrowRight,
   ChevronDown,
   Minus,
+  Package,
   Plus,
   ShoppingBag,
   Trash2,
@@ -14,6 +15,7 @@ import type {
   CommerceAISearchMessages,
   CustomerSnapshot,
 } from "@commerce-ai-tool/core";
+import { ICON_STROKE } from "../icons.js";
 
 export interface CartPanelProps {
   cart: CartSnapshot | null;
@@ -89,6 +91,85 @@ export function CartPanel({
     setPassword("");
   }
 
+  const authBlock = (
+    <div className="cat-cart-panel__auth">
+      {customer ? (
+        <div className="cat-cart-panel__signed-in">
+          <span>
+            {messages.signedInAs} {customer.email}
+          </span>
+          <button
+            type="button"
+            className="cat-cart-panel__sign-out"
+            onClick={onLogout}
+          >
+            {messages.signOut}
+          </button>
+        </div>
+      ) : (
+        <>
+          <button
+            type="button"
+            className="cat-cart-panel__auth-toggle"
+            disabled={isLoggingIn}
+            aria-expanded={isAuthExpanded}
+            onClick={() => setIsAuthExpanded((expanded) => !expanded)}
+          >
+            <span className="cat-cart-panel__auth-toggle-copy">
+              <span className="cat-cart-panel__auth-icon" aria-hidden="true">
+                <UserRound size={14} strokeWidth={ICON_STROKE} />
+              </span>
+              {messages.signInToSyncCart}
+            </span>
+            <ChevronDown
+              className={isAuthExpanded ? "cat-cart-panel__auth-chevron--open" : ""}
+              size={15}
+              strokeWidth={ICON_STROKE}
+              aria-hidden="true"
+            />
+          </button>
+          {isAuthExpanded ? (
+            <form className="cat-cart-panel__auth-form" onSubmit={handleLoginSubmit}>
+              <label className="cat-cart-panel__field">
+                <span className="cat-cart-panel__label">{messages.email}</span>
+                <input
+                  className="cat-cart-panel__input"
+                  type="email"
+                  name="email"
+                  autoComplete="email"
+                  required
+                  disabled={isLoggingIn}
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                />
+              </label>
+              <label className="cat-cart-panel__field">
+                <span className="cat-cart-panel__label">{messages.password}</span>
+                <input
+                  className="cat-cart-panel__input"
+                  type="password"
+                  name="password"
+                  autoComplete="current-password"
+                  required
+                  disabled={isLoggingIn}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                />
+              </label>
+              <button
+                type="submit"
+                className="cat-cart-panel__submit"
+                disabled={isLoggingIn}
+              >
+                {messages.signIn}
+              </button>
+            </form>
+          ) : null}
+        </>
+      )}
+    </div>
+  );
+
   return (
     <section
       className={`cat-cart-panel${isEmpty ? "" : " cat-cart-panel--with-items"}`}
@@ -102,7 +183,7 @@ export function CartPanel({
           onClick={onClose}
           aria-label={messages.closeCart}
         >
-          <X size={16} />
+          <X size={16} strokeWidth={ICON_STROKE} />
         </button>
       </header>
 
@@ -112,86 +193,9 @@ export function CartPanel({
         </div>
       )}
 
-      <div className="cat-cart-panel__auth">
-        {customer ? (
-          <div className="cat-cart-panel__signed-in">
-            <span>
-              {messages.signedInAs} {customer.email}
-            </span>
-            <button
-              type="button"
-              className="cat-cart-panel__sign-out"
-              onClick={onLogout}
-            >
-              {messages.signOut}
-            </button>
-          </div>
-        ) : (
-          <>
-            <button
-              type="button"
-              className="cat-cart-panel__auth-toggle"
-              disabled={isLoggingIn}
-              aria-expanded={isAuthExpanded}
-              onClick={() => setIsAuthExpanded((expanded) => !expanded)}
-            >
-              <span className="cat-cart-panel__auth-toggle-copy">
-                <span className="cat-cart-panel__auth-icon" aria-hidden="true">
-                  <UserRound size={14} strokeWidth={1.5} />
-                </span>
-                {messages.signInToSyncCart}
-              </span>
-              <ChevronDown
-                className={isAuthExpanded ? "cat-cart-panel__auth-chevron--open" : ""}
-                size={15}
-                strokeWidth={1.5}
-                aria-hidden="true"
-              />
-            </button>
-            {isAuthExpanded ? (
-              <form className="cat-cart-panel__auth-form" onSubmit={handleLoginSubmit}>
-                <label className="cat-cart-panel__field">
-                  <span className="cat-cart-panel__label">{messages.email}</span>
-                  <input
-                    className="cat-cart-panel__input"
-                    type="email"
-                    name="email"
-                    autoComplete="email"
-                    required
-                    disabled={isLoggingIn}
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                  />
-                </label>
-                <label className="cat-cart-panel__field">
-                  <span className="cat-cart-panel__label">{messages.password}</span>
-                  <input
-                    className="cat-cart-panel__input"
-                    type="password"
-                    name="password"
-                    autoComplete="current-password"
-                    required
-                    disabled={isLoggingIn}
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                  />
-                </label>
-                <button
-                  type="submit"
-                  className="cat-cart-panel__submit"
-                  disabled={isLoggingIn}
-                >
-                  {messages.signIn}
-                </button>
-              </form>
-            ) : null}
-          </>
-        )}
-      </div>
-
       {isEmpty ? (
         <div className="cat-cart-panel__empty">
-          <ShoppingBag size={20} aria-hidden="true" />
+          <ShoppingBag size={20} strokeWidth={ICON_STROKE} aria-hidden="true" />
           <span>{messages.emptyCart}</span>
         </div>
       ) : (
@@ -201,7 +205,9 @@ export function CartPanel({
               {item.imageUrl ? (
                 <img src={item.imageUrl} alt="" className="cat-cart-item__image" />
               ) : (
-                <div className="cat-cart-item__image cat-cart-item__image--placeholder" />
+                <div className="cat-cart-item__image cat-cart-item__image--placeholder">
+                  <Package size={16} strokeWidth={ICON_STROKE} aria-hidden="true" />
+                </div>
               )}
               <div className="cat-cart-item__info">
                 <div className="cat-cart-item__name">{item.name}</div>
@@ -222,7 +228,7 @@ export function CartPanel({
                     disabled={isLoading || item.quantity <= 1}
                     onClick={() => onQuantityChange(item.id, item.quantity - 1)}
                   >
-                    <Minus size={12} />
+                    <Minus size={12} strokeWidth={ICON_STROKE} />
                   </button>
                   <span className="cat-cart-item__qty-value">{item.quantity}</span>
                   <button
@@ -232,7 +238,7 @@ export function CartPanel({
                     disabled={isLoading}
                     onClick={() => onQuantityChange(item.id, item.quantity + 1)}
                   >
-                    <Plus size={12} />
+                    <Plus size={12} strokeWidth={ICON_STROKE} />
                   </button>
                 </div>
               </div>
@@ -243,12 +249,14 @@ export function CartPanel({
                 disabled={isLoading}
                 onClick={() => onRemove(item.id)}
               >
-                <Trash2 size={14} />
+                <Trash2 size={14} strokeWidth={ICON_STROKE} />
               </button>
             </li>
           ))}
         </ul>
       )}
+
+      {authBlock}
 
       {!isEmpty && (
         <footer className="cat-cart-panel__footer">
@@ -265,7 +273,7 @@ export function CartPanel({
             >
               <span>{messages.checkout}</span>
               <span className="cat-checkout-cta__icon" aria-hidden="true">
-                <ArrowRight size={15} strokeWidth={1.5} />
+                <ArrowRight size={15} strokeWidth={ICON_STROKE} />
               </span>
             </button>
           ) : null}

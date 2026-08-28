@@ -56,7 +56,7 @@ test("refines AI-suggested facets without a second AI search", async ({ page }) 
   await expect(page.getByRole("group", { name: "Color" })).toBeVisible();
   await page.getByRole("button", { name: "red" }).click();
 
-  await expect(page.getByRole("option", { name: "Red Glass" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Red Glass" })).toBeVisible();
   expect(refined).toBe(true);
   expect(sentSuggestedFacets).toBe(true);
   await expect(page.getByRole("button", { name: "New search" })).toBeVisible();
