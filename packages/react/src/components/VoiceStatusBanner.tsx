@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
 import { formatRecordingDuration } from "../hooks/useRecordingDuration.js";
 import type { CommerceAISearchMessages } from "@commerce-ai-tool/core";
+import { ICON_STROKE } from "../icons.js";
 
 export interface VoiceStatusBannerProps {
   isRecording: boolean;
@@ -58,7 +59,7 @@ export function VoiceStatusBanner({
               onClick={onDismissError}
               aria-label={messages.dismiss}
             >
-              <X size={14} aria-hidden="true" />
+              <X size={14} strokeWidth={ICON_STROKE} aria-hidden="true" />
             </button>
           )}
         </div>

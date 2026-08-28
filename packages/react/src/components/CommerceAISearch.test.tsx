@@ -139,9 +139,22 @@ describe("CommerceAISearch voice banner", () => {
 
     render(<CommerceAISearch apiBaseUrl="/api/commerce-ai" />);
 
-    expect(screen.getByRole("listbox")).not.toBeNull();
-    expect(screen.getByText("No products found")).not.toBeNull();
+    expect(screen.queryByRole("list")).toBeNull();
+    expect(screen.getByRole("status").textContent).toContain("No products found");
     expect(screen.getByText("Searched for: obscure gadget")).not.toBeNull();
+  });
+
+  it("does not expose a results list while searching", () => {
+    mockUseCommerceAISearch.mockReturnValue({
+      ...defaultSearchReturn,
+      query: "glass",
+      isLoading: true,
+    });
+
+    render(<CommerceAISearch apiBaseUrl="/api/commerce-ai" />);
+
+    expect(screen.queryByRole("list")).toBeNull();
+    expect(screen.getByText("Searching...")).not.toBeNull();
   });
 });
 
@@ -199,6 +212,55 @@ describe("CommerceAISearch autocomplete", () => {
     expect(screen.queryByLabelText("Search suggestions")).toBeNull();
     expect(screen.queryByText("No suggestions")).toBeNull();
     expect(screen.getByText("Chianti Wine Glass")).not.toBeNull();
+  });
+
+  it("invokes onProductSelect from a result card", () => {
+    const onProductSelect = vi.fn();
+    mockUseCommerceAISearch.mockReturnValue({
+      ...defaultSearchReturn,
+      query: "glass",
+      hasSearched: true,
+      results: [
+        {
+          id: "1",
+          name: "Chianti Wine Glass",
+          slug: "chianti-wine-glass",
+        },
+      ],
+    });
+
+    render(
+      <CommerceAISearch
+        apiBaseUrl="/api/commerce-ai"
+        enableAutocomplete
+        onProductSelect={onProductSelect}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Chianti Wine Glass" }));
+    expect(onProductSelect).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "1", name: "Chianti Wine Glass" }),
+    );
+    expect(screen.getByRole("listitem").className).toContain("cat-result-card--featured");
+  });
+
+  it("marks only the first result card as featured", () => {
+    mockUseCommerceAISearch.mockReturnValue({
+      ...defaultSearchReturn,
+      query: "glass",
+      hasSearched: true,
+      results: [
+        { id: "1", name: "Chianti Wine Glass", slug: "chianti-wine-glass" },
+        { id: "2", name: "Harmony Drinking Glass", slug: "harmony-drinking-glass" },
+      ],
+    });
+
+    render(<CommerceAISearch apiBaseUrl="/api/commerce-ai" />);
+
+    const items = screen.getAllByRole("listitem");
+    expect(items).toHaveLength(2);
+    expect(items[0]?.className).toContain("cat-result-card--featured");
+    expect(items[1]?.className).not.toContain("cat-result-card--featured");
   });
 });
 

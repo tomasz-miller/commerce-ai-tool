@@ -68,6 +68,16 @@ function mockCartHook() {
   return { setAddresses, getShippingMethods, setShippingMethod, placeOrder };
 }
 
+function fillRequiredAddress() {
+  fireEvent.change(screen.getByLabelText("First name"), { target: { value: "Ada" } });
+  fireEvent.change(screen.getByLabelText("Last name"), { target: { value: "Lovelace" } });
+  fireEvent.change(screen.getByLabelText("Street address"), {
+    target: { value: "Main Street" },
+  });
+  fireEvent.change(screen.getByLabelText("Postal code"), { target: { value: "10115" } });
+  fireEvent.change(screen.getByLabelText("City"), { target: { value: "Berlin" } });
+}
+
 describe("CommerceAICheckout", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -77,13 +87,7 @@ describe("CommerceAICheckout", () => {
     const actions = mockCartHook();
     render(<CommerceAICheckout apiBaseUrl="/api/commerce-ai" />);
 
-    fireEvent.change(screen.getByLabelText("First name"), { target: { value: "Ada" } });
-    fireEvent.change(screen.getByLabelText("Last name"), { target: { value: "Lovelace" } });
-    fireEvent.change(screen.getByLabelText("Street address"), {
-      target: { value: "Main Street" },
-    });
-    fireEvent.change(screen.getByLabelText("Postal code"), { target: { value: "10115" } });
-    fireEvent.change(screen.getByLabelText("City"), { target: { value: "Berlin" } });
+    fillRequiredAddress();
     fireEvent.click(screen.getByRole("button", { name: "Continue to delivery" }));
 
     await waitFor(() => expect(actions.getShippingMethods).toHaveBeenCalled());
@@ -110,13 +114,7 @@ describe("CommerceAICheckout", () => {
     actions.getShippingMethods.mockResolvedValue([]);
     render(<CommerceAICheckout apiBaseUrl="/api/commerce-ai" />);
 
-    fireEvent.change(screen.getByLabelText("First name"), { target: { value: "Ada" } });
-    fireEvent.change(screen.getByLabelText("Last name"), { target: { value: "Lovelace" } });
-    fireEvent.change(screen.getByLabelText("Street address"), {
-      target: { value: "Main Street" },
-    });
-    fireEvent.change(screen.getByLabelText("Postal code"), { target: { value: "10115" } });
-    fireEvent.change(screen.getByLabelText("City"), { target: { value: "Berlin" } });
+    fillRequiredAddress();
     fireEvent.click(screen.getByRole("button", { name: "Continue to delivery" }));
 
     await waitFor(() =>
@@ -136,13 +134,7 @@ describe("CommerceAICheckout", () => {
     actions.getShippingMethods.mockResolvedValue(null);
     render(<CommerceAICheckout apiBaseUrl="/api/commerce-ai" />);
 
-    fireEvent.change(screen.getByLabelText("First name"), { target: { value: "Ada" } });
-    fireEvent.change(screen.getByLabelText("Last name"), { target: { value: "Lovelace" } });
-    fireEvent.change(screen.getByLabelText("Street address"), {
-      target: { value: "Main Street" },
-    });
-    fireEvent.change(screen.getByLabelText("Postal code"), { target: { value: "10115" } });
-    fireEvent.change(screen.getByLabelText("City"), { target: { value: "Berlin" } });
+    fillRequiredAddress();
     fireEvent.click(screen.getByRole("button", { name: "Continue to delivery" }));
 
     await waitFor(() => expect(actions.getShippingMethods).toHaveBeenCalled());
@@ -153,5 +145,78 @@ describe("CommerceAICheckout", () => {
       ).toBe(true);
     });
     expect(actions.placeOrder).not.toHaveBeenCalled();
+  });
+
+  it("hides delivery until the address is submitted and explains a disabled order action", () => {
+    mockCartHook();
+    render(<CommerceAICheckout apiBaseUrl="/api/commerce-ai" />);
+
+    expect(screen.queryByRole("heading", { name: "Delivery method" })).toBeNull();
+    expect(screen.getByRole("combobox", { name: "Country" })).not.toBeNull();
+    expect(screen.getByText("Add a shipping address to continue")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Place order" }).hasAttribute("disabled")).toBe(
+      true,
+    );
+  });
+
+  it("labels countries in the catalog locale", () => {
+    mockCartHook();
+    render(
+      <CommerceAICheckout apiBaseUrl="/api/commerce-ai" catalogLocale="de-DE" country="DE" />,
+    );
+
+    expect(screen.getByRole("option", { name: "Deutschland" })).not.toBeNull();
+  });
+
+  it("does not show an incomplete-checkout hint while placing an order", async () => {
+    const actions = mockCartHook();
+    let finishPlace!: (order: {
+      id: string;
+      orderNumber: string;
+      orderState: string;
+      totalPrice: CartSnapshot["totalPrice"];
+      lineItems: CartSnapshot["lineItems"];
+    }) => void;
+    actions.placeOrder.mockReturnValue(
+      new Promise((resolve) => {
+        finishPlace = resolve;
+      }),
+    );
+
+    render(<CommerceAICheckout apiBaseUrl="/api/commerce-ai" />);
+    fillRequiredAddress();
+    fireEvent.click(screen.getByRole("button", { name: "Continue to delivery" }));
+
+    const shippingMethod = await waitFor(() => {
+      const button = screen.getByRole("button", { name: /Standard delivery/ });
+      expect(button.hasAttribute("disabled")).toBe(false);
+      return button;
+    });
+    fireEvent.click(shippingMethod);
+    await waitFor(() =>
+      expect(actions.setShippingMethod).toHaveBeenCalledWith("shipping-1"),
+    );
+
+    const placeOrder = await waitFor(() => {
+      const button = screen.getByRole("button", { name: "Place order" });
+      expect(button.hasAttribute("disabled")).toBe(false);
+      return button;
+    });
+    fireEvent.click(placeOrder);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Placing order/ })).not.toBeNull();
+    });
+    expect(screen.queryByText("Select a delivery method to continue")).toBeNull();
+    expect(screen.queryByText("Add a shipping address to continue")).toBeNull();
+
+    finishPlace({
+      id: "order-1",
+      orderNumber: "cat-1",
+      orderState: "Open",
+      totalPrice: cart.totalPrice,
+      lineItems: cart.lineItems,
+    });
+    expect(await screen.findByText("Order placed")).not.toBeNull();
   });
 });

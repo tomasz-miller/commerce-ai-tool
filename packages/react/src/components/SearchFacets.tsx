@@ -43,7 +43,7 @@ export function SearchFacets({
             </button>
           )}
           {onNewSearch && (
-            <button type="button" className="cat-facets__clear" onClick={onNewSearch}>
+            <button type="button" className="cat-facets__new" onClick={onNewSearch}>
               {messages.newSearch}
             </button>
           )}
@@ -73,7 +73,10 @@ export function SearchFacets({
                       aria-hidden="true"
                     />
                   ) : null}
-                  {bucket.label} <span aria-hidden="true">{bucket.count}</span>
+                  {bucket.label}{" "}
+                  <span className="cat-facet-chip__count" aria-hidden="true">
+                    {bucket.count}
+                  </span>
                 </button>
               );
             })}

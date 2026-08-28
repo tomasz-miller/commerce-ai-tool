@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Camera, X } from "lucide-react";
 import type { CommerceAISearchMessages } from "@commerce-ai-tool/core";
+import { ICON_STROKE } from "../icons.js";
 
 export interface CameraCaptureOverlayProps {
   stream: MediaStream | null;
@@ -25,6 +26,21 @@ export function CameraCaptureOverlay({
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        if (error) {
+          onDismissError();
+        } else {
+          onClose();
+        }
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [error, onClose, onDismissError]);
+
+  useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
@@ -45,7 +61,12 @@ export function CameraCaptureOverlay({
   }, [stream]);
 
   return (
-    <div className="cat-camera-overlay" role="dialog" aria-label={messages.cameraCapture}>
+    <div
+      className="cat-camera-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-label={messages.cameraCapture}
+    >
       <div className="cat-camera-overlay__panel">
         {error ? (
           <div className="cat-camera-overlay__error" role="alert">
@@ -72,7 +93,7 @@ export function CameraCaptureOverlay({
                 onClick={onClose}
                 aria-label={messages.cancel}
               >
-                <X size={16} aria-hidden="true" />
+                <X size={16} strokeWidth={ICON_STROKE} aria-hidden="true" />
                 {messages.cancel}
               </button>
               <button
@@ -83,7 +104,7 @@ export function CameraCaptureOverlay({
                 }}
                 aria-label={messages.capturePhoto}
               >
-                <Camera size={16} aria-hidden="true" />
+                <Camera size={16} strokeWidth={ICON_STROKE} aria-hidden="true" />
                 {messages.capturePhoto}
               </button>
             </div>
