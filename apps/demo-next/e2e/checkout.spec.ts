@@ -26,7 +26,28 @@ async function mockCheckoutApi(page: Page) {
     const path = url.pathname;
     let body: unknown = { cart };
 
-    if (path.endsWith("/shipping-methods")) {
+    if (path.endsWith("/payment-methods")) {
+      body = {
+        paymentMethods: [
+          {
+            method: "CREDIT_CARD",
+            name: "Credit card",
+            description: "Demo authorization — no real charge",
+          },
+        ],
+      };
+    } else if (path.endsWith("/payment")) {
+      body = {
+        payment: {
+          id: "pay-1",
+          paymentInterface: "MOCK",
+          method: "CREDIT_CARD",
+          status: "authorized",
+          amount: cart.totalPrice,
+        },
+        cart,
+      };
+    } else if (path.endsWith("/shipping-methods")) {
       body = {
         shippingMethods: [
           {
@@ -49,8 +70,21 @@ async function mockCheckoutApi(page: Page) {
           id: "order-1",
           orderNumber: "cat-e2e-1",
           orderState: "Open",
+          paymentState: "Pending",
+          shipmentState: "Ready",
           totalPrice: cart.totalPrice,
           lineItems: cart.lineItems,
+          shippingAddress: {
+            firstName: "Ada",
+            lastName: "Lovelace",
+            streetName: "Main Street",
+            postalCode: "10115",
+            city: "Berlin",
+            country: "DE",
+          },
+          deliveries: [
+            { id: "parcel-1", trackingId: "DHL-123", carrier: "DHL" },
+          ],
         },
       };
     }
@@ -59,6 +93,32 @@ async function mockCheckoutApi(page: Page) {
       status: 200,
       contentType: "application/json",
       body: JSON.stringify(body),
+    });
+  });
+  await page.route("**/api/commerce-ai/orders**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        order: {
+          id: "order-1",
+          orderNumber: "cat-e2e-1",
+          orderState: "Open",
+          paymentState: "Pending",
+          shipmentState: "Shipped",
+          totalPrice: cart.totalPrice,
+          lineItems: cart.lineItems,
+          shippingAddress: {
+            firstName: "Ada",
+            lastName: "Lovelace",
+            streetName: "Main Street",
+            postalCode: "10115",
+            city: "Berlin",
+            country: "DE",
+          },
+          deliveries: [{ id: "parcel-1", trackingId: "DHL-123", carrier: "DHL" }],
+        },
+      }),
     });
   });
 }
@@ -85,10 +145,15 @@ test("completes the host-owned checkout flow", async ({ page }) => {
   await page.getByLabel("City").fill("Berlin");
   await page.getByRole("button", { name: "Continue to delivery" }).click();
   await page.getByRole("button", { name: /Standard delivery/ }).click();
+  await page.getByRole("button", { name: /Credit card/ }).click();
   await page.getByRole("button", { name: "Place order" }).click();
 
   await expect(page.getByRole("heading", { name: "Order placed" })).toBeVisible();
   await expect(page.getByText("cat-e2e-1")).toBeVisible();
+  await page.getByRole("link", { name: "View order status" }).click();
+  await expect(page).toHaveURL(/\/orders\?orderNumber=cat-e2e-1/);
+  await expect(page.getByRole("heading", { name: "cat-e2e-1" })).toBeVisible();
+  await expect(page.getByText("DHL-123")).toBeVisible();
 });
 
 test("stacks checkout sections and keeps the order action sticky on mobile", async ({

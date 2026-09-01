@@ -1,3 +1,7 @@
+import type { PaymentProvider } from "../payments/types.js";
+
+export type { PaymentMethodOption } from "../payments/types.js";
+
 export type ThemeMode = "auto" | "light" | "dark";
 
 export type AIProviderName = "openrouter" | "bedrock";
@@ -77,6 +81,12 @@ export interface CommerceAIDefaults {
   country?: string;
 }
 
+export interface PaymentConfig {
+  provider?: PaymentProvider;
+  /** Block order creation without a successful authorization. Defaults to true when a provider is set. */
+  requiredForOrder?: boolean;
+}
+
 export interface LangfuseConfig {
   /** Derived from LANGFUSE_PUBLIC_KEY + LANGFUSE_SECRET_KEY when loading from env. */
   enabled?: boolean;
@@ -103,6 +113,7 @@ export interface CommerceAIConfig {
   timeouts?: SearchTimeoutsConfig;
   facets?: FacetConfig;
   langfuse?: LangfuseConfig;
+  payments?: PaymentConfig;
 }
 
 export interface ProductCard {
@@ -160,6 +171,24 @@ export interface ShippingMethodSnapshot {
   price?: MoneyAmount;
 }
 
+export interface PaymentSnapshot {
+  id: string;
+  key?: string;
+  interfaceId?: string;
+  paymentInterface: string;
+  method: string;
+  status: "authorized" | "pending" | "failed";
+  amount: MoneyAmount;
+  clientData?: Record<string, string>;
+}
+
+export interface DeliverySnapshot {
+  id: string;
+  trackingId?: string;
+  carrier?: string;
+  provider?: string;
+}
+
 /** Client-safe cart shape — never the raw commercetools Cart object. */
 export interface CartSnapshot {
   id: string;
@@ -172,14 +201,24 @@ export interface CartSnapshot {
   shippingAddress?: CheckoutAddress;
   billingAddress?: CheckoutAddress;
   shippingMethod?: ShippingMethodSnapshot;
+  payments?: PaymentSnapshot[];
 }
 
 export interface OrderSnapshot {
   id: string;
   orderNumber?: string;
   orderState: string;
+  createdAt?: string;
+  paymentState?: string;
+  shipmentState?: string;
+  customerEmail?: string;
   totalPrice: MoneyAmount;
   lineItems: CartLineItemSnapshot[];
+  shippingAddress?: CheckoutAddress;
+  billingAddress?: CheckoutAddress;
+  shippingMethod?: ShippingMethodSnapshot;
+  payments?: PaymentSnapshot[];
+  deliveries?: DeliverySnapshot[];
 }
 
 /** Public customer identity — never includes credentials. */
@@ -259,6 +298,27 @@ export interface SetShippingMethodRequest extends CheckoutRequest {
 
 export interface CreateOrderRequest extends CheckoutRequest {
   orderNumber?: string;
+}
+
+export interface AuthorizePaymentRequest extends CheckoutRequest {
+  method: string;
+  orderNumber?: string;
+}
+
+export interface GetOrderRequest {
+  orderNumber?: string;
+  anonymousId?: string;
+  customerId?: string;
+  catalogLocale?: string;
+  sessionToken?: string;
+}
+
+export interface ListOrdersRequest {
+  anonymousId?: string;
+  customerId?: string;
+  catalogLocale?: string;
+  sessionToken?: string;
+  limit?: number;
 }
 
 export interface SearchMeta {

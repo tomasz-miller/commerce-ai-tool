@@ -101,6 +101,12 @@ function gateway(overrides: Partial<CheckoutGateway> = {}): CheckoutGateway {
     updateCart: vi.fn().mockResolvedValue(cart({ version: 3 })),
     getShippingMethodsMatchingCart: vi.fn().mockResolvedValue([shippingMethod()]),
     createOrderFromCart: vi.fn().mockResolvedValue(order()),
+    updateOrder: vi.fn().mockImplementation(async (_id, version, actions) => ({
+      ...order(),
+      version: version + 1,
+      paymentState: actions[0] && "paymentState" in actions[0] ? actions[0].paymentState : undefined,
+    })),
+    getPaymentById: vi.fn(),
     ...overrides,
   };
 }
@@ -194,5 +200,138 @@ describe("createCheckoutOperations", () => {
     await expect(checkout.createOrder({ anonymousId: "anon-1" })).rejects.toEqual(
       new CheckoutIncompleteError("Shipping address is required"),
     );
+  });
+
+  it("rejects order creation when payment is required but missing", async () => {
+    const readyCart = cart({
+      shippingAddress: address,
+      shippingInfo: {
+        shippingMethodName: "Standard delivery",
+        price: money(500),
+        shippingRate: { price: money(500), tiers: [] },
+        taxRate: undefined,
+        taxedPrice: undefined,
+        deliveries: [],
+        discountedPrice: undefined,
+        shippingMethod: { typeId: "shipping-method", id: "shipping-1" },
+        shippingMethodState: "MatchesCart",
+      },
+    });
+    const checkout = createCheckoutOperations(
+      gateway({ queryCarts: vi.fn().mockResolvedValue([readyCart]) }),
+      { requirePayment: true },
+    );
+
+    await expect(checkout.createOrder({ anonymousId: "anon-1" })).rejects.toEqual(
+      new CheckoutIncompleteError("Payment is required"),
+    );
+  });
+
+  it("sets order paymentState after a successful authorization", async () => {
+    const readyCart = cart({
+      shippingAddress: address,
+      shippingInfo: {
+        shippingMethodName: "Standard delivery",
+        price: money(500),
+        shippingRate: { price: money(500), tiers: [] },
+        taxRate: undefined,
+        taxedPrice: undefined,
+        deliveries: [],
+        discountedPrice: undefined,
+        shippingMethod: { typeId: "shipping-method", id: "shipping-1" },
+        shippingMethodState: "MatchesCart",
+      },
+      paymentInfo: {
+        payments: [{ typeId: "payment", id: "pay-1" }],
+      },
+    });
+    const api = gateway({
+      queryCarts: vi.fn().mockResolvedValue([readyCart]),
+      getPaymentById: vi.fn().mockResolvedValue({
+        id: "pay-1",
+        transactions: [{ type: "Authorization", state: "Success", amount: money(9900) }],
+        amountPlanned: money(9900),
+        paymentMethodInfo: { paymentInterface: "MOCK", method: "CREDIT_CARD" },
+      }),
+    });
+    const checkout = createCheckoutOperations(api, { requirePayment: true });
+
+    await expect(
+      checkout.createOrder({ anonymousId: "anon-1", orderNumber: "cat-request-1" }),
+    ).resolves.toMatchObject({ paymentState: "Pending" });
+    expect(api.updateOrder).toHaveBeenCalledWith("order-1", 2, [
+      { action: "changePaymentState", paymentState: "Pending" },
+    ]);
+  });
+
+  it("rejects order creation when the authorized amount does not match the cart total", async () => {
+    const readyCart = cart({
+      shippingAddress: address,
+      shippingInfo: {
+        shippingMethodName: "Standard delivery",
+        price: money(500),
+        shippingRate: { price: money(500), tiers: [] },
+        taxRate: undefined,
+        taxedPrice: undefined,
+        deliveries: [],
+        discountedPrice: undefined,
+        shippingMethod: { typeId: "shipping-method", id: "shipping-1" },
+        shippingMethodState: "MatchesCart",
+      },
+      paymentInfo: {
+        payments: [{ typeId: "payment", id: "pay-1" }],
+      },
+    });
+    const checkout = createCheckoutOperations(
+      gateway({
+        queryCarts: vi.fn().mockResolvedValue([readyCart]),
+        getPaymentById: vi.fn().mockResolvedValue({
+          id: "pay-1",
+          transactions: [{ type: "Authorization", state: "Success", amount: money(5000) }],
+          amountPlanned: money(5000),
+          paymentMethodInfo: { paymentInterface: "MOCK", method: "CREDIT_CARD" },
+        }),
+      }),
+      { requirePayment: true },
+    );
+
+    await expect(checkout.createOrder({ anonymousId: "anon-1" })).rejects.toEqual(
+      new CheckoutIncompleteError("Payment does not match the cart total"),
+    );
+  });
+
+  it("still returns paymentState when changePaymentState fails", async () => {
+    const readyCart = cart({
+      shippingAddress: address,
+      shippingInfo: {
+        shippingMethodName: "Standard delivery",
+        price: money(500),
+        shippingRate: { price: money(500), tiers: [] },
+        taxRate: undefined,
+        taxedPrice: undefined,
+        deliveries: [],
+        discountedPrice: undefined,
+        shippingMethod: { typeId: "shipping-method", id: "shipping-1" },
+        shippingMethodState: "MatchesCart",
+      },
+      paymentInfo: {
+        payments: [{ typeId: "payment", id: "pay-1" }],
+      },
+    });
+    const api = gateway({
+      queryCarts: vi.fn().mockResolvedValue([readyCart]),
+      getPaymentById: vi.fn().mockResolvedValue({
+        id: "pay-1",
+        transactions: [{ type: "Authorization", state: "Success", amount: money(9900) }],
+        amountPlanned: money(9900),
+        paymentMethodInfo: { paymentInterface: "MOCK", method: "CREDIT_CARD" },
+      }),
+      updateOrder: vi.fn().mockRejectedValue(new Error("version conflict")),
+    });
+    const checkout = createCheckoutOperations(api, { requirePayment: true });
+
+    await expect(
+      checkout.createOrder({ anonymousId: "anon-1", orderNumber: "cat-request-1" }),
+    ).resolves.toMatchObject({ paymentState: "Pending" });
   });
 });

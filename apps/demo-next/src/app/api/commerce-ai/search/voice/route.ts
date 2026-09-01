@@ -1,15 +1,5 @@
-import { createNextHandlers, loadConfigFromEnv } from "@commerce-ai-tool/server";
-import type { NextHandlers } from "@commerce-ai-tool/server";
-
-let handlers: NextHandlers | null = null;
-
-function getHandlers(): NextHandlers {
-  if (!handlers) {
-    handlers = createNextHandlers(loadConfigFromEnv());
-  }
-  return handlers;
-}
+import { getCommerceAIHandlers } from "@/lib/commerce-ai-handlers";
 
 export async function POST(req: Request) {
-  return getHandlers().searchVoice(req);
+  return getCommerceAIHandlers().searchVoice(req);
 }

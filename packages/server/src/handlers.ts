@@ -24,10 +24,16 @@ import {
   executeSetCartAddresses,
   executeSetShippingMethod,
 } from "./checkout-actions.js";
+import {
+  executeAuthorizePayment,
+  executeGetPaymentMethods,
+} from "./payment-actions.js";
+import { executeGetOrder } from "./order-actions.js";
 import { readCartSessionHeader } from "./cart-session.js";
 import { parseMultipart, readJsonBody } from "./utils/multipart.js";
 import type {
   AddToCartRequest,
+  AuthorizePaymentRequest,
   CartLoginRequest,
   CartMutationRequest,
   CreateOrderRequest,
@@ -237,6 +243,54 @@ export function createHandlers(server: CommerceAIServer) {
         return jsonResponse(await executeCreateOrder(server, body));
       } catch (error) {
         const mapped = mapRouteError(error, "createOrder", "Create order failed");
+        return errorResponse(mapped.message, mapped.status);
+      }
+    },
+
+    async getPaymentMethods(req: IncomingMessage): Promise<HandlerResponse> {
+      try {
+        const query = parseRequestQuery(req);
+        return jsonResponse(
+          await executeGetPaymentMethods(server, {
+            anonymousId: query.anonymousId,
+            cartId: query.cartId,
+            catalogLocale: query.catalogLocale,
+            sessionToken: readCartSessionHeader(req.headers),
+          }),
+        );
+      } catch (error) {
+        const mapped = mapRouteError(
+          error,
+          "getPaymentMethods",
+          "Get payment methods failed",
+        );
+        return errorResponse(mapped.message, mapped.status);
+      }
+    },
+
+    async authorizePayment(req: IncomingMessage): Promise<HandlerResponse> {
+      try {
+        const body = await readJsonBody<AuthorizePaymentRequest>(req);
+        return jsonResponse(await executeAuthorizePayment(server, body));
+      } catch (error) {
+        const mapped = mapRouteError(error, "authorizePayment", "Payment failed");
+        return errorResponse(mapped.message, mapped.status);
+      }
+    },
+
+    async getOrder(req: IncomingMessage): Promise<HandlerResponse> {
+      try {
+        const query = parseRequestQuery(req);
+        return jsonResponse(
+          await executeGetOrder(server, {
+            orderNumber: query.orderNumber ?? "",
+            anonymousId: query.anonymousId,
+            catalogLocale: query.catalogLocale,
+            sessionToken: readCartSessionHeader(req.headers),
+          }),
+        );
+      } catch (error) {
+        const mapped = mapRouteError(error, "getOrder", "Get order failed");
         return errorResponse(mapped.message, mapped.status);
       }
     },

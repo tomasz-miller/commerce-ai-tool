@@ -6,6 +6,7 @@ import {
 import { createApiBuilderFromCtpClient, type ProductSearchRequest } from "@commercetools/platform-sdk";
 import type {
   AddToCartRequest,
+  AuthorizePaymentRequest,
   CartLoginRequest,
   CartLoginResult,
   CartMutationRequest,
@@ -13,7 +14,12 @@ import type {
   CheckoutRequest,
   CommercetoolsConfig,
   CreateOrderRequest,
+  GetOrderRequest,
+  ListOrdersRequest,
   OrderSnapshot,
+  PaymentConfig,
+  PaymentMethodOption,
+  PaymentSnapshot,
   ProductCard,
   SetCartAddressesRequest,
   SetShippingMethodRequest,
@@ -22,7 +28,9 @@ import type {
 } from "../types/index.js";
 import type { ProductTypeForFacets } from "./product-types.js";
 import { createCartOperations, type CartGateway } from "./cart.js";
-import { createCheckoutOperations, type CheckoutGateway } from "./checkout.js";
+import { createCheckoutOperations } from "./checkout.js";
+import { createOrderOperations, type OrderGateway } from "./order.js";
+import { createPaymentOperations, type PaymentGateway } from "./payment.js";
 import {
   buildProductSearchRequest,
   buildProjectionSearchQueryArgs,
@@ -70,13 +78,25 @@ export interface CommercetoolsClient {
   getShippingMethods(input: CheckoutRequest): Promise<ShippingMethodSnapshot[]>;
   setShippingMethod(input: SetShippingMethodRequest): Promise<CartSnapshot>;
   createOrder(input: CreateOrderRequest): Promise<OrderSnapshot>;
+  listPaymentMethods(context: {
+    locale?: string;
+    country?: string;
+  }): Promise<PaymentMethodOption[]>;
+  authorizePayment(
+    input: AuthorizePaymentRequest,
+  ): Promise<{ payment: PaymentSnapshot; cart: CartSnapshot }>;
+  getOrder(input: GetOrderRequest): Promise<OrderSnapshot>;
+  listOrders(input: ListOrdersRequest): Promise<OrderSnapshot[]>;
 }
 
 type ProjectApiRoot = ReturnType<ReturnType<typeof createApiBuilderFromCtpClient>["withProjectKey"]>;
 
 export type { ProductSearchBuildInput, ProductSearchQueryOptions } from "./query-builder.js";
 
-export function createCommercetoolsClient(config: CommercetoolsConfig): CommercetoolsClient {
+export function createCommercetoolsClient(
+  config: CommercetoolsConfig,
+  options?: { payments?: PaymentConfig },
+): CommercetoolsClient {
   const scopes = config.scopes ?? [
     `manage_project:${config.projectKey}`,
   ];
@@ -109,7 +129,7 @@ export function createCommercetoolsClient(config: CommercetoolsConfig): Commerce
     projectKey: config.projectKey,
   });
 
-  const cartGateway: CartGateway & CheckoutGateway = {
+  const cartGateway: CartGateway & PaymentGateway & OrderGateway = {
     async queryCarts(where) {
       const response = await apiRoot
         .carts()
@@ -118,13 +138,18 @@ export function createCommercetoolsClient(config: CommercetoolsConfig): Commerce
             where,
             limit: 1,
             sort: "lastModifiedAt desc",
+            expand: ["paymentInfo.payments"],
           },
         })
         .execute();
       return response.body.results ?? [];
     },
     async getCartById(id) {
-      const response = await apiRoot.carts().withId({ ID: id }).get().execute();
+      const response = await apiRoot
+        .carts()
+        .withId({ ID: id })
+        .get({ queryArgs: { expand: ["paymentInfo.payments"] } })
+        .execute();
       return response.body;
     },
     async createCart(draft) {
@@ -183,9 +208,47 @@ export function createCommercetoolsClient(config: CommercetoolsConfig): Commerce
       }).execute();
       return response.body;
     },
+    async updateOrder(id, version, actions) {
+      const response = await apiRoot
+        .orders()
+        .withId({ ID: id })
+        .post({ body: { version, actions } })
+        .execute();
+      return response.body;
+    },
+    async createPayment(draft) {
+      const response = await apiRoot.payments().post({ body: draft }).execute();
+      return response.body;
+    },
+    async getPaymentById(id) {
+      const response = await apiRoot.payments().withId({ ID: id }).get().execute();
+      return response.body;
+    },
+    async getPaymentByKey(key) {
+      const response = await apiRoot.payments().withKey({ key }).get().execute();
+      return response.body;
+    },
+    async queryOrders(where, options) {
+      const response = await apiRoot
+        .orders()
+        .get({
+          queryArgs: {
+            where,
+            limit: options?.limit ?? 1,
+            sort: "createdAt desc",
+            expand: ["paymentInfo.payments"],
+          },
+        })
+        .execute();
+      return response.body.results ?? [];
+    },
   };
+  const requirePayment =
+    options?.payments?.requiredForOrder ?? Boolean(options?.payments?.provider);
   const cart = createCartOperations(cartGateway);
-  const checkout = createCheckoutOperations(cartGateway);
+  const checkout = createCheckoutOperations(cartGateway, { requirePayment });
+  const payments = createPaymentOperations(cartGateway, options?.payments?.provider);
+  const orders = createOrderOperations(cartGateway);
 
   return {
     async listProductTypes() {
@@ -302,6 +365,10 @@ export function createCommercetoolsClient(config: CommercetoolsConfig): Commerce
     getShippingMethods: checkout.getShippingMethods,
     setShippingMethod: checkout.setShippingMethod,
     createOrder: checkout.createOrder,
+    listPaymentMethods: payments.listPaymentMethods,
+    authorizePayment: payments.authorizePayment,
+    getOrder: orders.getOrder,
+    listOrders: orders.listOrders,
   };
 }
 
