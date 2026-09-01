@@ -5,12 +5,14 @@ import {
   type ChangeEvent,
   type FormEvent,
 } from "react";
-import { ArrowLeft, ArrowRight, Check, MapPin, Package } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, CreditCard, MapPin, Package } from "lucide-react";
 import {
   resolveCommerceAISearchMessages,
   type CheckoutAddress,
   type CommerceAISearchMessages,
   type OrderSnapshot,
+  type PaymentMethodOption,
+  type PaymentSnapshot,
   type ShippingMethodSnapshot,
   type ThemeMode,
 } from "@commerce-ai-tool/core";
@@ -26,6 +28,7 @@ export interface CommerceAICheckoutProps {
   country?: string;
   messages?: Partial<CommerceAISearchMessages>;
   continueShoppingHref?: string;
+  orderStatusHref?: string;
   onOrderPlaced?: (order: OrderSnapshot) => void;
 }
 
@@ -280,6 +283,7 @@ export function CommerceAICheckout({
   country = "DE",
   messages: messageOverrides,
   continueShoppingHref = "/",
+  orderStatusHref = "/orders",
   onOrderPlaced,
 }: CommerceAICheckoutProps) {
   const messages = useMemo(
@@ -297,6 +301,10 @@ export function CommerceAICheckout({
   const [shippingMethods, setShippingMethods] = useState<ShippingMethodSnapshot[]>([]);
   const [hasLoadedShippingMethods, setHasLoadedShippingMethods] = useState(false);
   const [selectedShippingMethodId, setSelectedShippingMethodId] = useState("");
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethodOption[]>([]);
+  const [paymentMethodsLoaded, setPaymentMethodsLoaded] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("");
+  const [authorizedPayment, setAuthorizedPayment] = useState<PaymentSnapshot | null>(null);
   const [order, setOrder] = useState<OrderSnapshot | null>(null);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -311,13 +319,25 @@ export function CommerceAICheckout({
       if (!updated) {
         return;
       }
-      const methods = await cart.getShippingMethods();
+      const [methods, payments] = await Promise.all([
+        cart.getShippingMethods(),
+        cart.getPaymentMethods(),
+      ]);
       if (methods === null) {
         return;
       }
       setShippingMethods(methods);
       setHasLoadedShippingMethods(true);
       setSelectedShippingMethodId(updated.shippingMethod?.id ?? "");
+      if (payments === null) {
+        setPaymentMethods([]);
+        setPaymentMethodsLoaded(false);
+      } else {
+        setPaymentMethods(payments);
+        setPaymentMethodsLoaded(true);
+      }
+      setSelectedPaymentMethod("");
+      setAuthorizedPayment(null);
     });
   }
 
@@ -326,6 +346,26 @@ export function CommerceAICheckout({
       const updated = await cart.setShippingMethod(methodId);
       if (updated) {
         setSelectedShippingMethodId(methodId);
+        setSelectedPaymentMethod("");
+        setAuthorizedPayment(null);
+      }
+    });
+  }
+
+  function selectPaymentMethod(method: string) {
+    if (
+      authorizedPayment?.status === "authorized" &&
+      authorizedPayment.method === method &&
+      authorizedPayment.amount.amount === cart.cart?.totalPrice.amount &&
+      authorizedPayment.amount.currency === cart.cart?.totalPrice.currency
+    ) {
+      return;
+    }
+    startTransition(async () => {
+      const payment = await cart.authorizePayment(method);
+      if (payment?.status === "authorized") {
+        setSelectedPaymentMethod(method);
+        setAuthorizedPayment(payment);
       }
     });
   }
@@ -356,6 +396,14 @@ export function CommerceAICheckout({
             <p className="cat-checkout__eyebrow">{messages.checkout}</p>
             <h1>{messages.orderPlaced}</h1>
             <strong>{order.orderNumber ?? order.id}</strong>
+            {(order.orderNumber || order.id) && orderStatusHref ? (
+              <a
+                className="cat-checkout__back"
+                href={`${orderStatusHref}?orderNumber=${encodeURIComponent(order.orderNumber ?? order.id)}`}
+              >
+                {messages.viewOrderStatus}
+              </a>
+            ) : null}
             <a className="cat-checkout__back" href={continueShoppingHref}>
               <ArrowLeft size={15} strokeWidth={ICON_STROKE} aria-hidden="true" />
               {messages.continueShopping}
@@ -388,13 +436,26 @@ export function CommerceAICheckout({
   }
 
   const checkoutBusy = isPending || cart.isMutating || isPlacingOrder;
-  const canPlaceOrder =
+  const shippingReady =
     hasLoadedShippingMethods &&
     (shippingMethods.length === 0 || Boolean(selectedShippingMethodId));
+  const paymentMethodsUnknown = hasLoadedShippingMethods && !paymentMethodsLoaded;
+  const paymentOffered = paymentMethodsLoaded && paymentMethods.length > 0;
+  const paymentRequired = paymentMethodsUnknown || paymentOffered;
+  const paymentReady =
+    !paymentRequired ||
+    (authorizedPayment?.status === "authorized" &&
+      authorizedPayment.amount.amount === cart.cart.totalPrice.amount &&
+      authorizedPayment.amount.currency === cart.cart.totalPrice.currency);
+  const canPlaceOrder = shippingReady && paymentReady;
   const placeOrderHint = !canPlaceOrder
-    ? hasLoadedShippingMethods
-      ? messages.selectDeliveryToContinue
-      : messages.completeAddressToContinue
+    ? !hasLoadedShippingMethods
+      ? messages.completeAddressToContinue
+      : shippingMethods.length > 0 && !selectedShippingMethodId
+        ? messages.selectDeliveryToContinue
+        : paymentRequired && !paymentReady
+          ? messages.selectPaymentToContinue
+          : undefined
     : undefined;
 
   return (
@@ -411,10 +472,18 @@ export function CommerceAICheckout({
           </li>
           <li
             className={`cat-checkout__step${hasLoadedShippingMethods ? " cat-checkout__step--current" : ""}`}
-            aria-current={hasLoadedShippingMethods ? "step" : undefined}
+            aria-current={hasLoadedShippingMethods && !paymentRequired ? "step" : undefined}
           >
             {messages.checkoutStepDelivery}
           </li>
+          {paymentRequired ? (
+            <li
+              className={`cat-checkout__step${hasLoadedShippingMethods ? " cat-checkout__step--current" : ""}`}
+              aria-current={hasLoadedShippingMethods ? "step" : undefined}
+            >
+              {messages.checkoutStepPayment}
+            </li>
+          ) : null}
         </ol>
       </header>
 
@@ -501,6 +570,49 @@ export function CommerceAICheckout({
                   {messages.noShippingMethods}
                 </p>
               )}
+            </div>
+          </section>
+          ) : null}
+
+          {shippingReady && paymentRequired ? (
+          <section className="cat-checkout__bezel">
+            <div className="cat-checkout__core">
+              <div className="cat-checkout__section-heading">
+                <CreditCard size={18} strokeWidth={ICON_STROKE} aria-hidden="true" />
+                <h2>{messages.paymentMethod}</h2>
+              </div>
+              <div
+                className="cat-checkout__shipping-methods"
+                aria-label={messages.selectPaymentMethod}
+              >
+                {paymentMethods.map((method) => (
+                  <button
+                    key={method.method}
+                    type="button"
+                    className={`cat-checkout__shipping-card${selectedPaymentMethod === method.method ? " cat-checkout__shipping-card--selected" : ""}`}
+                    disabled={checkoutBusy}
+                    aria-pressed={selectedPaymentMethod === method.method}
+                    onClick={() => selectPaymentMethod(method.method)}
+                  >
+                    <span className="cat-checkout__shipping-copy">
+                      <strong>{method.name}</strong>
+                      {method.description ? <small>{method.description}</small> : null}
+                    </span>
+                    <span className="cat-checkout__shipping-price">
+                      {authorizedPayment?.status === "authorized" &&
+                      authorizedPayment.method === method.method
+                        ? messages.paymentAuthorized
+                        : ""}
+                      <span className="cat-checkout__shipping-check" aria-hidden="true">
+                        {authorizedPayment?.status === "authorized" &&
+                        authorizedPayment.method === method.method ? (
+                          <Check size={14} strokeWidth={ICON_STROKE} />
+                        ) : null}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
           </section>
           ) : null}

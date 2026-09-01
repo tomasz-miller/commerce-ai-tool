@@ -10,7 +10,9 @@ import {
   formatMoney,
   InvalidCredentialsError,
   isConcurrentModification,
+  isMatchingPriceNotFound,
   mapCartToSnapshot,
+  MissingPriceError,
   resolveLineItemDraft,
   type CartGateway,
 } from "./cart.js";
@@ -142,6 +144,22 @@ describe("cart helpers", () => {
       isConcurrentModification({ body: { errors: [{ code: "ConcurrentModification" }] } }),
     ).toBe(true);
     expect(isConcurrentModification({ statusCode: 400 })).toBe(false);
+  });
+
+  it("detects MatchingPriceNotFound errors", () => {
+    expect(
+      isMatchingPriceNotFound({
+        statusCode: 400,
+        body: { errors: [{ code: "MatchingPriceNotFound" }] },
+      }),
+    ).toBe(true);
+    expect(
+      isMatchingPriceNotFound({
+        statusCode: 400,
+        message: "The variant '1' does not contain a price for currency 'GBP' country 'DE'",
+      }),
+    ).toBe(true);
+    expect(isMatchingPriceNotFound({ statusCode: 400, message: "other" })).toBe(false);
   });
 
   it("defaults add-to-cart quantity to 1", () => {
@@ -276,6 +294,129 @@ describe("createCartOperations", () => {
       { action: "setCountry", country: "DE" },
       { action: "addLineItem", sku: "SHOE-RED", quantity: 1 },
     ]);
+  });
+
+  it("retries add without country when the scoped price is missing", async () => {
+    const existing = createCart();
+    const updated = createCart({ version: 2 });
+    const missingPrice = {
+      statusCode: 400,
+      message: "The variant '1' with SKU 'CBM-03' does not contain a price for currency 'GBP' country 'DE'",
+      body: { errors: [{ code: "MatchingPriceNotFound" }] },
+    };
+    const updateCart = vi
+      .fn<(id: string, version: number, actions: CartUpdateAction[]) => Promise<Cart>>()
+      .mockRejectedValueOnce(missingPrice)
+      .mockResolvedValueOnce(updated);
+    const gateway = createGateway({
+      queryCarts: vi.fn().mockResolvedValue([existing]),
+      updateCart,
+    });
+    const ops = createCartOperations(gateway);
+
+    await ops.addToCart({
+      anonymousId: "anon-1",
+      sku: "CBM-03",
+      country: "DE",
+      catalogLocale: "en",
+    });
+
+    expect(updateCart).toHaveBeenNthCalledWith(1, "cart-1", 1, [
+      { action: "setCountry", country: "DE" },
+      { action: "addLineItem", sku: "CBM-03", quantity: 1 },
+    ]);
+    expect(updateCart).toHaveBeenNthCalledWith(2, "cart-1", 1, [
+      { action: "addLineItem", sku: "CBM-03", quantity: 1 },
+    ]);
+  });
+
+  it("clears a cart country when add still has no matching price", async () => {
+    const existing = createCart({ country: "DE" });
+    const updated = createCart({ version: 2 });
+    const missingPrice = {
+      statusCode: 400,
+      body: { errors: [{ code: "MatchingPriceNotFound" }] },
+    };
+    const updateCart = vi
+      .fn<(id: string, version: number, actions: CartUpdateAction[]) => Promise<Cart>>()
+      .mockRejectedValueOnce(missingPrice)
+      .mockResolvedValueOnce(updated);
+    const gateway = createGateway({
+      queryCarts: vi.fn().mockResolvedValue([existing]),
+      updateCart,
+    });
+    const ops = createCartOperations(gateway);
+
+    await ops.addToCart({
+      anonymousId: "anon-1",
+      sku: "CBM-03",
+      country: "DE",
+      catalogLocale: "en",
+    });
+
+    expect(updateCart).toHaveBeenNthCalledWith(1, "cart-1", 1, [
+      { action: "addLineItem", sku: "CBM-03", quantity: 1 },
+    ]);
+    expect(updateCart).toHaveBeenNthCalledWith(2, "cart-1", 1, [
+      { action: "setCountry" },
+      { action: "addLineItem", sku: "CBM-03", quantity: 1 },
+    ]);
+  });
+
+  it("creates a cart without country when the scoped price is missing", async () => {
+    const created = createCart({ version: 1 });
+    const missingPrice = {
+      statusCode: 400,
+      body: { errors: [{ code: "MatchingPriceNotFound" }] },
+    };
+    const createCartFn = vi
+      .fn()
+      .mockRejectedValueOnce(missingPrice)
+      .mockResolvedValueOnce(created);
+    const gateway = createGateway({ createCart: createCartFn });
+    const ops = createCartOperations(gateway);
+
+    await ops.addToCart({
+      anonymousId: "anon-1",
+      sku: "CBM-03",
+      currency: "EUR",
+      country: "DE",
+      catalogLocale: "en",
+    });
+
+    expect(createCartFn).toHaveBeenNthCalledWith(1, {
+      currency: "EUR",
+      country: "DE",
+      anonymousId: "anon-1",
+      lineItems: [{ sku: "CBM-03", quantity: 1 }],
+    });
+    expect(createCartFn).toHaveBeenNthCalledWith(2, {
+      currency: "EUR",
+      country: undefined,
+      anonymousId: "anon-1",
+      lineItems: [{ sku: "CBM-03", quantity: 1 }],
+    });
+  });
+
+  it("surfaces MissingPriceError when no price exists even without country", async () => {
+    const missingPrice = {
+      statusCode: 400,
+      message: "The variant '1' does not contain a price for currency 'GBP' country 'DE'",
+      body: { errors: [{ code: "MatchingPriceNotFound" }] },
+    };
+    const gateway = createGateway({
+      createCart: vi.fn().mockRejectedValue(missingPrice),
+    });
+    const ops = createCartOperations(gateway);
+
+    await expect(
+      ops.addToCart({
+        anonymousId: "anon-1",
+        sku: "CBM-03",
+        country: "DE",
+        catalogLocale: "en",
+      }),
+    ).rejects.toBeInstanceOf(MissingPriceError);
   });
 
   it("retries cart updates after a concurrent modification", async () => {

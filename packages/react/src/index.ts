@@ -2,6 +2,8 @@ export { CommerceAISearch } from "./components/CommerceAISearch.js";
 export type { CommerceAISearchProps, SearchMode } from "./components/CommerceAISearch.js";
 export { CommerceAICheckout } from "./components/CommerceAICheckout.js";
 export type { CommerceAICheckoutProps } from "./components/CommerceAICheckout.js";
+export { CommerceAIOrderStatus } from "./components/CommerceAIOrderStatus.js";
+export type { CommerceAIOrderStatusProps } from "./components/CommerceAIOrderStatus.js";
 export { useCommerceAISearch } from "./hooks/useCommerceAISearch.js";
 export type {
   SetQueryOptions,
@@ -20,6 +22,8 @@ export type {
   CommerceAISearchMessages,
   CustomerSnapshot,
   OrderSnapshot,
+  PaymentMethodOption,
+  PaymentSnapshot,
   ProductCard,
   ShippingMethodSnapshot,
 } from "@commerce-ai-tool/core";

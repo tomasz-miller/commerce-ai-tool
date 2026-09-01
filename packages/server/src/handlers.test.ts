@@ -6,6 +6,7 @@ import {
   CartNotFoundError,
   InvalidCredentialsError,
   SearchTimeoutError,
+  MissingPriceError,
 } from "@commerce-ai-tool/core";
 import type { CartSnapshot, CommercetoolsClient, SearchOrchestrator } from "@commerce-ai-tool/core";
 import express from "express";
@@ -275,6 +276,11 @@ describe("route-actions", () => {
 
     expect(mapRouteError(new ValidationError("bad input"), "search", "fail")).toEqual({
       message: "bad input",
+      status: 400,
+    });
+
+    expect(mapRouteError(new MissingPriceError("no GBP+DE price"), "addToCart", "fail")).toEqual({
+      message: "no GBP+DE price",
       status: 400,
     });
 

@@ -15,6 +15,7 @@ import type {
   MoneyAmount,
   UpdateCartQuantityRequest,
 } from "../types/index.js";
+import { mapCartPayments } from "./payment-map.js";
 
 export const DEFAULT_CART_CURRENCY = "EUR";
 export const DEFAULT_CART_LOCALE = "en";
@@ -103,7 +104,9 @@ export function mapLineItemToSnapshot(
   };
 }
 
-function mapAddress(address: Cart["shippingAddress"]): CheckoutAddress | undefined {
+export function mapCheckoutAddress(
+  address: Cart["shippingAddress"],
+): CheckoutAddress | undefined {
   if (
     !address?.firstName ||
     !address.lastName ||
@@ -143,8 +146,8 @@ export function mapCartToSnapshot(cart: Cart, locale: string): CartSnapshot {
     lineItems,
     totalPrice: formatMoney(cart.totalPrice, locale),
     totalQuantity,
-    shippingAddress: mapAddress(cart.shippingAddress),
-    billingAddress: mapAddress(cart.billingAddress),
+    shippingAddress: mapCheckoutAddress(cart.shippingAddress),
+    billingAddress: mapCheckoutAddress(cart.billingAddress),
     shippingMethod: cart.shippingInfo?.shippingMethod
       ? {
           id: cart.shippingInfo.shippingMethod.id,
@@ -152,6 +155,7 @@ export function mapCartToSnapshot(cart: Cart, locale: string): CartSnapshot {
           price: formatMoney(cart.shippingInfo.price, locale),
         }
       : undefined,
+    payments: mapCartPayments(cart, locale),
   };
 }
 
@@ -237,35 +241,64 @@ export class InvalidCredentialsError extends Error {
   }
 }
 
-export function isInvalidCredentials(error: unknown): boolean {
-  if (!error || typeof error !== "object") {
-    return false;
+export class MissingPriceError extends Error {
+  constructor(message = "No matching price for this cart currency and country") {
+    super(message);
+    this.name = "MissingPriceError";
   }
+}
 
+function commercetoolsErrorParts(error: unknown): {
+  status?: number;
+  codes: string[];
+  message?: string;
+} {
+  if (!error || typeof error !== "object") {
+    return { codes: [] };
+  }
   const candidate = error as {
     statusCode?: number;
-    body?: { statusCode?: number; errors?: Array<{ code?: string }> };
+    message?: string;
+    body?: {
+      statusCode?: number;
+      message?: string;
+      errors?: Array<{ code?: string; message?: string }>;
+    };
   };
-  const status = candidate.statusCode ?? candidate.body?.statusCode;
+  const codes = (candidate.body?.errors ?? [])
+    .map((item) => item.code)
+    .filter((code): code is string => Boolean(code));
+  return {
+    status: candidate.statusCode ?? candidate.body?.statusCode,
+    codes,
+    message: candidate.body?.message ?? candidate.message,
+  };
+}
+
+export function isInvalidCredentials(error: unknown): boolean {
+  const { status, codes } = commercetoolsErrorParts(error);
   if (status !== 400 && status !== 401) {
     return false;
   }
-
-  return candidate.body?.errors?.some((item) => item.code === "InvalidCredentials") ?? status === 401;
+  return codes.includes("InvalidCredentials") || status === 401;
 }
 
 export function isConcurrentModification(error: unknown): boolean {
-  if (!error || typeof error !== "object") {
-    return false;
-  }
+  const { status, codes } = commercetoolsErrorParts(error);
+  return status === 409 || codes.includes("ConcurrentModification");
+}
 
-  const candidate = error as { statusCode?: number; body?: { statusCode?: number; errors?: Array<{ code?: string }> } };
-  const status = candidate.statusCode ?? candidate.body?.statusCode;
-  if (status === 409) {
+export function isMatchingPriceNotFound(error: unknown): boolean {
+  const { status, codes, message } = commercetoolsErrorParts(error);
+  if (codes.includes("MatchingPriceNotFound")) {
     return true;
   }
+  return status === 400 && Boolean(message?.includes("does not contain a price"));
+}
 
-  return candidate.body?.errors?.some((item) => item.code === "ConcurrentModification") ?? false;
+function toMissingPriceError(error: unknown): MissingPriceError {
+  const message = error instanceof Error ? error.message : commercetoolsErrorParts(error).message;
+  return new MissingPriceError(message);
 }
 
 export function assertCartOwner(
@@ -376,6 +409,71 @@ export function createCartOperations(gateway: CartGateway): CartOperations {
     return null;
   }
 
+  async function createCartWithPriceFallback(
+    input: AddToCartRequest,
+    lineItem: ReturnType<typeof toLineItemIdentifier>,
+  ): Promise<Cart> {
+    const country = input.country?.trim() || undefined;
+    const draft = {
+      currency: input.currency?.trim() || DEFAULT_CART_CURRENCY,
+      country,
+      anonymousId: input.customerId ? undefined : input.anonymousId,
+      customerId: input.customerId,
+      lineItems: [lineItem],
+    };
+
+    try {
+      return await gateway.createCart(draft);
+    } catch (error) {
+      if (!country || !isMatchingPriceNotFound(error)) {
+        throw isMatchingPriceNotFound(error) ? toMissingPriceError(error) : error;
+      }
+      try {
+        return await gateway.createCart({ ...draft, country: undefined });
+      } catch (retryError) {
+        throw isMatchingPriceNotFound(retryError) ? toMissingPriceError(retryError) : retryError;
+      }
+    }
+  }
+
+  async function addLineItemWithPriceFallback(
+    cart: Cart,
+    input: AddToCartRequest,
+    addAction: CartUpdateAction,
+  ): Promise<Cart> {
+    const actions = addLineItemActions(cart, input, addAction);
+    try {
+      return await updateWithRetry(cart, actions);
+    } catch (error) {
+      if (!isMatchingPriceNotFound(error)) {
+        throw error;
+      }
+
+      const changedCountry = actions.some((action) => action.action === "setCountry");
+      if (changedCountry) {
+        try {
+          return await updateWithRetry(cart, [addAction]);
+        } catch (retryError) {
+          if (!isMatchingPriceNotFound(retryError)) {
+            throw retryError;
+          }
+        }
+      }
+
+      if (cart.country || changedCountry) {
+        try {
+          return await updateWithRetry(cart, [{ action: "setCountry" }, addAction]);
+        } catch (retryError) {
+          if (!isMatchingPriceNotFound(retryError)) {
+            throw retryError;
+          }
+        }
+      }
+
+      throw toMissingPriceError(error);
+    }
+  }
+
   return {
     async getCart(anonymousId, locale) {
       const cart = await findActiveAnonymousCart(anonymousId);
@@ -396,34 +494,25 @@ export function createCartOperations(gateway: CartGateway): CartOperations {
 
       if (input.cartId) {
         const cart = await requireActiveCart(input);
-        const updated = await updateWithRetry(cart, addLineItemActions(cart, input, addAction));
+        const updated = await addLineItemWithPriceFallback(cart, input, addAction);
         return mapCartToSnapshot(updated, locale);
       }
 
       const existing = await findExistingCart(input);
       if (existing) {
-        const updated = await updateWithRetry(
-          existing,
-          addLineItemActions(existing, input, addAction),
-        );
+        const updated = await addLineItemWithPriceFallback(existing, input, addAction);
         return mapCartToSnapshot(updated, locale);
       }
 
       try {
-        const created = await gateway.createCart({
-          currency: input.currency?.trim() || DEFAULT_CART_CURRENCY,
-          country: input.country?.trim() || undefined,
-          anonymousId: input.customerId ? undefined : input.anonymousId,
-          customerId: input.customerId,
-          lineItems: [draft],
-        });
+        const created = await createCartWithPriceFallback(input, draft);
         return mapCartToSnapshot(created, locale);
       } catch (error) {
         const raced = await findExistingCart(input);
         if (!raced) {
           throw error;
         }
-        const updated = await updateWithRetry(raced, addLineItemActions(raced, input, addAction));
+        const updated = await addLineItemWithPriceFallback(raced, input, addAction);
         return mapCartToSnapshot(updated, locale);
       }
     },

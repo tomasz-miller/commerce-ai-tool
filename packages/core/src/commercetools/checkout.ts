@@ -2,6 +2,8 @@ import type {
   Cart,
   CartUpdateAction,
   Order,
+  OrderUpdateAction,
+  Payment,
   ShippingMethod,
 } from "@commercetools/platform-sdk";
 import type {
@@ -17,12 +19,12 @@ import {
   buildAnonymousCartWhere,
   buildCustomerCartWhere,
   CartNotFoundError,
-  formatMoney,
   isConcurrentModification,
   mapCartToSnapshot,
-  mapLineItemToSnapshot,
   resolveCartLocale,
 } from "./cart.js";
+import { mapOrderToSnapshot } from "./order.js";
+import { resolveCartPaymentCoverage, resolveOrderPaymentState } from "./payment-map.js";
 
 export interface CheckoutGateway {
   queryCarts(where: string): Promise<Cart[]>;
@@ -34,6 +36,8 @@ export interface CheckoutGateway {
     version: number;
     orderNumber: string;
   }): Promise<Order>;
+  updateOrder(id: string, version: number, actions: OrderUpdateAction[]): Promise<Order>;
+  getPaymentById(id: string): Promise<Payment>;
 }
 
 export interface CheckoutOperations {
@@ -43,6 +47,10 @@ export interface CheckoutOperations {
     input: SetShippingMethodRequest,
   ): Promise<ReturnType<typeof mapCartToSnapshot>>;
   createOrder(input: CreateOrderRequest): Promise<OrderSnapshot>;
+}
+
+export interface CheckoutOperationsOptions {
+  requirePayment?: boolean;
 }
 
 export class CheckoutIncompleteError extends Error {
@@ -56,15 +64,7 @@ export function createCheckoutOrderNumber(): string {
   return `cat-${globalThis.crypto.randomUUID()}`;
 }
 
-export function mapOrderToSnapshot(order: Order, locale: string): OrderSnapshot {
-  return {
-    id: order.id,
-    orderNumber: order.orderNumber,
-    orderState: order.orderState,
-    totalPrice: formatMoney(order.totalPrice, locale),
-    lineItems: order.lineItems.map((item) => mapLineItemToSnapshot(item, locale)),
-  };
-}
+export { mapOrderToSnapshot };
 
 function mapShippingMethod(method: ShippingMethod): ShippingMethodSnapshot {
   return {
@@ -74,7 +74,10 @@ function mapShippingMethod(method: ShippingMethod): ShippingMethodSnapshot {
   };
 }
 
-export function createCheckoutOperations(gateway: CheckoutGateway): CheckoutOperations {
+export function createCheckoutOperations(
+  gateway: CheckoutGateway,
+  options: CheckoutOperationsOptions = {},
+): CheckoutOperations {
   async function requireActiveCart(input: CheckoutRequest): Promise<Cart> {
     let cart: Cart | undefined;
 
@@ -157,12 +160,40 @@ export function createCheckoutOperations(gateway: CheckoutGateway): CheckoutOper
         throw new CheckoutIncompleteError("Shipping method is required");
       }
 
+      if (options.requirePayment) {
+        const coverage = await resolveCartPaymentCoverage(cart, (id) =>
+          gateway.getPaymentById(id),
+        );
+        if (coverage === "missing") {
+          throw new CheckoutIncompleteError("Payment is required");
+        }
+        if (coverage === "mismatch") {
+          throw new CheckoutIncompleteError("Payment does not match the cart total");
+        }
+      }
+
+      const locale = resolveCartLocale(input.catalogLocale);
       const order = await gateway.createOrderFromCart({
         cartId: cart.id,
         version: cart.version,
         orderNumber: input.orderNumber?.trim() || createCheckoutOrderNumber(),
       });
-      return mapOrderToSnapshot(order, resolveCartLocale(input.catalogLocale));
+
+      const paymentState = await resolveOrderPaymentState(cart, (id) =>
+        gateway.getPaymentById(id),
+      );
+      if (!paymentState) {
+        return mapOrderToSnapshot(order, locale);
+      }
+
+      try {
+        const updated = await gateway.updateOrder(order.id, order.version, [
+          { action: "changePaymentState", paymentState },
+        ]);
+        return mapOrderToSnapshot(updated, locale);
+      } catch {
+        return { ...mapOrderToSnapshot(order, locale), paymentState };
+      }
     },
   };
 }

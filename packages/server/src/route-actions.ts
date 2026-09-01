@@ -4,7 +4,11 @@ import {
   CheckoutIncompleteError,
   InvalidCredentialsError,
   logSearchTrace,
+  OrderNotFoundError,
+  PaymentDeclinedError,
+  PaymentNotConfiguredError,
   SearchTimeoutError,
+  MissingPriceError,
 } from "@commerce-ai-tool/core";
 import { InvalidCartSessionError } from "./cart-session.js";
 import { TooManyRequestsError } from "./login-rate-limit.js";
@@ -72,7 +76,19 @@ export function mapRouteError(
     return { message: error.message, status: 400 };
   }
 
-  if (error instanceof CartNotFoundError) {
+  if (error instanceof MissingPriceError) {
+    return { message: error.message, status: 400 };
+  }
+
+  if (error instanceof PaymentDeclinedError) {
+    return { message: error.message, status: 402 };
+  }
+
+  if (error instanceof PaymentNotConfiguredError) {
+    return { message: error.message, status: 400 };
+  }
+
+  if (error instanceof CartNotFoundError || error instanceof OrderNotFoundError) {
     return { message: error.message, status: 404 };
   }
 

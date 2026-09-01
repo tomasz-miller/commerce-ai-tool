@@ -108,7 +108,7 @@ Keep Product Search API (REST) for search and facets. Use GraphQL only to fetch 
 
 - [x] Authenticated cart sessions (customer login + merge)
 
-## v2.0 — Checkout (current)
+## v2.0 — Checkout
 
 - [x] Host-owned checkout route with reusable React checkout UI
 - [x] Shipping and billing addresses on the commercetools Cart
@@ -117,13 +117,13 @@ Keep Product Search API (REST) for search and facets. Use GraphQL only to fetch 
 
 ## v2.1 — Payments
 
-- [ ] Payment provider hooks
+- [x] Payment provider hooks
 
 ## v2.2 — Orders
 
-- [ ] Order confirmation and tracking
+- [x] Order confirmation and tracking
 
-## v2.3 — Multi-item shopping missions
+## v2.3 — Multi-item shopping missions (current)
 
 - [ ] Detect compound shopping requests and split them into product intents with quantities and filters
 - [ ] Run bounded commercetools searches for each intent in parallel, with partial-result handling

@@ -12,6 +12,9 @@ import {
   ORDER_RATE_LIMIT_MAX_ATTEMPTS,
   ORDER_RATE_LIMIT_MESSAGE,
   ORDER_RATE_LIMIT_WINDOW_MS,
+  PAYMENT_RATE_LIMIT_MAX_ATTEMPTS,
+  PAYMENT_RATE_LIMIT_MESSAGE,
+  PAYMENT_RATE_LIMIT_WINDOW_MS,
 } from "./login-rate-limit.js";
 import { createCommerceAIServer } from "./server.js";
 
@@ -29,10 +32,15 @@ export interface ExpressRouterOptions {
    * Set `false` only when an upstream gateway already throttles this route.
    */
   orderRateLimit?: false | { windowMs?: number; limit?: number };
+  /**
+   * Rate limit for `POST /cart/payment`. Defaults to 20 attempts / 15 minutes per IP.
+   * Set `false` only when an upstream gateway already throttles this route.
+   */
+  paymentRateLimit?: false | { windowMs?: number; limit?: number };
 }
 
 export function createExpressRouter(options: ExpressRouterOptions): Router {
-  const { config, basePath = "", corsOrigins, loginRateLimit, orderRateLimit } = options;
+  const { config, basePath = "", corsOrigins, loginRateLimit, orderRateLimit, paymentRateLimit } = options;
   const server = createCommerceAIServer({ config, corsOrigins });
   const handlers = createHandlers(server);
   const router = Router();
@@ -45,6 +53,11 @@ export function createExpressRouter(options: ExpressRouterOptions): Router {
     windowMs: ORDER_RATE_LIMIT_WINDOW_MS,
     limit: ORDER_RATE_LIMIT_MAX_ATTEMPTS,
     message: ORDER_RATE_LIMIT_MESSAGE,
+  });
+  const paymentLimiter = createRateLimitMiddleware(paymentRateLimit, {
+    windowMs: PAYMENT_RATE_LIMIT_WINDOW_MS,
+    limit: PAYMENT_RATE_LIMIT_MAX_ATTEMPTS,
+    message: PAYMENT_RATE_LIMIT_MESSAGE,
   });
 
   if (corsOrigins) {
@@ -121,8 +134,23 @@ export function createExpressRouter(options: ExpressRouterOptions): Router {
     sendHandlerResponse(res, response);
   });
 
+  router.get(`${basePath}/cart/payment-methods`, async (req, res) => {
+    const response = await handlers.getPaymentMethods(req);
+    sendHandlerResponse(res, response);
+  });
+
+  router.post(`${basePath}/cart/payment`, paymentLimiter, async (req, res) => {
+    const response = await handlers.authorizePayment(req);
+    sendHandlerResponse(res, response);
+  });
+
   router.post(`${basePath}/cart/order`, orderLimiter, async (req, res) => {
     const response = await handlers.createOrder(req);
+    sendHandlerResponse(res, response);
+  });
+
+  router.get(`${basePath}/orders`, async (req, res) => {
+    const response = await handlers.getOrder(req);
     sendHandlerResponse(res, response);
   });
 
