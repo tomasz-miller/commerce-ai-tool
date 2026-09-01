@@ -94,6 +94,14 @@ function fillRequiredAddress() {
   fireEvent.change(screen.getByLabelText("City"), { target: { value: "Berlin" } });
 }
 
+async function waitForEnabledButton(name: string | RegExp) {
+  return waitFor(() => {
+    const button = screen.getByRole("button", { name });
+    expect(button.hasAttribute("disabled")).toBe(false);
+    return button;
+  });
+}
+
 describe("CommerceAICheckout", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -154,7 +162,7 @@ describe("CommerceAICheckout", () => {
       expect(actions.setShippingMethod).toHaveBeenCalledWith("shipping-1"),
     );
 
-    const payment = await waitFor(() => screen.getByRole("button", { name: /Credit card/ }));
+    const payment = await waitForEnabledButton(/Credit card/);
     expect(screen.getByRole("button", { name: "Place order" }).hasAttribute("disabled")).toBe(
       true,
     );
@@ -193,7 +201,7 @@ describe("CommerceAICheckout", () => {
       expect(actions.setShippingMethod).toHaveBeenCalledWith("shipping-1"),
     );
 
-    const payment = await waitFor(() => screen.getByRole("button", { name: /Credit card/ }));
+    const payment = await waitForEnabledButton(/Credit card/);
     fireEvent.click(payment);
     await waitFor(() => expect(actions.authorizePayment).toHaveBeenCalledWith("CREDIT_CARD"));
     expect(screen.getByRole("button", { name: "Place order" }).hasAttribute("disabled")).toBe(
