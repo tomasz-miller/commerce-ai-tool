@@ -32,7 +32,9 @@ export function createCommerceAIServer(options: CommerceAIServerOptions): Commer
   const voiceMode = resolveVoiceMode(config);
   const elevenlabs = config.elevenlabs ? createElevenLabsClient(config.elevenlabs) : null;
 
-  const commercetools = createCommercetoolsClient(config.commercetools);
+  const commercetools = createCommercetoolsClient(config.commercetools, {
+    payments: config.payments,
+  });
   const orchestrator = createSearchOrchestrator({
     config,
     commercetoolsClient: commercetools,
@@ -231,6 +233,12 @@ export function loadConfigFromEnv(): CommerceAIConfig {
               : undefined,
           }
         : undefined,
+    payments:
+      process.env.CAT_PAYMENT_REQUIRED === "true"
+        ? { requiredForOrder: true }
+        : process.env.CAT_PAYMENT_REQUIRED === "false"
+          ? { requiredForOrder: false }
+          : undefined,
     langfuse: {
       enabled: isLangfuseEnabled(),
       promptsEnabled: process.env.LANGFUSE_PROMPTS === "true",

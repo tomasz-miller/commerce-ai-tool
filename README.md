@@ -287,11 +287,36 @@ Set `onCheckout` to navigate from the cart panel to a host-owned route:
 
 Cart routes: `GET /cart`, `POST /cart/add`, `POST /cart/remove`, `POST /cart/update-quantity`, `POST /cart/login`, and `POST /cart/logout`.
 
-Checkout routes: `POST /cart/addresses`, `GET /cart/shipping-methods`, `POST /cart/shipping-method`, and `POST /cart/order`. The commercetools project must have a Shipping Method with a Zone matching the checkout country. Order creation is rate-limited (20 attempts per 15 minutes per IP on the Express router; Next handlers use the same in-memory cap). When no matching shipping methods exist, checkout still allows placing the order after a successful address step.
+Checkout routes: `POST /cart/addresses`, `GET /cart/shipping-methods`, `POST /cart/shipping-method`, `GET /cart/payment-methods`, `POST /cart/payment`, and `POST /cart/order`. Order lookup: `GET /orders` lists recent orders for the current cart identity; `GET /orders?orderNumber=…` returns a single client-safe snapshot. The commercetools project must have a Shipping Method with a Zone matching the checkout country. Order creation is rate-limited (20 attempts per 15 minutes per IP on the Express router; Next handlers use the same in-memory cap). Payment authorization uses the same cap. When no matching shipping methods exist, checkout still allows placing the order after a successful address step. When no payment provider is configured, `GET /cart/payment-methods` returns an empty list and checkout skips the payment step.
 
 Guest carts use `anonymousId` in `localStorage` (`commerce-ai-tool:anonymousId`). After sign-in, the widget stores an HMAC session token (`commerce-ai-tool:customerSession`) and sends it as the `x-commerce-ai-cart-session` header on GET requests and as `sessionToken` in POST bodies; a valid token wins over `anonymousId`. Do not put the session token in query strings. Commercetools login uses `anonymousCartSignInMode: MergeWithExistingCustomerCart` and only merges a client `cartId` that belongs to the current `anonymousId`. `POST /cart/login` is rate-limited (10 attempts per 15 minutes per IP on the Express router; Next handlers use the same in-memory cap). Manual testing needs a Customer account in the commercetools project (do not commit passwords). On logout the token is dropped and a new guest `anonymousId` is created.
 
-v2.0 does not create commercetools Payment resources. Projects that require payment before order creation should connect a PSP in the planned v2.1 payment hooks; do not create dummy successful payments.
+### Payments
+
+The library does not bundle a PSP. Hosts inject a `PaymentProvider` on `CommerceAIConfig.payments.provider`. The server creates a commercetools Payment (Authorization transaction), links it to the Cart with `addPayment`, then creates the Order. Dummy successful charges do not belong in the library — the demo app ships a mock adapter only.
+
+```ts
+import type { PaymentProvider } from "@commerce-ai-tool/core";
+import { createNextHandlers, loadConfigFromEnv } from "@commerce-ai-tool/server";
+
+const stripe: PaymentProvider = {
+  paymentInterface: "STRIPE",
+  listMethods: async () => [{ method: "CREDIT_CARD", name: "Credit card" }],
+  authorize: async (request) => {
+    // Call your PSP, return { status, interfaceId }
+    return { status: "authorized", interfaceId: "pi_..." };
+  },
+};
+
+const handlers = createNextHandlers({
+  ...loadConfigFromEnv(),
+  payments: { provider: stripe },
+});
+```
+
+Set `CAT_PAYMENT_REQUIRED=true` (or omit it when a provider is set) to block `POST /cart/order` without a successful authorization. `requiredForOrder: false` keeps v2.0 behavior for hosts that are not ready to charge.
+
+After checkout, render `CommerceAIOrderStatus` on a host route (the demo uses `/orders?orderNumber=…`) to show payment/shipment state and parcel tracking numbers from commercetools deliveries.
 
 ## Angular
 

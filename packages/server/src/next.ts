@@ -1,5 +1,6 @@
 import type {
   AddToCartRequest,
+  AuthorizePaymentRequest,
   CartLoginRequest,
   CartMutationRequest,
   CommerceAIConfig,
@@ -34,6 +35,11 @@ import {
   executeSetCartAddresses,
   executeSetShippingMethod,
 } from "./checkout-actions.js";
+import {
+  executeAuthorizePayment,
+  executeGetPaymentMethods,
+} from "./payment-actions.js";
+import { executeGetOrder } from "./order-actions.js";
 import { readCartSessionHeader } from "./cart-session.js";
 import {
   clientKeyFromWebHeaders,
@@ -41,6 +47,9 @@ import {
   ORDER_RATE_LIMIT_MAX_ATTEMPTS,
   ORDER_RATE_LIMIT_MESSAGE,
   ORDER_RATE_LIMIT_WINDOW_MS,
+  PAYMENT_RATE_LIMIT_MAX_ATTEMPTS,
+  PAYMENT_RATE_LIMIT_MESSAGE,
+  PAYMENT_RATE_LIMIT_WINDOW_MS,
   TooManyRequestsError,
 } from "./login-rate-limit.js";
 import { parseMultipartRequest } from "./utils/multipart.js";
@@ -61,6 +70,9 @@ export interface NextHandlers {
   getShippingMethods: (req: Request) => Promise<Response>;
   setShippingMethod: (req: Request) => Promise<Response>;
   createOrder: (req: Request) => Promise<Response>;
+  getPaymentMethods: (req: Request) => Promise<Response>;
+  authorizePayment: (req: Request) => Promise<Response>;
+  getOrder: (req: Request) => Promise<Response>;
   login: (req: Request) => Promise<Response>;
   logout: () => Promise<Response>;
 }
@@ -69,6 +81,10 @@ const loginLimiter = createLoginAttemptLimiter();
 const orderLimiter = createLoginAttemptLimiter({
   windowMs: ORDER_RATE_LIMIT_WINDOW_MS,
   limit: ORDER_RATE_LIMIT_MAX_ATTEMPTS,
+});
+const paymentLimiter = createLoginAttemptLimiter({
+  windowMs: PAYMENT_RATE_LIMIT_WINDOW_MS,
+  limit: PAYMENT_RATE_LIMIT_MAX_ATTEMPTS,
 });
 
 export function createNextHandlers(config: CommerceAIConfig): NextHandlers {
@@ -288,6 +304,66 @@ export function createNextHandlers(config: CommerceAIConfig): NextHandlers {
         }
 
         const mapped = mapRouteError(error, "createOrder", "Create order failed");
+        return toWebErrorResponse(mapped.message, mapped.status);
+      }
+    },
+
+    getPaymentMethods: async (req: Request) => {
+      try {
+        const url = new URL(req.url);
+        const result = await executeGetPaymentMethods(server, {
+          anonymousId: url.searchParams.get("anonymousId") ?? undefined,
+          cartId: url.searchParams.get("cartId") ?? undefined,
+          catalogLocale: url.searchParams.get("catalogLocale") ?? undefined,
+          sessionToken: readCartSessionHeader(req.headers),
+        });
+        return Response.json(result);
+      } catch (error) {
+        const mapped = mapRouteError(
+          error,
+          "getPaymentMethods",
+          "Get payment methods failed",
+        );
+        return toWebErrorResponse(mapped.message, mapped.status);
+      }
+    },
+
+    authorizePayment: async (req: Request) => {
+      try {
+        paymentLimiter.consume(clientKeyFromWebHeaders(req.headers));
+        const result = await executeAuthorizePayment(
+          server,
+          (await req.json()) as AuthorizePaymentRequest,
+        );
+        return Response.json(result);
+      } catch (error) {
+        if (error instanceof TooManyRequestsError) {
+          return Response.json(
+            { error: PAYMENT_RATE_LIMIT_MESSAGE },
+            {
+              status: 429,
+              headers: { "Retry-After": String(error.retryAfterSeconds) },
+            },
+          );
+        }
+
+        const mapped = mapRouteError(error, "authorizePayment", "Payment failed");
+        return toWebErrorResponse(mapped.message, mapped.status);
+      }
+    },
+
+    getOrder: async (req: Request) => {
+      try {
+        const url = new URL(req.url);
+        const result = await executeGetOrder(server, {
+          orderNumber: url.searchParams.get("orderNumber") ?? "",
+          anonymousId: url.searchParams.get("anonymousId") ?? undefined,
+          catalogLocale: url.searchParams.get("catalogLocale") ?? undefined,
+          sessionToken: readCartSessionHeader(req.headers),
+        });
+        return Response.json(result);
+      } catch (error) {
+        const mapped = mapRouteError(error, "getOrder", "Get order failed");
         return toWebErrorResponse(mapped.message, mapped.status);
       }
     },

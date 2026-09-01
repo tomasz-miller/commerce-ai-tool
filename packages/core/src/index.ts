@@ -15,17 +15,41 @@ export {
   CartAccessDeniedError,
   CartNotFoundError,
   InvalidCredentialsError,
+  MissingPriceError,
 } from "./commercetools/cart.js";
 export {
   CheckoutIncompleteError,
   createCheckoutOperations,
   createCheckoutOrderNumber,
-  mapOrderToSnapshot,
 } from "./commercetools/checkout.js";
+export { mapOrderToSnapshot } from "./commercetools/order.js";
 export type {
   CheckoutGateway,
   CheckoutOperations,
+  CheckoutOperationsOptions,
 } from "./commercetools/checkout.js";
+export {
+  OrderNotFoundError,
+  createOrderOperations,
+  buildAnonymousOrderWhere,
+  buildCustomerOrderWhere,
+  buildOwnerOrderWhere,
+  buildOwnerOrdersWhere,
+} from "./commercetools/order.js";
+export type { OrderGateway, OrderOperations } from "./commercetools/order.js";
+export {
+  PaymentDeclinedError,
+  PaymentNotConfiguredError,
+  createPaymentOperations,
+  createPaymentKey,
+} from "./commercetools/payment.js";
+export type { PaymentGateway, PaymentOperations } from "./commercetools/payment.js";
+export type {
+  PaymentProvider,
+  PaymentAuthorizationRequest,
+  PaymentAuthorizationResult,
+  PaymentMethodOption,
+} from "./payments/types.js";
 export {
   FacetSchemaStore,
   resolveFacetSchema,

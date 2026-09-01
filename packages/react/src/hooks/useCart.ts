@@ -5,6 +5,8 @@ import {
   type CheckoutAddress,
   type CustomerSnapshot,
   type OrderSnapshot,
+  type PaymentMethodOption,
+  type PaymentSnapshot,
   type ShippingMethodSnapshot,
 } from "@commerce-ai-tool/core";
 
@@ -52,6 +54,11 @@ export interface UseCartReturn {
   /** Returns matching methods, or `null` when the request failed. */
   getShippingMethods: () => Promise<ShippingMethodSnapshot[] | null>;
   setShippingMethod: (shippingMethodId: string) => Promise<CartSnapshot | null>;
+  /** Returns matching methods, or `null` when the request failed. */
+  getPaymentMethods: () => Promise<PaymentMethodOption[] | null>;
+  authorizePayment: (method: string) => Promise<PaymentSnapshot | null>;
+  getOrder: (orderNumber: string) => Promise<OrderSnapshot | null>;
+  listOrders: () => Promise<OrderSnapshot[]>;
   placeOrder: () => Promise<OrderSnapshot | null>;
   login: (input: { email: string; password: string }) => Promise<CartSnapshot | null>;
   logout: () => Promise<void>;
@@ -63,7 +70,10 @@ interface CartApiBody {
   customer?: CustomerSnapshot | null;
   sessionToken?: string;
   shippingMethods?: ShippingMethodSnapshot[];
+  paymentMethods?: PaymentMethodOption[];
+  payment?: PaymentSnapshot;
   order?: OrderSnapshot;
+  orders?: OrderSnapshot[];
   error?: string;
 }
 
@@ -388,6 +398,159 @@ export function useCart(options: UseCartOptions): UseCartReturn {
     [mutate],
   );
 
+  const getPaymentMethods = useCallback(async (): Promise<
+    PaymentMethodOption[] | null
+  > => {
+    if (!enabled || !anonymousId) {
+      return [];
+    }
+    const params = new URLSearchParams();
+    const headers: Record<string, string> = {};
+    const token = sessionTokenRef.current;
+    if (token) {
+      headers[CART_SESSION_HEADER] = token;
+    } else {
+      params.set("anonymousId", anonymousId);
+    }
+    if (cartRef.current?.id) {
+      params.set("cartId", cartRef.current.id);
+    }
+    if (catalogLocale) {
+      params.set("catalogLocale", catalogLocale);
+    }
+
+    setIsMutating(true);
+    setError(null);
+    try {
+      const response = await fetch(
+        `${apiBaseUrl}/cart/payment-methods?${params.toString()}`,
+        token ? { headers } : undefined,
+      );
+      const body = await parseCartApi(response);
+      return body.paymentMethods ?? [];
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Payment methods request failed");
+      return null;
+    } finally {
+      setIsMutating(false);
+    }
+  }, [anonymousId, apiBaseUrl, catalogLocale, enabled]);
+
+  const authorizePayment = useCallback(
+    async (method: string): Promise<PaymentSnapshot | null> => {
+      if (!enabled || !anonymousId) {
+        return null;
+      }
+
+      const run = async (): Promise<PaymentSnapshot | null> => {
+        orderNumberRef.current ??= `cat-${createAnonymousId()}`;
+        setIsMutating(true);
+        setError(null);
+        try {
+          const response = await fetch(`${apiBaseUrl}/cart/payment`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              anonymousId,
+              sessionToken: sessionTokenRef.current ?? undefined,
+              cartId: cartRef.current?.id,
+              catalogLocale,
+              method,
+              orderNumber: orderNumberRef.current,
+            }),
+          });
+          const body = await parseCartApi(response);
+          if (body.cart) {
+            applyCart(body.cart);
+          }
+          if (!body.payment) {
+            throw new CartRequestError("Payment response is missing", response.status);
+          }
+          return body.payment;
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Payment failed");
+          return null;
+        } finally {
+          setIsMutating(false);
+        }
+      };
+
+      const pending = mutationChainRef.current.then(run, run);
+      mutationChainRef.current = pending.then(
+        () => undefined,
+        () => undefined,
+      );
+      return pending;
+    },
+    [anonymousId, apiBaseUrl, applyCart, catalogLocale, enabled],
+  );
+
+  const getOrder = useCallback(
+    async (orderNumber: string): Promise<OrderSnapshot | null> => {
+      if (!enabled || !anonymousId || !orderNumber.trim()) {
+        return null;
+      }
+      const params = new URLSearchParams();
+      const headers: Record<string, string> = {};
+      const token = sessionTokenRef.current;
+      if (token) {
+        headers[CART_SESSION_HEADER] = token;
+      }
+      params.set("anonymousId", anonymousId);
+      params.set("orderNumber", orderNumber.trim());
+      if (catalogLocale) {
+        params.set("catalogLocale", catalogLocale);
+      }
+
+      setIsLoading(true);
+      setError(null);
+      try {
+        const response = await fetch(`${apiBaseUrl}/orders?${params.toString()}`, {
+          headers,
+        });
+        const body = await parseCartApi(response);
+        return body.order ?? null;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Order request failed");
+        return null;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [anonymousId, apiBaseUrl, catalogLocale, enabled],
+  );
+
+  const listOrders = useCallback(async (): Promise<OrderSnapshot[]> => {
+    if (!enabled || !anonymousId) {
+      return [];
+    }
+    const params = new URLSearchParams();
+    const headers: Record<string, string> = {};
+    const token = sessionTokenRef.current;
+    if (token) {
+      headers[CART_SESSION_HEADER] = token;
+    }
+    params.set("anonymousId", anonymousId);
+    if (catalogLocale) {
+      params.set("catalogLocale", catalogLocale);
+    }
+
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`${apiBaseUrl}/orders?${params.toString()}`, {
+        headers,
+      });
+      const body = await parseCartApi(response);
+      return body.orders ?? [];
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Order request failed");
+      return [];
+    } finally {
+      setIsLoading(false);
+    }
+  }, [anonymousId, apiBaseUrl, catalogLocale, enabled]);
+
   const placeOrder = useCallback(async (): Promise<OrderSnapshot | null> => {
     if (!enabled || !anonymousId) {
       return null;
@@ -510,6 +673,10 @@ export function useCart(options: UseCartOptions): UseCartReturn {
     setAddresses,
     getShippingMethods,
     setShippingMethod,
+    getPaymentMethods,
+    authorizePayment,
+    getOrder,
+    listOrders,
     placeOrder,
     login,
     logout,

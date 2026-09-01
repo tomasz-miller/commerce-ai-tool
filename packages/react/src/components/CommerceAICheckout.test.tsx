@@ -32,6 +32,10 @@ function mockCartHook() {
     ...cart,
     shippingMethod: { id: "shipping-1", name: "Standard delivery" },
   });
+  const getPaymentMethods = vi.fn().mockResolvedValue([]);
+  const authorizePayment = vi.fn();
+  const getOrder = vi.fn();
+  const listOrders = vi.fn();
   const placeOrder = vi.fn().mockResolvedValue({
     id: "order-1",
     orderNumber: "cat-1",
@@ -59,13 +63,25 @@ function mockCartHook() {
     setAddresses,
     getShippingMethods,
     setShippingMethod,
+    getPaymentMethods,
+    authorizePayment,
+    getOrder,
+    listOrders,
     placeOrder,
     login: vi.fn(),
     logout: vi.fn(),
     refresh: vi.fn(),
   });
 
-  return { setAddresses, getShippingMethods, setShippingMethod, placeOrder };
+  return {
+    setAddresses,
+    getShippingMethods,
+    setShippingMethod,
+    getPaymentMethods,
+    authorizePayment,
+    getOrder,
+    placeOrder,
+  };
 }
 
 function fillRequiredAddress() {
@@ -107,6 +123,108 @@ describe("CommerceAICheckout", () => {
     await waitFor(() => expect(actions.placeOrder).toHaveBeenCalled());
     expect(await screen.findByText("Order placed")).not.toBeNull();
     expect(screen.getByText("cat-1")).not.toBeNull();
+    expect(screen.getByRole("link", { name: "View order status" }).getAttribute("href")).toBe(
+      "/orders?orderNumber=cat-1",
+    );
+  });
+
+  it("requires payment authorization when methods are offered", async () => {
+    const actions = mockCartHook();
+    actions.getPaymentMethods.mockResolvedValue([
+      { method: "CREDIT_CARD", name: "Credit card" },
+    ]);
+    actions.authorizePayment.mockResolvedValue({
+      id: "pay-1",
+      paymentInterface: "MOCK",
+      method: "CREDIT_CARD",
+      status: "authorized",
+      amount: cart.totalPrice,
+    });
+    render(<CommerceAICheckout apiBaseUrl="/api/commerce-ai" />);
+
+    fillRequiredAddress();
+    fireEvent.click(screen.getByRole("button", { name: "Continue to delivery" }));
+    const shippingMethod = await waitFor(() => {
+      const button = screen.getByRole("button", { name: /Standard delivery/ });
+      expect(button.hasAttribute("disabled")).toBe(false);
+      return button;
+    });
+    fireEvent.click(shippingMethod);
+    await waitFor(() =>
+      expect(actions.setShippingMethod).toHaveBeenCalledWith("shipping-1"),
+    );
+
+    const payment = await waitFor(() => screen.getByRole("button", { name: /Credit card/ }));
+    expect(screen.getByRole("button", { name: "Place order" }).hasAttribute("disabled")).toBe(
+      true,
+    );
+    fireEvent.click(payment);
+    await waitFor(() => expect(actions.authorizePayment).toHaveBeenCalledWith("CREDIT_CARD"));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Place order" }).hasAttribute("disabled")).toBe(
+        false,
+      );
+    });
+  });
+
+  it("keeps place order disabled when authorization is still pending", async () => {
+    const actions = mockCartHook();
+    actions.getPaymentMethods.mockResolvedValue([
+      { method: "CREDIT_CARD", name: "Credit card" },
+    ]);
+    actions.authorizePayment.mockResolvedValue({
+      id: "pay-1",
+      paymentInterface: "MOCK",
+      method: "CREDIT_CARD",
+      status: "pending",
+      amount: cart.totalPrice,
+    });
+    render(<CommerceAICheckout apiBaseUrl="/api/commerce-ai" />);
+
+    fillRequiredAddress();
+    fireEvent.click(screen.getByRole("button", { name: "Continue to delivery" }));
+    const shippingMethod = await waitFor(() => {
+      const button = screen.getByRole("button", { name: /Standard delivery/ });
+      expect(button.hasAttribute("disabled")).toBe(false);
+      return button;
+    });
+    fireEvent.click(shippingMethod);
+    await waitFor(() =>
+      expect(actions.setShippingMethod).toHaveBeenCalledWith("shipping-1"),
+    );
+
+    const payment = await waitFor(() => screen.getByRole("button", { name: /Credit card/ }));
+    fireEvent.click(payment);
+    await waitFor(() => expect(actions.authorizePayment).toHaveBeenCalledWith("CREDIT_CARD"));
+    expect(screen.getByRole("button", { name: "Place order" }).hasAttribute("disabled")).toBe(
+      true,
+    );
+  });
+
+  it("does not skip payment when payment methods fail to load", async () => {
+    const actions = mockCartHook();
+    actions.getPaymentMethods.mockResolvedValue(null);
+    render(<CommerceAICheckout apiBaseUrl="/api/commerce-ai" />);
+
+    fillRequiredAddress();
+    fireEvent.click(screen.getByRole("button", { name: "Continue to delivery" }));
+    const shippingMethod = await waitFor(() => {
+      const button = screen.getByRole("button", { name: /Standard delivery/ });
+      expect(button.hasAttribute("disabled")).toBe(false);
+      return button;
+    });
+    fireEvent.click(shippingMethod);
+    await waitFor(() =>
+      expect(actions.setShippingMethod).toHaveBeenCalledWith("shipping-1"),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Payment method" })).not.toBeNull();
+      expect(
+        screen.getByRole("button", { name: "Place order" }).hasAttribute("disabled"),
+      ).toBe(true);
+    });
+    expect(actions.placeOrder).not.toHaveBeenCalled();
   });
 
   it("allows placing an order when no shipping methods are available", async () => {

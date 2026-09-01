@@ -63,13 +63,31 @@ export interface CommerceAISearchMessages {
   noShippingMethods: string;
   completeAddressToContinue: string;
   selectDeliveryToContinue: string;
+  selectPaymentToContinue: string;
   checkoutStepAddress: string;
   checkoutStepDelivery: string;
+  checkoutStepPayment: string;
+  paymentMethod: string;
+  selectPaymentMethod: string;
+  paymentAuthorized: string;
+  paymentDeclined: string;
+  continueToPayment: string;
   placeOrder: string;
   placingOrder: string;
   orderPlaced: string;
+  viewOrderStatus: string;
   continueShopping: string;
   checkoutFailed: string;
+  orderStatus: string;
+  orderPlacedAt: string;
+  paymentStateLabel: string;
+  shipmentStateLabel: string;
+  trackingNumber: string;
+  carrier: string;
+  noTrackingYet: string;
+  orderNotFound: string;
+  noOrdersYet: string;
+  yourOrders: string;
   firstName: string;
   lastName: string;
   streetName: string;
@@ -145,13 +163,31 @@ export const DEFAULT_COMMERCE_AI_SEARCH_MESSAGES: CommerceAISearchMessages = {
   noShippingMethods: "No delivery methods are available for this address",
   completeAddressToContinue: "Add a shipping address to continue",
   selectDeliveryToContinue: "Select a delivery method to continue",
+  selectPaymentToContinue: "Select a payment method to continue",
   checkoutStepAddress: "Address",
   checkoutStepDelivery: "Delivery",
+  checkoutStepPayment: "Payment",
+  paymentMethod: "Payment method",
+  selectPaymentMethod: "Select a payment method",
+  paymentAuthorized: "Payment authorized",
+  paymentDeclined: "Payment was declined",
+  continueToPayment: "Continue to payment",
   placeOrder: "Place order",
   placingOrder: "Placing order…",
   orderPlaced: "Order placed",
+  viewOrderStatus: "View order status",
   continueShopping: "Continue shopping",
   checkoutFailed: "Checkout failed",
+  orderStatus: "Order status",
+  orderPlacedAt: "Placed",
+  paymentStateLabel: "Payment",
+  shipmentStateLabel: "Shipment",
+  trackingNumber: "Tracking number",
+  carrier: "Carrier",
+  noTrackingYet: "Tracking details will appear when the order ships",
+  orderNotFound: "Order not found",
+  noOrdersYet: "No orders yet",
+  yourOrders: "Your orders",
   firstName: "First name",
   lastName: "Last name",
   streetName: "Street address",
