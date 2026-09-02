@@ -1,10 +1,12 @@
 # Commerce AI Tool — Agent Instructions
 
+Product documentation lives in [`docs/`](docs/README.md). This file is for coding agents: toolchain, quality gates, and English-only rules.
+
 ## Language (mandatory)
 
 **All project files must be written in English.**
 
-This includes source code, tests, configuration, documentation, comments, Cursor rules, commit messages, and user-facing strings in the codebase. Do not create or edit repository files in Polish or any other language.
+This includes source code, tests, configuration, documentation (`docs/`, README, this file), comments, Cursor rules, commit messages, and user-facing strings in the codebase. Do not create or edit repository files in Polish or any other language.
 
 The agent may reply to users in their preferred language in chat, but every artifact committed to the repo stays in English.
 
@@ -149,7 +151,7 @@ Do not finish a task with a failing lint, typecheck, test, or build.
 - **Turbo `dev`**: libraries wait for `^build` + own `build` before watch
 - Widget modalities are independent: `enableVoice`, `enableCameraSearch`, and `enableImageSearch` must not gate one another
 - Unused variables: `_` prefix or remove import (ESLint rule)
-- Public API changes → update README / CHANGELOG / changeset
+- Public API or behavior changes → update the matching page under [`docs/`](docs/README.md), plus CHANGELOG / changeset.
 
 ## CI (GitHub Actions)
 
@@ -169,27 +171,19 @@ Release (`.github/workflows/release.yml`) is disabled (`workflow_dispatch` only)
 4. Integration in `apps/demo-next` (+ E2E if user flow applies)
 5. Full verification: `pnpm lint && pnpm typecheck && pnpm test && pnpm build`
 
-## Locale model
+## Product documentation
 
-- **`catalogLocale`** — commercetools index language (`fullText.language`, `localeProjection`). Set via `CAT_CATALOG_LOCALE` or per-request/widget override.
-- **`queryLocale`** — user input language for AI interpretation. Defaults to `catalogLocale` when omitted.
-- AI returns `searchTerms` in catalog language; product cards use catalog language.
-- Each `searchTerms` element is a complete catalog-language phrase. Product Search ORs phrases (specific query → one phrase; broad category intent → 3–5 synonym/hyponym phrases). Do not split one product query into separate words.
-- Autocomplete: CT Search Term Suggestions on `searchKeywords` first; multi-word prefixes retry the last token and keep hits that contain every query token; if none remain and the query is cross-locale or multi-word NL, AI proposes catalog-language suggestion phrases (`suggestSearchTerms`). Typed-query passthrough into Product Search runs only when `queryLocale` and `catalogLocale` share a language. Projection Search fallback uses the first `searchTerms` phrase only.
-- Resolver: `packages/core/src/locale/resolve.ts` (`resolveSearchLocales`).
-- Dev tracing: `logSearchTrace` in `packages/core/src/utils/dev-trace.ts` (enabled when `NODE_ENV !== production` or `CAT_DEBUG=true`).
-- Langfuse (opt-in): set `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY`; core wraps AI + commercetools spans under the HTTP request span; autocomplete suggestions are not traced unless `LANGFUSE_TRACE_SUGGESTIONS=true`. Host registers `LangfuseSpanProcessor` (see `apps/demo-next/src/instrumentation.ts` and `@commerce-ai-tool/server/flush`). Complements `CAT_DEBUG`; see README “Langfuse (AI observability)”. Optional managed system prompts: `LANGFUSE_PROMPTS=true` or `CommerceAIConfig.langfuse.promptsEnabled` (applied by `createSearchOrchestrator` via `configureLangfusePrompts`) + `pnpm sync:langfuse-prompts` (default label `staging`; promote with `--label production` after evals). Git catalog remains source of truth / eval fallback (`createEvalAIProvider` forces local prompts).
-- **Shopping missions** — opt-in via `CommerceAIConfig.missions` / `CAT_MISSIONS_*` or per-request `enableMissions`. A fresh text search runs `interpretTextQuery` and `decomposeShoppingMission` in parallel (`commerce-ai/mission-query`); that is one extra LLM call. Usable missions (confidence, ≥2 intents) fan out bounded Product Search calls. Voice, image, and Angular are not on this path yet.
+Canonical docs: [`docs/README.md`](docs/README.md). Read the relevant page before changing search, cart, checkout, or host APIs.
 
-## Cart session
+| Topic | Doc |
+|-------|-----|
+| Widget install | [docs/getting-started.md](docs/getting-started.md) |
+| Locales, env, facets, missions flags | [docs/configuration.md](docs/configuration.md) |
+| LLM interpretation and Product Search | [docs/search-pipeline.md](docs/search-pipeline.md) |
+| Cart, payments, orders | [docs/cart-and-checkout.md](docs/cart-and-checkout.md) |
+| `CAT_DEBUG` / Langfuse | [docs/observability.md](docs/observability.md) |
 
-- **Guest** — `anonymousId` in `localStorage` (`commerce-ai-tool:anonymousId`); the server looks up the Active cart by `anonymousId`.
-- **Customer** — HMAC session token (`commerce-ai-tool:customerSession`) signed with `CAT_CART_SESSION_SECRET` (falls back to `CTP_CLIENT_SECRET`). A valid token wins over `anonymousId`. `GET /cart` sends it as `x-commerce-ai-cart-session` (never as a query parameter); mutations send `sessionToken` in the JSON body.
-- **Batch add** — `POST /cart/add-items` adds 1–20 line items in one commercetools Cart update (mission “add all”).
-- **Login** — commercetools `POST /{projectKey}/login` with `anonymousCartSignInMode: MergeWithExistingCustomerCart`. A client `cartId` is merged only after the cart is loaded and `cart.anonymousId` matches the request `anonymousId`. Passwords are never logged or sent to Langfuse. Catalog `storeKey` is not applied to login (cart CRUD is project-scoped). Express `POST /cart/login` is rate-limited (10 attempts / 15 minutes per IP); Next handlers apply the same cap in memory.
-- **Logout** — client drops the token and rotates `anonymousId` (stateless `POST /cart/logout`).
-- **Checkout** — the widget calls host `onCheckout(cart)`; the host route renders `CommerceAICheckout`. Checkout reuses the cart identity model for `POST /cart/addresses`, `GET /cart/shipping-methods`, `POST /cart/shipping-method`, `GET /cart/payment-methods`, `POST /cart/payment`, and `POST /cart/order`. Order creation requires an Active, non-empty cart with a shipping address and a selected matching Shipping Method when methods are available. When a `PaymentProvider` is configured, a successful Authorization Payment must be linked to the Cart before the Order. Express `POST /cart/order` and `POST /cart/payment` are rate-limited (20 attempts / 15 minutes per IP); Next handlers apply the same cap in memory. `GET /orders` returns `{ orders }` for the current cart identity. `GET /orders?orderNumber=` returns `{ order }` for that number.
-- **Payments** — hosts inject `CommerceAIConfig.payments.provider` (`PaymentProvider`). Core creates a commercetools Payment resource and `addPayment` on the Cart; the library does not ship a PSP or fake successful charges. The demo app uses a mock adapter only.
+Hard rules that still belong here: secrets never in the browser; widget modalities (`enableVoice`, `enableCameraSearch`, `enableImageSearch`) must not gate one another; `searchTerms` are catalog-language phrases, never split words.
 
 ## Key config files
 
@@ -201,5 +195,6 @@ Release (`.github/workflows/release.yml`) is disabled (`workflow_dispatch` only)
 | `eslint.config.mjs` | Root ESLint flat config |
 | `vitest.config.ts` | `packages/**/*.test.ts` pattern |
 | `apps/demo-next/.env.example` | Required environment variables |
+| `docs/` | Canonical product documentation |
 | `evals/` | Promptfoo LLM prompt evaluations (local only) |
 | `.cursor/rules/` | Cursor agent rules (English only) |

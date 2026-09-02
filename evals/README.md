@@ -1,6 +1,8 @@
 # Promptfoo evaluations
 
-Local [Promptfoo](https://www.promptfoo.dev/) harness for testing Commerce AI search prompts against real LLM calls.
+Local [Promptfoo](https://promptfoo.dev/) harness for testing Commerce AI search prompts against real LLM calls.
+
+Product documentation (search pipeline, locales, Langfuse): [`docs/`](../docs/README.md). This file covers only the eval harness.
 
 ## What is Promptfoo?
 

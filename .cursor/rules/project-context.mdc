@@ -36,3 +36,5 @@ Checkout is host-routed: `CommerceAISearch.onCheckout` navigates to a host page 
 Shopping missions (opt-in `enableMissions` / `CAT_MISSIONS_*`) split compound text queries into product intents, search in parallel, and batch-add via `POST /cart/add-items`. Angular and voice/image missions are deferred.
 
 Never expose API keys in client-side code.
+
+Canonical documentation: `docs/README.md`.
