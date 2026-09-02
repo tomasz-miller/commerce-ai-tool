@@ -1,5 +1,5 @@
 export type * from "./types/index.js";
-export { CART_SESSION_HEADER } from "./types/index.js";
+export { CART_SESSION_HEADER, MAX_LINE_ITEM_QUANTITY } from "./types/index.js";
 export {
   DEFAULT_COMMERCE_AI_SEARCH_MESSAGES,
   resolveCommerceAISearchMessages,
@@ -102,6 +102,8 @@ export {
   parseInterpretedQuery,
   parseVoiceAudioInterpretation,
   parseSuggestSearchTerms,
+  parseDecomposedMission,
+  MAX_MISSION_INTENTS,
   buildRefineQueryUserMessage,
   buildSchemaAwareTextQueryUserMessage,
   buildSuggestSearchTermsUserMessage,

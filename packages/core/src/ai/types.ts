@@ -1,4 +1,5 @@
 import type {
+  DecomposedShoppingMission,
   FacetAttributeDefinition,
   InterpretedSearchFilters,
   InterpretedSearchQuery,
@@ -42,4 +43,9 @@ export interface AIProvider {
     topProductName: string | undefined,
     locales: SearchLocaleContext,
   ): Promise<string>;
+  decomposeShoppingMission(
+    text: string,
+    locales: SearchLocaleContext,
+    attributeCatalog?: FacetAttributeDefinition[],
+  ): Promise<DecomposedShoppingMission>;
 }

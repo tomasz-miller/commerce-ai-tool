@@ -46,6 +46,7 @@ function createMockCommercetoolsClient(
     getCart: vi.fn().mockResolvedValue(null),
     getCustomerCart: vi.fn().mockResolvedValue(null),
     addToCart: vi.fn(),
+    addItemsToCart: vi.fn(),
     removeLineItem: vi.fn(),
     changeLineItemQuantity: vi.fn(),
     loginAndMerge: vi.fn(),

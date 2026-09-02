@@ -52,6 +52,7 @@ function mockCart(overrides: Partial<UseCartReturn> = {}) {
     closeCart: vi.fn(),
     toggleCart: vi.fn(),
     addToCart: vi.fn(),
+    addItems: vi.fn(),
     removeFromCart: vi.fn(),
     updateQuantity: vi.fn(),
     setAddresses: vi.fn(),

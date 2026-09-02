@@ -96,6 +96,7 @@ pnpm eval:promptfoo:voice
 pnpm eval:promptfoo:image
 pnpm eval:promptfoo:voice-enhance
 pnpm eval:promptfoo:voice-tts
+pnpm eval:promptfoo:mission
 pnpm eval:promptfoo:redteam
 pnpm eval:promptfoo:redteam:generate
 pnpm eval:promptfoo:view  # Promptfoo results web UI
@@ -107,7 +108,7 @@ Before finishing a feature, run **all of the above** (same order as CI), except 
 
 ## Prompt evaluations (Promptfoo)
 
-Local LLM regression tests live in [`evals/`](evals/). They call the same `createAIProvider` paths as production (text, image, voice enhance/TTS, redteam).
+Local LLM regression tests live in [`evals/`](evals/). They call the same `createAIProvider` paths as production (text, image, voice enhance/TTS, missions, redteam).
 
 - **Setup:** `cp evals/.env.example evals/.env` and set `OPENROUTER_API_KEY`
 - **Run:** `pnpm eval:promptfoo` and suite-specific `pnpm eval:promptfoo:*` scripts (see [`evals/README.md`](evals/README.md))
@@ -178,11 +179,13 @@ Release (`.github/workflows/release.yml`) is disabled (`workflow_dispatch` only)
 - Resolver: `packages/core/src/locale/resolve.ts` (`resolveSearchLocales`).
 - Dev tracing: `logSearchTrace` in `packages/core/src/utils/dev-trace.ts` (enabled when `NODE_ENV !== production` or `CAT_DEBUG=true`).
 - Langfuse (opt-in): set `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY`; core wraps AI + commercetools spans under the HTTP request span; autocomplete suggestions are not traced unless `LANGFUSE_TRACE_SUGGESTIONS=true`. Host registers `LangfuseSpanProcessor` (see `apps/demo-next/src/instrumentation.ts` and `@commerce-ai-tool/server/flush`). Complements `CAT_DEBUG`; see README “Langfuse (AI observability)”. Optional managed system prompts: `LANGFUSE_PROMPTS=true` or `CommerceAIConfig.langfuse.promptsEnabled` (applied by `createSearchOrchestrator` via `configureLangfusePrompts`) + `pnpm sync:langfuse-prompts` (default label `staging`; promote with `--label production` after evals). Git catalog remains source of truth / eval fallback (`createEvalAIProvider` forces local prompts).
+- **Shopping missions** — opt-in via `CommerceAIConfig.missions` / `CAT_MISSIONS_*` or per-request `enableMissions`. A fresh text search runs `interpretTextQuery` and `decomposeShoppingMission` in parallel (`commerce-ai/mission-query`); that is one extra LLM call. Usable missions (confidence, ≥2 intents) fan out bounded Product Search calls. Voice, image, and Angular are not on this path yet.
 
 ## Cart session
 
 - **Guest** — `anonymousId` in `localStorage` (`commerce-ai-tool:anonymousId`); the server looks up the Active cart by `anonymousId`.
 - **Customer** — HMAC session token (`commerce-ai-tool:customerSession`) signed with `CAT_CART_SESSION_SECRET` (falls back to `CTP_CLIENT_SECRET`). A valid token wins over `anonymousId`. `GET /cart` sends it as `x-commerce-ai-cart-session` (never as a query parameter); mutations send `sessionToken` in the JSON body.
+- **Batch add** — `POST /cart/add-items` adds 1–20 line items in one commercetools Cart update (mission “add all”).
 - **Login** — commercetools `POST /{projectKey}/login` with `anonymousCartSignInMode: MergeWithExistingCustomerCart`. A client `cartId` is merged only after the cart is loaded and `cart.anonymousId` matches the request `anonymousId`. Passwords are never logged or sent to Langfuse. Catalog `storeKey` is not applied to login (cart CRUD is project-scoped). Express `POST /cart/login` is rate-limited (10 attempts / 15 minutes per IP); Next handlers apply the same cap in memory.
 - **Logout** — client drops the token and rotates `anonymousId` (stateless `POST /cart/logout`).
 - **Checkout** — the widget calls host `onCheckout(cart)`; the host route renders `CommerceAICheckout`. Checkout reuses the cart identity model for `POST /cart/addresses`, `GET /cart/shipping-methods`, `POST /cart/shipping-method`, `GET /cart/payment-methods`, `POST /cart/payment`, and `POST /cart/order`. Order creation requires an Active, non-empty cart with a shipping address and a selected matching Shipping Method when methods are available. When a `PaymentProvider` is configured, a successful Authorization Payment must be linked to the Cart before the Order. Express `POST /cart/order` and `POST /cart/payment` are rate-limited (20 attempts / 15 minutes per IP); Next handlers apply the same cap in memory. `GET /orders` returns `{ orders }` for the current cart identity. `GET /orders?orderNumber=` returns `{ order }` for that number.

@@ -1,4 +1,5 @@
 import type {
+  AddItemsToCartRequest,
   AddToCartRequest,
   AuthorizePaymentRequest,
   CartLoginRequest,
@@ -23,6 +24,7 @@ import {
 } from "./route-actions.js";
 import {
   executeAddToCart,
+  executeAddItemsToCart,
   executeGetCart,
   executeLogin,
   executeLogout,
@@ -64,6 +66,7 @@ export interface NextHandlers {
   tts: (req: Request) => Promise<Response>;
   getCart: (req: Request) => Promise<Response>;
   addToCart: (req: Request) => Promise<Response>;
+  addItemsToCart: (req: Request) => Promise<Response>;
   removeFromCart: (req: Request) => Promise<Response>;
   updateCartQuantity: (req: Request) => Promise<Response>;
   setCartAddresses: (req: Request) => Promise<Response>;
@@ -111,6 +114,7 @@ export function createNextHandlers(config: CommerceAIConfig): NextHandlers {
           catalogLocale?: string;
           locale?: string;
           limit?: number;
+          enableMissions?: boolean;
         };
 
         const result = await executeSearch(server, body);
@@ -207,6 +211,19 @@ export function createNextHandlers(config: CommerceAIConfig): NextHandlers {
         return Response.json(result);
       } catch (error) {
         const mapped = mapRouteError(error, "addToCart", "Add to cart failed");
+        return toWebErrorResponse(mapped.message, mapped.status);
+      }
+    },
+
+    addItemsToCart: async (req: Request) => {
+      try {
+        const result = await executeAddItemsToCart(
+          server,
+          (await req.json()) as AddItemsToCartRequest,
+        );
+        return Response.json(result);
+      } catch (error) {
+        const mapped = mapRouteError(error, "addItemsToCart", "Add items to cart failed");
         return toWebErrorResponse(mapped.message, mapped.status);
       }
     },

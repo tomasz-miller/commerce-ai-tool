@@ -24,6 +24,7 @@ AI-powered product search plugin for [commercetools](https://commercetools.com) 
 - **Glass UI** — minimalist design with light / dark / auto theme
 - **Widget i18n** — override English default labels via the `messages` prop
 - **Cart** — optional add-to-cart and cart preview (`enableCart`), or the exported `useCart` hook; guest sign-in merges into the customer cart (v1.5)
+- **Shopping missions** — opt-in compound shopping lists (`enableMissions` / `CAT_MISSIONS_*`): grouped product picks and a batched add-to-cart (v2.3)
 - **Checkout** — host-owned checkout routes can render `CommerceAICheckout` for addresses, matching delivery methods, and order placement
 - **Server-only secrets** — API keys never exposed to the browser
 
@@ -114,6 +115,10 @@ Server env vars (see `apps/demo-next/.env.example`):
 - `CAT_FACET_SCHEMA_TTL_MS=600000` — Product Types schema cache TTL
 - `CAT_FACET_INCLUDE=color,size` / `CAT_FACET_EXCLUDE=internalCode` — restrict discovered attributes
 - `CAT_FACET_MAX_ATTRIBUTES=12` — limit the attribute catalog supplied to the AI
+- `CAT_MISSIONS_ENABLED=true` — opt-in multi-item shopping missions (extra LLM call per fresh text search)
+- `CAT_MISSIONS_MAX_INTENTS=5` — cap on product intents per mission
+- `CAT_MISSIONS_PER_INTENT_LIMIT=4` — product cards fetched per intent
+- `CAT_MISSIONS_MIN_CONFIDENCE=0.6` — fall back to standard search below this confidence
 
 Autocomplete uses commercetools Search Term Suggestions first (indexed `searchKeywords` in `catalogLocale`, plus `queryLocale` when it differs). Keywords use a whitespace tokenizer, so `table` matches `Art Deco Coffee Table`, but `coffee table` as a prefix does not — the server then retries the last token and **keeps only hits that still contain every query token** (so `coffee table` does not surface a side table). When nothing remains for cross-locale or multi-word natural-language input, the server falls back to a lightweight AI call that proposes short **catalog-language** search phrases as suggestions. Set `CAT_CATALOG_LOCALE` to a real project language (for example `en-GB` or `en-US` — not bare `en` unless that locale exists on products).
 
@@ -160,6 +165,14 @@ User-message builders and JSON parsers stay in code — only system prompt text 
 
 Set `enableFacets` on the widget to let the search pipeline discover filterable attributes from commercetools Product Types. Only attributes marked `isSearchable` are considered. The AI proposes relevant facets for the initial query; users can refine with facet chips or natural language, such as “height above 10 cm”. Hex color values (for example `#FFFFFF`) are shown as the nearest CSS color name with a swatch; filters still use the original hex key. The server keeps the schema in a short-lived process cache and exposes `GET /search/facet-schema` for host-app preload.
 
+### Multi-item shopping missions
+
+Set `enableMissions` on the React widget (or `CAT_MISSIONS_ENABLED=true` on the server) so a compound request such as “a tennis racket, two golf balls and a bag” is split into product intents. Both `interpretTextQuery` and `decomposeShoppingMission` run in parallel on a fresh text search; if the mission is unused (single product, low confidence, or an AI error) the response is the standard search. Mission mode skips facet chips. Angular and voice/image missions are not in this release.
+
+Each intent group shows a quantity and product cards. “Add all to cart” posts selected SKUs in one commercetools update via `POST /cart/add-items` (1–20 items). `SearchResult.mission` carries the groups; `products` remains the de-duplicated union so hosts that ignore missions still render a flat list.
+
+Config on `CommerceAIConfig.missions`: `enabled` (default `false`), `maxIntents` (5), `perIntentLimit` (4), `minConfidence` (0.6). The widget sends `enableMissions: true` as a per-request override.
+
 ### 4. Add the widget
 
 ```tsx
@@ -182,6 +195,7 @@ export function Search() {
       enableCameraSearch
       enableTts
       enableCart
+      enableMissions
       messages={{
         placeholder: "What are you looking for?",
         searching: "Searching...",
@@ -285,7 +299,7 @@ Set `onCheckout` to navigate from the cart panel to a host-owned route:
 />
 ```
 
-Cart routes: `GET /cart`, `POST /cart/add`, `POST /cart/remove`, `POST /cart/update-quantity`, `POST /cart/login`, and `POST /cart/logout`.
+Cart routes: `GET /cart`, `POST /cart/add`, `POST /cart/add-items`, `POST /cart/remove`, `POST /cart/update-quantity`, `POST /cart/login`, and `POST /cart/logout`.
 
 Checkout routes: `POST /cart/addresses`, `GET /cart/shipping-methods`, `POST /cart/shipping-method`, `GET /cart/payment-methods`, `POST /cart/payment`, and `POST /cart/order`. Order lookup: `GET /orders` lists recent orders for the current cart identity; `GET /orders?orderNumber=…` returns a single client-safe snapshot. The commercetools project must have a Shipping Method with a Zone matching the checkout country. Order creation is rate-limited (20 attempts per 15 minutes per IP on the Express router; Next handlers use the same in-memory cap). Payment authorization uses the same cap. When no matching shipping methods exist, checkout still allows placing the order after a successful address step. When no payment provider is configured, `GET /cart/payment-methods` returns an empty list and checkout skips the payment step.
 

@@ -46,6 +46,7 @@ export interface SearchRequestBody {
   refineQuery?: string;
   includeFacets?: boolean;
   suggestedFacets?: SuggestedFacet[];
+  enableMissions?: boolean;
 }
 
 export interface SuggestionsRequestBody {
@@ -151,6 +152,7 @@ export async function executeSearch(
         refineQuery: body.refineQuery,
         includeFacets: body.includeFacets,
         suggestedFacets: body.suggestedFacets,
+        enableMissions: body.enableMissions,
       }),
   );
 }

@@ -72,6 +72,7 @@ function createMockServer(overrides: Partial<CommerceAIServer> = {}): CommerceAI
       getCart: vi.fn().mockResolvedValue(sampleCart),
       getCustomerCart: vi.fn().mockResolvedValue(sampleCart),
       addToCart: vi.fn().mockResolvedValue(sampleCart),
+      addItemsToCart: vi.fn().mockResolvedValue(sampleCart),
       removeLineItem: vi.fn().mockResolvedValue(sampleCart),
       changeLineItemQuantity: vi.fn().mockResolvedValue(sampleCart),
       loginAndMerge: vi.fn(),
@@ -170,6 +171,17 @@ function createTestApp(handlers: ReturnType<typeof createHandlers>) {
 
   app.post("/cart/add", async (req, res) => {
     const response = await handlers.addToCart(req);
+    res.status(response.status);
+    if (response.headers) {
+      for (const [key, value] of Object.entries(response.headers)) {
+        res.setHeader(key, value);
+      }
+    }
+    res.send(response.body);
+  });
+
+  app.post("/cart/add-items", async (req, res) => {
+    const response = await handlers.addItemsToCart(req);
     res.status(response.status);
     if (response.headers) {
       for (const [key, value] of Object.entries(response.headers)) {
@@ -488,6 +500,34 @@ describe("createHandlers HTTP", () => {
     expect(response.body).toEqual({ cart: sampleCart });
     expect(server.commercetools.addToCart).toHaveBeenCalledWith(
       expect.objectContaining({ anonymousId: "anon-1", sku: "SHOE-RED" }),
+    );
+  });
+
+  it("addItemsToCart validates items", async () => {
+    const handlers = createHandlers(createMockServer());
+    const response = await handlers.addItemsToCart(jsonRequest({ anonymousId: "anon-1", items: [] }));
+
+    expect(response.status).toBe(400);
+    expect(JSON.parse(response.body as string)).toEqual({
+      error: "items is required",
+    });
+  });
+
+  it("express routes handle add items", async () => {
+    const server = createMockServer();
+    const app = createTestApp(createHandlers(server));
+
+    const response = await request(app)
+      .post("/cart/add-items")
+      .send({ anonymousId: "anon-1", items: [{ sku: "RACKET-1", quantity: 1 }] })
+      .expect(200);
+
+    expect(response.body).toEqual({ cart: sampleCart });
+    expect(server.commercetools.addItemsToCart).toHaveBeenCalledWith(
+      expect.objectContaining({
+        anonymousId: "anon-1",
+        items: [expect.objectContaining({ sku: "RACKET-1", quantity: 1 })],
+      }),
     );
   });
 

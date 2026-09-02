@@ -32,8 +32,11 @@ import { uint8ArrayToBase64 } from "../utils/audio.js";
 import type {
   AIConfig,
   CommerceAIConfig,
+  DecomposedShoppingMission,
   ImageSearchResult,
   InterpretedSearchQuery,
+  MissionIntentGroup,
+  ProductCard,
   SearchLocaleContext,
   SearchLocaleOptions,
   SearchResult,
@@ -45,6 +48,7 @@ import type {
   VoiceMode,
   VoiceSearchResult,
 } from "../types/index.js";
+import { isUsableMission, resolveMissionOptions } from "./mission.js";
 import {
   clampSuggestionsLimit,
   normalizeSuggestionList,
@@ -303,6 +307,106 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
     );
   }
 
+  async function executeMissionSearch(
+    mission: DecomposedShoppingMission,
+    locales: SearchLocaleContext,
+    timer: ReturnType<typeof createSearchTimer>,
+    maxIntents: number,
+    perIntentLimit: number,
+  ): Promise<SearchResult | null> {
+    const intents = mission.intents.slice(0, maxIntents);
+    logSearchTrace("mission", {
+      intentCount: intents.length,
+      quantities: intents.map((intent) => intent.quantity),
+      confidence: mission.confidence,
+      catalogLocale: locales.catalogLocale,
+    });
+
+    return withPipelineSpan(
+      "commercetools.mission-search",
+      {
+        input: {
+          intentCount: intents.length,
+          confidence: mission.confidence,
+          catalogLocale: locales.catalogLocale,
+        },
+      },
+      async (span) => {
+        const groups: MissionIntentGroup[] = await Promise.all(
+          intents.map(async (intent) => {
+            try {
+              const result = await executeSearch(
+                {
+                  searchTerms: intent.searchTerms,
+                  filters: intent.filters,
+                  sort: intent.sort ?? "relevance",
+                  interpretation: intent.label,
+                },
+                locales,
+                perIntentLimit,
+                0,
+                timer,
+              );
+              return {
+                intent,
+                products: result.products,
+                total: result.meta.total,
+              };
+            } catch (error) {
+              logSearchTrace("mission_intent_failed", {
+                intentId: intent.id,
+                message: error instanceof Error ? error.message : "unknown error",
+              });
+              return {
+                intent,
+                products: [] as ProductCard[],
+                total: 0,
+                failed: true,
+              };
+            }
+          }),
+        );
+
+        if (groups.every((group) => group.products.length === 0)) {
+          span?.update({ metadata: { allIntentsEmpty: true } });
+          return null;
+        }
+
+        const products = uniqueProducts(groups.flatMap((group) => group.products));
+        const total = groups.reduce((sum, group) => sum + group.total, 0);
+        const searchTerms = uniqueStrings(groups.flatMap((group) => group.intent.searchTerms));
+
+        const result: SearchResult = {
+          products,
+          meta: {
+            total,
+            limit: perIntentLimit,
+            offset: 0,
+            locale: locales.catalogLocale,
+            catalogLocale: locales.catalogLocale,
+            queryLocale: locales.queryLocale,
+            queryInterpretation: mission.interpretation,
+            searchTerms,
+          },
+          mission: {
+            intents: groups,
+            interpretation: mission.interpretation,
+          },
+        };
+
+        span?.update({
+          output: {
+            intentCount: groups.length,
+            failedCount: groups.filter((group) => group.failed).length,
+            productCount: products.length,
+            total,
+          },
+        });
+        return result;
+      },
+    );
+  }
+
   async function interpretVoice(
     audio: Uint8Array,
     mimeType: string,
@@ -378,6 +482,7 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
 
       return withPropagatedAttributes(pipelineMeta, async () => {
             const includeFacets = Boolean(request.includeFacets || config.facets?.enabled);
+            const missionOptions = resolveMissionOptions(config.missions, request.enableMissions);
             const cacheKey = buildTextSearchCacheKey(
               JSON.stringify({
                 query: request.query,
@@ -386,6 +491,10 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
                 refineQuery: request.refineQuery,
                 suggestedFacets: request.suggestedFacets,
                 includeFacets,
+                missions: missionOptions.enabled,
+                maxIntents: missionOptions.maxIntents,
+                perIntentLimit: missionOptions.perIntentLimit,
+                minConfidence: missionOptions.minConfidence,
               }),
               locales.queryLocale,
               locales.catalogLocale,
@@ -450,6 +559,42 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
                 interpretation: request.query,
                 suggestedFacets: request.suggestedFacets,
               };
+            } else if (missionOptions.enabled) {
+              const [interpretedResult, missionResult] = await Promise.all([
+                withTimeout(
+                  ai.interpretTextQuery(request.query, locales, facetSchema?.attributes),
+                  timeouts.aiTextMs,
+                  "ai_interpret",
+                ),
+                withTimeout(
+                  ai.decomposeShoppingMission(request.query, locales, facetSchema?.attributes),
+                  timeouts.aiTextMs,
+                  "ai_mission",
+                ).catch(() => null),
+              ]);
+              interpreted = {
+                ...interpretedResult,
+                filters: { ...(interpretedResult.filters ?? {}), ...(request.filters ?? {}) },
+              };
+              timer.mark("ai_interpret");
+              if (missionResult) {
+                timer.mark("ai_mission");
+              }
+
+              const missionSearch = isUsableMission(missionResult, missionOptions.minConfidence)
+                ? await executeMissionSearch(
+                    missionResult,
+                    locales,
+                    timer,
+                    missionOptions.maxIntents,
+                    missionOptions.perIntentLimit,
+                  )
+                : null;
+
+              if (missionSearch) {
+                resultCache?.set(`${cacheKey}|${request.offset ?? 0}`, missionSearch);
+                return withTraceIdMeta(withTimings(missionSearch, timer));
+              }
             } else {
               interpreted = await withTimeout(
                 ai.interpretTextQuery(request.query, locales, facetSchema?.attributes),
@@ -710,6 +855,33 @@ function resolveAIProviderTraceMeta(ai: AIConfig) {
 
 function productIdsFrom(searchResult: { productIds: string[] }): string[] {
   return searchResult.productIds;
+}
+
+function uniqueProducts(products: ProductCard[]): ProductCard[] {
+  const seen = new Set<string>();
+  const result: ProductCard[] = [];
+  for (const product of products) {
+    if (seen.has(product.id)) {
+      continue;
+    }
+    seen.add(product.id);
+    result.push(product);
+  }
+  return result;
+}
+
+function uniqueStrings(values: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const key = value.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(value);
+  }
+  return result;
 }
 
 async function attachVoiceTts(

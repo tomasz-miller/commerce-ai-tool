@@ -123,10 +123,15 @@ Keep Product Search API (REST) for search and facets. Use GraphQL only to fetch 
 
 - [x] Order confirmation and tracking
 
-## v2.3 — Multi-item shopping missions (current)
+## v2.3 — Multi-item shopping missions
 
-- [ ] Detect compound shopping requests and split them into product intents with quantities and filters
-- [ ] Run bounded commercetools searches for each intent in parallel, with partial-result handling
-- [ ] Present grouped product recommendations for each intent
-- [ ] Let users select products and add the requested quantities to the cart
-- [ ] Fall back to standard search when intent decomposition is uncertain
+- [x] Detect compound shopping requests and split them into product intents with quantities and filters
+- [x] Run bounded commercetools searches for each intent in parallel, with partial-result handling
+- [x] Present grouped product recommendations for each intent
+- [x] Let users select products and add the requested quantities to the cart
+- [x] Fall back to standard search when intent decomposition is uncertain
+
+## v2.4 — Mission surfaces (current)
+
+- [ ] Angular widget grouped mission results and batched add-to-cart
+- [ ] Voice (and optionally image) shopping-mission decomposition

@@ -25,6 +25,8 @@ const defaultSearchReturn = {
   suggestionsReady: false,
   selectSuggestion: vi.fn(),
   results: [],
+  mission: null,
+  setMission: vi.fn(),
   meta: null,
   setMeta: vi.fn(),
   isLoading: false,
@@ -37,6 +39,9 @@ const defaultSearchReturn = {
   setError: vi.fn(),
   setIsLoading: vi.fn(),
   clear: vi.fn(),
+  startNewSearch: vi.fn(),
+  hasFacetSession: false,
+  refine: vi.fn(),
 };
 
 const defaultVoiceReturn = {
@@ -78,6 +83,7 @@ const defaultCartReturn = {
   closeCart: vi.fn(),
   toggleCart: vi.fn(),
   addToCart: vi.fn(),
+  addItems: vi.fn(),
   removeFromCart: vi.fn(),
   updateQuantity: vi.fn(),
   setAddresses: vi.fn(),
@@ -527,5 +533,77 @@ describe("CommerceAISearch cart", () => {
     render(<CommerceAISearch apiBaseUrl="/api/commerce-ai" enableCart />);
 
     expect(screen.getByText("Your cart is empty")).not.toBeNull();
+  });
+
+  it("runs a fresh search on submit after a mission, even when facets were enabled", () => {
+    const search = vi.fn();
+    const refine = vi.fn();
+    mockUseCommerceAISearch.mockReturnValue({
+      ...defaultSearchReturn,
+      query: "a racket and two balls",
+      hasSearched: true,
+      hasFacetSession: false,
+      search,
+      refine,
+      mission: {
+        interpretation: "racket and balls",
+        intents: [
+          {
+            intent: { id: "intent-0", label: "racket", quantity: 1, searchTerms: ["racket"] },
+            products: [{ id: "p1", name: "Racket" }],
+            total: 1,
+          },
+        ],
+      },
+      meta: {
+        total: 1,
+        limit: 4,
+        offset: 0,
+        locale: "en",
+        catalogLocale: "en",
+        queryLocale: "en",
+        searchTerms: ["racket", "balls"],
+      },
+    });
+
+    const { container } = render(
+      <CommerceAISearch apiBaseUrl="/api/commerce-ai" enableFacets enableMissions />,
+    );
+    const form = container.querySelector("form");
+    expect(form).not.toBeNull();
+    fireEvent.submit(form!);
+
+    expect(search).toHaveBeenCalledWith("a racket and two balls");
+    expect(refine).not.toHaveBeenCalled();
+  });
+
+  it("refines on submit when a facet session is active", () => {
+    const search = vi.fn();
+    const refine = vi.fn();
+    mockUseCommerceAISearch.mockReturnValue({
+      ...defaultSearchReturn,
+      query: "taller glasses",
+      hasSearched: true,
+      hasFacetSession: true,
+      search,
+      refine,
+      meta: {
+        total: 1,
+        limit: 20,
+        offset: 0,
+        locale: "en",
+        catalogLocale: "en",
+        queryLocale: "en",
+        searchTerms: ["glasses"],
+      },
+    });
+
+    const { container } = render(
+      <CommerceAISearch apiBaseUrl="/api/commerce-ai" enableFacets />,
+    );
+    fireEvent.submit(container.querySelector("form")!);
+
+    expect(refine).toHaveBeenCalledWith("taller glasses");
+    expect(search).not.toHaveBeenCalled();
   });
 });
