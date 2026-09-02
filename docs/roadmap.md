@@ -1,5 +1,7 @@
 # Roadmap
 
+Shipped versions and remaining work. [Documentation index](README.md).
+
 ## v1.0
 
 - [x] Product search via commercetools Product Search API
@@ -10,7 +12,7 @@
 - [x] Glass morphism UI with light / dark / auto theme
 - [x] React, Next.js, and Angular packages
 - [x] Server package (Express + Next.js handlers)
-- [x] Promptfoo LLM evals for text search interpretation ([`evals/`](evals/))
+- [x] Promptfoo LLM evals for text search interpretation ([`evals/`](../evals/))
 
 ## v1.1
 
@@ -29,7 +31,7 @@ Local [Promptfoo](https://www.promptfoo.dev/) regression tests for AI prompts. C
 - [x] `evals/` harness with custom provider → `createAIProvider` → `interpretTextQuery`
 - [x] Text search test cases: locale translation, sort intent, non-commerce edge cases
 - [x] Scripts: `pnpm eval:promptfoo`, `pnpm eval:promptfoo:view`
-- [x] English docs: [`evals/README.md`](evals/README.md)
+- [x] English docs: [`evals/README.md`](../evals/README.md)
 
 ### Done (voice evals — phase 0a)
 
@@ -78,7 +80,7 @@ Integrate [Langfuse](https://langfuse.com) for every AI step in the search pipel
 - **Prompt management** — version and deploy prompts (`TEXT_QUERY`, image, voice enhance, TTS summary) without code releases; roll back bad prompt changes quickly
 - **Locale-aware debugging** — correlate `queryLocale` / `catalogLocale` with AI inputs and outputs (e.g. wrong-language `searchTerms`, empty CT results despite high `total`)
 - **Production debugging** — replace ad-hoc `CAT_DEBUG` logs with searchable traces, inputs/outputs, and error context in staging and production
-- **Quality & evaluations** — score interpretations and voice summaries; build datasets from real queries for regression tests when changing prompts or models (offline regression covered today by [Promptfoo](evals/); Langfuse adds production-sourced datasets and scoring)
+- **Quality & evaluations** — score interpretations and voice summaries; build datasets from real queries for regression tests when changing prompts or models (offline regression covered today by [Promptfoo](../evals/); Langfuse adds production-sourced datasets and scoring)
 - **User/session context** — attach `sessionId`, widget props, and search mode (text / voice / image) to traces for support and analytics
 - **Governance** — audit trail of what was sent to external LLMs (retention policies, PII considerations for voice transcripts)
 
@@ -89,7 +91,7 @@ Integrate [Langfuse](https://langfuse.com) for every AI step in the search pipel
 - [x] Trace metadata: `queryLocale`, `catalogLocale`, search type, commercetools `projectKey`, model id
 - [x] Instrument all `AIProvider` methods: `interpretTextQuery`, `interpretImageQuery`, `enhanceVoiceTranscript`, `summarizeVoiceResults`, `suggestSearchTerms`
 - [x] Link server voice handler span to core child spans (single trace id returned optionally in dev)
-- [x] Document setup in `.env.example` and README; note relationship to existing `CAT_DEBUG` dev tracing
+- [x] Document setup in `.env.example` and [observability](observability.md); note relationship to existing `CAT_DEBUG` dev tracing
 - [x] Optional: Langfuse prompt labels synced with `packages/core/src/prompts` for managed prompts (`LANGFUSE_PROMPTS`, `pnpm sync:langfuse-prompts`)
 
 ## v1.3 — Cart
@@ -123,10 +125,15 @@ Keep Product Search API (REST) for search and facets. Use GraphQL only to fetch 
 
 - [x] Order confirmation and tracking
 
-## v2.3 — Multi-item shopping missions (current)
+## v2.3 — Multi-item shopping missions
 
-- [ ] Detect compound shopping requests and split them into product intents with quantities and filters
-- [ ] Run bounded commercetools searches for each intent in parallel, with partial-result handling
-- [ ] Present grouped product recommendations for each intent
-- [ ] Let users select products and add the requested quantities to the cart
-- [ ] Fall back to standard search when intent decomposition is uncertain
+- [x] Detect compound shopping requests and split them into product intents with quantities and filters
+- [x] Run bounded commercetools searches for each intent in parallel, with partial-result handling
+- [x] Present grouped product recommendations for each intent
+- [x] Let users select products and add the requested quantities to the cart
+- [x] Fall back to standard search when intent decomposition is uncertain
+
+## v2.4 — Mission surfaces (current)
+
+- [ ] Angular widget grouped mission results and batched add-to-cart
+- [x] Voice (and optionally image) shopping-mission decomposition

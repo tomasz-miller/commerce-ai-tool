@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Commerce AI — shopping mission decomposition evals
+
+prompts:
+  - "{{query}}"
+
+providers:
+  - id: file://providers/mission-search-provider.ts
+    label: openrouter-gpt-56-luna
+    config:
+      provider: openrouter
+      model: openai/gpt-5.6-luna
+
+defaultTest:
+  assert:
+    - type: javascript
+      value: |
+        try {
+          JSON.parse(output);
+          return true;
+        } catch {
+          return false;
+        }
+    - type: javascript
+      value: |
+        const parsed = JSON.parse(output);
+        return typeof parsed.isMission === "boolean" && Array.isArray(parsed.intents);
+
+tests:
+  - file://tests/mission-search.yaml

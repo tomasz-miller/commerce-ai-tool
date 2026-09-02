@@ -50,7 +50,10 @@ describe("buildSuggestionsCacheKey", () => {
 describe("buildImageSearchCacheKey", () => {
   it("includes image hash and locales", () => {
     expect(buildImageSearchCacheKey("abc123", "image/jpeg", "en", "no", 20)).toBe(
-      "image|abc123|image/jpeg|en|no|20",
+      "image|abc123|image/jpeg|en|no|20|no-missions",
+    );
+    expect(buildImageSearchCacheKey("abc123", "image/jpeg", "en", "no", 20, true)).toBe(
+      "image|abc123|image/jpeg|en|no|20|missions",
     );
   });
 });
@@ -58,10 +61,13 @@ describe("buildImageSearchCacheKey", () => {
 describe("buildVoiceSearchCacheKey", () => {
   it("includes audio hash and voice mode", () => {
     expect(buildVoiceSearchCacheKey("hash", "audio/webm", "openrouter-audio", "en", "no", 20, true)).toBe(
-      "voice|openrouter-audio|tts|hash|audio/webm|en|no|20",
+      "voice|openrouter-audio|tts|hash|audio/webm|en|no|20|no-missions",
     );
     expect(buildVoiceSearchCacheKey("hash", "audio/webm", "openrouter-audio", "en", "no", 20, false)).toBe(
-      "voice|openrouter-audio|no-tts|hash|audio/webm|en|no|20",
+      "voice|openrouter-audio|no-tts|hash|audio/webm|en|no|20|no-missions",
+    );
+    expect(buildVoiceSearchCacheKey("hash", "audio/webm", "openrouter-audio", "en", "no", 20, true, true)).toBe(
+      "voice|openrouter-audio|tts|hash|audio/webm|en|no|20|missions",
     );
   });
 });

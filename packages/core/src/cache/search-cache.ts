@@ -93,8 +93,17 @@ export function buildImageSearchCacheKey(
   queryLocale: string,
   catalogLocale: string,
   limit: number,
+  missionsEnabled = false,
 ): string {
-  return ["image", imageHash, mimeType, queryLocale, catalogLocale, String(limit)].join("|");
+  return [
+    "image",
+    imageHash,
+    mimeType,
+    queryLocale,
+    catalogLocale,
+    String(limit),
+    missionsEnabled ? "missions" : "no-missions",
+  ].join("|");
 }
 
 export function buildVoiceSearchCacheKey(
@@ -105,6 +114,7 @@ export function buildVoiceSearchCacheKey(
   catalogLocale: string,
   limit: number,
   enableTts: boolean,
+  missionsEnabled = false,
 ): string {
   return [
     "voice",
@@ -115,5 +125,6 @@ export function buildVoiceSearchCacheKey(
     queryLocale,
     catalogLocale,
     String(limit),
+    missionsEnabled ? "missions" : "no-missions",
   ].join("|");
 }

@@ -9,9 +9,11 @@ import {
   buildVoiceAudioUserMessage,
   buildVoiceEnhanceUserMessage,
   buildSuggestSearchTermsUserMessage,
+  buildMissionQueryUserMessage,
   parseInterpretedQuery,
   parseVoiceAudioInterpretation,
   parseSuggestSearchTerms,
+  parseDecomposedMission,
 } from "../../prompts/index.js";
 import { SYSTEM_PROMPT_NAMES } from "../../prompts/catalog.js";
 import { resolveAndLinkSystemPrompt } from "../../prompts/resolve.js";
@@ -188,6 +190,27 @@ export class OpenRouterProvider implements AIProvider {
     });
 
     return this.extractContent(response).trim();
+  }
+
+  async decomposeShoppingMission(
+    text: string,
+    locales: SearchLocaleContext,
+    attributeCatalog: FacetAttributeDefinition[] = [],
+  ) {
+    const system = await resolveAndLinkSystemPrompt(SYSTEM_PROMPT_NAMES.MISSION_QUERY);
+    const response = await this.client.chat.send({
+      model: this.model,
+      messages: [
+        { role: "system", content: system },
+        {
+          role: "user",
+          content: buildMissionQueryUserMessage(text, locales, attributeCatalog),
+        },
+      ],
+      responseFormat: { type: "json_object" },
+    });
+
+    return parseDecomposedMission(this.extractContent(response));
   }
 
   private async sendChatCompletion(body: Record<string, unknown>) {

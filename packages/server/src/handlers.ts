@@ -12,6 +12,7 @@ import {
 } from "./route-actions.js";
 import {
   executeAddToCart,
+  executeAddItemsToCart,
   executeGetCart,
   executeLogin,
   executeLogout,
@@ -32,6 +33,7 @@ import { executeGetOrder } from "./order-actions.js";
 import { readCartSessionHeader } from "./cart-session.js";
 import { parseMultipart, readJsonBody } from "./utils/multipart.js";
 import type {
+  AddItemsToCartRequest,
   AddToCartRequest,
   AuthorizePaymentRequest,
   CartLoginRequest,
@@ -58,6 +60,7 @@ export function createHandlers(server: CommerceAIServer) {
           catalogLocale?: string;
           locale?: string;
           limit?: number;
+          enableMissions?: boolean;
         }>(req);
 
         const result = await executeSearch(server, body);
@@ -166,6 +169,17 @@ export function createHandlers(server: CommerceAIServer) {
         return jsonResponse(result);
       } catch (error) {
         const mapped = mapRouteError(error, "addToCart", "Add to cart failed");
+        return errorResponse(mapped.message, mapped.status);
+      }
+    },
+
+    async addItemsToCart(req: IncomingMessage): Promise<HandlerResponse> {
+      try {
+        const body = await readJsonBody<AddItemsToCartRequest>(req);
+        const result = await executeAddItemsToCart(server, body);
+        return jsonResponse(result);
+      } catch (error) {
+        const mapped = mapRouteError(error, "addItemsToCart", "Add items to cart failed");
         return errorResponse(mapped.message, mapped.status);
       }
     },

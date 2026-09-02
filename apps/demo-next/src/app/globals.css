@@ -278,6 +278,12 @@ body::after {
   }
 }
 
+@media (min-width: 768px) {
+  .demo-page:has(.cat-root--mission) {
+    grid-template-columns: minmax(0, 0.42fr) minmax(36rem, 1.58fr);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .demo-hero,
   .demo-search,

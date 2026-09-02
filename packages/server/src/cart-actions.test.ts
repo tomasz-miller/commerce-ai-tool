@@ -2,6 +2,7 @@ import type { CartSnapshot, CommercetoolsClient, SearchOrchestrator } from "@com
 import { describe, expect, it, vi } from "vitest";
 import {
   executeAddToCart,
+  executeAddItemsToCart,
   executeGetCart,
   executeLogin,
   executeLogout,
@@ -28,6 +29,7 @@ function createServer(): CommerceAIServer {
       getCart: vi.fn().mockResolvedValue(sampleCart),
       getCustomerCart: vi.fn().mockResolvedValue(sampleCart),
       addToCart: vi.fn().mockResolvedValue(sampleCart),
+      addItemsToCart: vi.fn().mockResolvedValue(sampleCart),
       removeLineItem: vi.fn().mockResolvedValue(sampleCart),
       changeLineItemQuantity: vi.fn().mockResolvedValue(sampleCart),
       loginAndMerge: vi.fn(),
@@ -90,6 +92,46 @@ describe("cart-actions", () => {
   it("rejects quantity below 1 on add", async () => {
     await expect(
       executeAddToCart(createServer(), { anonymousId: "anon-1", sku: "SKU", quantity: 0 }),
+    ).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it("adds multiple items through addItemsToCart", async () => {
+    const server = createServer();
+    const result = await executeAddItemsToCart(server, {
+      anonymousId: "anon-1",
+      items: [
+        { sku: "RACKET-1", quantity: 1 },
+        { sku: "BALL-1", quantity: 2 },
+      ],
+    });
+
+    expect(server.commercetools.addItemsToCart).toHaveBeenCalledWith({
+      anonymousId: "anon-1",
+      customerId: undefined,
+      items: [
+        { sku: "RACKET-1", productId: undefined, variantId: undefined, quantity: 1 },
+        { sku: "BALL-1", productId: undefined, variantId: undefined, quantity: 2 },
+      ],
+      currency: "EUR",
+      country: "DE",
+      catalogLocale: "en",
+      cartId: undefined,
+    });
+    expect(result).toEqual({ cart: sampleCart });
+  });
+
+  it("rejects line quantity above the max on addItemsToCart", async () => {
+    await expect(
+      executeAddItemsToCart(createServer(), {
+        anonymousId: "anon-1",
+        items: [{ sku: "RACKET-1", quantity: 100 }],
+      }),
+    ).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it("rejects empty items on addItemsToCart", async () => {
+    await expect(
+      executeAddItemsToCart(createServer(), { anonymousId: "anon-1", items: [] }),
     ).rejects.toBeInstanceOf(ValidationError);
   });
 

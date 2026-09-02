@@ -21,6 +21,11 @@
   color: var(--cat-text);
   width: 100%;
   max-width: var(--cat-max-width);
+  transition: max-width 500ms var(--cat-ease);
+}
+
+.cat-root--mission {
+  --cat-max-width: min(72rem, 100%);
 }
 
 .cat-root[data-theme="dark"] {
@@ -333,6 +338,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .cat-root {
+    transition: none;
+  }
+
   .cat-icon-btn--active {
     animation: none;
   }
@@ -496,6 +505,102 @@
 }
 
 .cat-result-card__add--added {
+  color: var(--cat-accent);
+}
+
+.cat-mission {
+  display: grid;
+  gap: 1rem;
+  margin-top: 0.85rem;
+  min-width: 0;
+  container-type: inline-size;
+  container-name: cat-mission;
+}
+
+.cat-mission__header {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.cat-mission__title {
+  margin: 0;
+  color: var(--cat-text);
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.cat-mission__interpretation {
+  margin: 0;
+  color: var(--cat-text-muted);
+  font-size: 0.8rem;
+}
+
+.cat-mission__lanes {
+  display: grid;
+  gap: 1rem;
+  align-items: start;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@container cat-mission (min-width: 32rem) {
+  .cat-mission__lanes {
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  }
+}
+
+.cat-mission-group {
+  display: grid;
+  gap: 0.55rem;
+  min-width: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--cat-glass-border);
+  border-radius: var(--cat-radius);
+  background: color-mix(in srgb, var(--cat-overlay-bg) 88%, transparent);
+}
+
+.cat-mission-group__header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.15rem 0 0.35rem;
+  background: color-mix(in srgb, var(--cat-overlay-bg) 92%, transparent);
+}
+
+.cat-mission-group__label {
+  margin: 0;
+  color: var(--cat-text);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.cat-mission-group__qty {
+  color: var(--cat-text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.cat-mission-group__products {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: minmax(0, 1fr);
+  margin-top: 0;
+}
+
+.cat-mission__footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.cat-mission__add-all {
+  min-width: 10rem;
+}
+
+.cat-mission__add-all--added {
   color: var(--cat-accent);
 }
 
@@ -915,6 +1020,10 @@
   font-size: 0.8125rem;
   color: var(--cat-text-muted);
   text-align: center;
+}
+
+.cat-root > .cat-status {
+  margin-top: 0.85rem;
 }
 
 .cat-status--error {

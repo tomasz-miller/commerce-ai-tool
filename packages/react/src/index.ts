@@ -1,5 +1,7 @@
 export { CommerceAISearch } from "./components/CommerceAISearch.js";
 export type { CommerceAISearchProps, SearchMode } from "./components/CommerceAISearch.js";
+export { MissionResults } from "./components/MissionResults.js";
+export type { MissionResultsProps } from "./components/MissionResults.js";
 export { CommerceAICheckout } from "./components/CommerceAICheckout.js";
 export type { CommerceAICheckoutProps } from "./components/CommerceAICheckout.js";
 export { CommerceAIOrderStatus } from "./components/CommerceAIOrderStatus.js";
@@ -24,6 +26,7 @@ export type {
   OrderSnapshot,
   PaymentMethodOption,
   PaymentSnapshot,
+  MissionSearchResult,
   ProductCard,
   ShippingMethodSnapshot,
 } from "@commerce-ai-tool/core";

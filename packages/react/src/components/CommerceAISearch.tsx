@@ -17,7 +17,7 @@ import type {
   ProductCard,
   ThemeMode,
 } from "@commerce-ai-tool/core";
-import { resolveCommerceAISearchMessages } from "@commerce-ai-tool/core";
+import { resolveCommerceAISearchMessages, looksLikeCompoundShoppingList } from "@commerce-ai-tool/core";
 import { useCommerceAISearch } from "../hooks/useCommerceAISearch.js";
 import { useCameraCapture } from "../hooks/useCameraCapture.js";
 import { useCart } from "../hooks/useCart.js";
@@ -26,6 +26,7 @@ import { useVoiceSearch } from "../hooks/useVoiceSearch.js";
 import { ICON_STROKE } from "../icons.js";
 import { CameraCaptureOverlay } from "./CameraCaptureOverlay.js";
 import { CartPanel } from "./CartPanel.js";
+import { MissionResults } from "./MissionResults.js";
 import { SearchFacets } from "./SearchFacets.js";
 import { VoiceStatusBanner } from "./VoiceStatusBanner.js";
 import type { CameraFacingMode } from "../utils/camera.js";
@@ -57,6 +58,8 @@ export interface CommerceAISearchProps {
   enableTts?: boolean;
   /** Enable built-in add-to-cart buttons and cart preview panel. Default false. */
   enableCart?: boolean;
+  /** Enable multi-item shopping missions on text, voice, and image search. Default false. */
+  enableMissions?: boolean;
   /** Currency for cart creation. Required when `enableCart` is true unless the server has a default. */
   currency?: string;
   /** Optional ISO country code used for commercetools price selection. */
@@ -86,6 +89,7 @@ export function CommerceAISearch({
   cameraFacingMode = "environment",
   enableTts = true,
   enableCart = false,
+  enableMissions = false,
   currency,
   country,
   className,
@@ -120,6 +124,7 @@ export function CommerceAISearch({
     suggestionsReady,
     selectSuggestion,
     results,
+    mission,
     isLoading,
     hasSearched,
     setHasSearched,
@@ -127,15 +132,15 @@ export function CommerceAISearch({
     meta,
     search,
     searchByImage,
-    setResults,
-    setMeta,
     setError,
     setIsLoading,
     facets = [],
     suggestedFacets = [],
+    hasFacetSession = false,
     refineFilters = async () => undefined,
     refine = async () => undefined,
     startNewSearch = async () => undefined,
+    applySearchResult = () => undefined,
   } = useCommerceAISearch({
     apiBaseUrl,
     catalogLocale,
@@ -144,6 +149,7 @@ export function CommerceAISearch({
     enableAutocomplete,
     enableFacets,
     persistSession,
+    enableMissions,
   });
 
   const voice = useVoiceSearch({
@@ -152,10 +158,14 @@ export function CommerceAISearch({
     queryLocale,
     locale,
     enableTts,
-    onResults: (products, resultMeta) => {
+    enableMissions,
+    onResults: (products, resultMeta, extras) => {
       setLastSearchMode("voice");
-      setResults(products);
-      setMeta(resultMeta);
+      applySearchResult({
+        products,
+        meta: resultMeta,
+        mission: extras?.mission,
+      });
       setError(null);
       setIsLoading(false);
       setHasSearched(true);
@@ -206,11 +216,21 @@ export function CommerceAISearch({
   );
 
   const displayResults = results;
+  const showMission = Boolean(mission);
   const showEmptyResults =
-    !isLoading && !error && hasSearched && displayResults.length === 0 && query.trim().length > 0;
+    !isLoading &&
+    !error &&
+    hasSearched &&
+    displayResults.length === 0 &&
+    !showMission &&
+    query.trim().length > 0;
   const showResults =
     query.trim().length > 0 &&
-    (isLoading || !!error || displayResults.length > 0 || showEmptyResults);
+    (isLoading ||
+      !!error ||
+      displayResults.length > 0 ||
+      showEmptyResults ||
+      showMission);
   const showSuggestions =
     enableAutocomplete &&
     !suggestionsDismissed &&
@@ -230,7 +250,11 @@ export function CommerceAISearch({
         return;
       }
 
-      if (enableFacets && meta?.searchTerms) {
+      if (
+        enableFacets &&
+        hasFacetSession &&
+        !(enableMissions && looksLikeCompoundShoppingList(query))
+      ) {
         void refine(query);
       } else {
         void search(query);
@@ -240,7 +264,8 @@ export function CommerceAISearch({
       activeSuggestionIndex,
       enableAutocomplete,
       enableFacets,
-      meta?.searchTerms,
+      enableMissions,
+      hasFacetSession,
       query,
       refine,
       search,
@@ -353,7 +378,14 @@ export function CommerceAISearch({
 
   return (
     <div
-      className={`cat-root cat-wrapper ${className ?? ""}`}
+      className={[
+        "cat-root",
+        "cat-wrapper",
+        showMission && !isLoading && !error ? "cat-root--mission" : "",
+        className ?? "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
       data-theme={theme}
       onDragOver={(e) => {
         if (!enableImageSearch) {
@@ -559,7 +591,7 @@ export function CommerceAISearch({
         />
       )}
 
-      {enableFacets && lastSearchMode === "text" && hasSearched && (
+      {enableFacets && lastSearchMode === "text" && hasSearched && !showMission && (
         <SearchFacets
           facets={facets}
           suggestedFacets={suggestedFacets}
@@ -581,7 +613,23 @@ export function CommerceAISearch({
         />
       )}
 
-      {showResults && (
+      {showResults && isLoading && <div className="cat-status">{messages.searching}</div>}
+      {showResults && error && <div className="cat-status cat-status--error">{error}</div>}
+
+      {!isLoading && !error && showResults && showMission && mission ? (
+        <MissionResults
+          mission={mission}
+          messages={messages}
+          enableCart={enableCart}
+          isMutating={cart.isMutating}
+          addedProductIds={addedProductIds}
+          onProductSelect={onProductSelect}
+          onAddItem={(product) => void handleAddToCart(product)}
+          onAddAll={(items) => cart.addItems(items)}
+        />
+      ) : null}
+
+      {showResults && !showMission && !isLoading && !error && (
         <div
           className="cat-results"
           role={!isLoading && displayResults.length > 0 ? "list" : undefined}
@@ -591,9 +639,6 @@ export function CommerceAISearch({
               : undefined
           }
         >
-          {isLoading && <div className="cat-status">{messages.searching}</div>}
-          {error && <div className="cat-status cat-status--error">{error}</div>}
-
           {!isLoading &&
             displayResults.map((product, index) => {
               const canAdd = Boolean(product.sku || product.id);

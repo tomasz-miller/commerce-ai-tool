@@ -216,8 +216,23 @@ export function loadConfigFromEnv(): CommerceAIConfig {
             ? Number(process.env.CAT_CACHE_MAX_ENTRIES)
             : undefined,
         }
-      : process.env.CAT_CACHE_ENABLED === "true"
+        : process.env.CAT_CACHE_ENABLED === "true"
         ? {}
+        : undefined,
+    missions:
+      process.env.CAT_MISSIONS_ENABLED === "true"
+        ? {
+            enabled: true,
+            maxIntents: process.env.CAT_MISSIONS_MAX_INTENTS
+              ? Number(process.env.CAT_MISSIONS_MAX_INTENTS)
+              : undefined,
+            perIntentLimit: process.env.CAT_MISSIONS_PER_INTENT_LIMIT
+              ? Number(process.env.CAT_MISSIONS_PER_INTENT_LIMIT)
+              : undefined,
+            minConfidence: process.env.CAT_MISSIONS_MIN_CONFIDENCE
+              ? Number(process.env.CAT_MISSIONS_MIN_CONFIDENCE)
+              : undefined,
+          }
         : undefined,
     facets:
       process.env.CAT_FACETS_ENABLED === "true"

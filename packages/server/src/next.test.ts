@@ -36,6 +36,7 @@ function createMockServer(): CommerceAIServer {
       getCart: vi.fn().mockResolvedValue(sampleCart),
       getCustomerCart: vi.fn().mockResolvedValue(sampleCart),
       addToCart: vi.fn().mockResolvedValue(sampleCart),
+      addItemsToCart: vi.fn().mockResolvedValue(sampleCart),
       removeLineItem: vi.fn().mockResolvedValue(sampleCart),
       changeLineItemQuantity: vi.fn().mockResolvedValue(sampleCart),
       loginAndMerge: vi.fn(),
@@ -170,6 +171,31 @@ describe("createNextHandlers", () => {
     );
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ cart: sampleCart });
+  });
+
+  it("addItemsToCart uses shared cart actions", async () => {
+    const server = createMockServer();
+    vi.mocked(createCommerceAIServer).mockReturnValue(server);
+
+    const handlers = createNextHandlers({} as never);
+    const response = await handlers.addItemsToCart(
+      new Request("http://localhost/cart/add-items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          anonymousId: "anon-1",
+          items: [{ sku: "RACKET-1", quantity: 1 }],
+        }),
+      }),
+    );
+
+    expect(server.commercetools.addItemsToCart).toHaveBeenCalledWith(
+      expect.objectContaining({
+        anonymousId: "anon-1",
+        items: [expect.objectContaining({ sku: "RACKET-1", quantity: 1 })],
+      }),
+    );
+    expect(response.status).toBe(200);
   });
 
   it("login uses shared cart actions", async () => {
