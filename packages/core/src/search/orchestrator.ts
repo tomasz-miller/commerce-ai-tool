@@ -41,6 +41,7 @@ import type {
   SearchLocaleOptions,
   SearchResult,
   ResolvedFacetSchema,
+  FacetAttributeDefinition,
   SuggestionsRequest,
   SuggestionsResult,
   TextSearchRequest,
@@ -65,12 +66,16 @@ export interface SearchOrchestrator {
   searchByVoice(
     audio: Uint8Array,
     mimeType: string,
-    options?: SearchLocaleOptions & { limit?: number; enableTts?: boolean },
+    options?: SearchLocaleOptions & {
+      limit?: number;
+      enableTts?: boolean;
+      enableMissions?: boolean;
+    },
   ): Promise<VoiceSearchResult & { ttsText?: string }>;
   searchByImage(
     image: Uint8Array,
     mimeType: string,
-    options?: SearchLocaleOptions & { limit?: number },
+    options?: SearchLocaleOptions & { limit?: number; enableMissions?: boolean },
   ): Promise<ImageSearchResult>;
   suggestByText(request: SuggestionsRequest): Promise<SuggestionsResult>;
 }
@@ -407,6 +412,40 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
     );
   }
 
+  async function tryMissionSearchFromQuery(
+    query: string,
+    locales: SearchLocaleContext,
+    timer: ReturnType<typeof createSearchTimer>,
+    missionOptions: ReturnType<typeof resolveMissionOptions>,
+    attributeCatalog: FacetAttributeDefinition[] = [],
+  ): Promise<SearchResult | null> {
+    if (!missionOptions.enabled) {
+      return null;
+    }
+    const trimmed = query.trim();
+    if (!trimmed) {
+      return null;
+    }
+    const missionResult = await withTimeout(
+      ai.decomposeShoppingMission(trimmed, locales, attributeCatalog),
+      timeouts.aiTextMs,
+      "ai_mission",
+    ).catch(() => null);
+    if (missionResult) {
+      timer.mark("ai_mission");
+    }
+    if (!isUsableMission(missionResult, missionOptions.minConfidence)) {
+      return null;
+    }
+    return executeMissionSearch(
+      missionResult,
+      locales,
+      timer,
+      missionOptions.maxIntents,
+      missionOptions.perIntentLimit,
+    );
+  }
+
   async function interpretVoice(
     audio: Uint8Array,
     mimeType: string,
@@ -646,6 +685,7 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
 
       return withPropagatedAttributes(pipelineMeta, async () => {
             const enableTts = options.enableTts !== false;
+            const missionOptions = resolveMissionOptions(config.missions, options.enableMissions);
             const voiceCacheKey = buildVoiceSearchCacheKey(
               hashUint8Array(audio),
               mimeType,
@@ -654,6 +694,7 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
               locales.catalogLocale,
               searchLimit,
               enableTts,
+              missionOptions.enabled,
             );
             const cachedVoice = voiceResultCache?.get(voiceCacheKey);
             if (cachedVoice) {
@@ -663,15 +704,23 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
 
             const voiceInterpretation = await interpretVoice(audio, mimeType, locales, timer);
             const { transcript, enhancedQuery, ...interpreted } = voiceInterpretation;
-            const result = await executeSearch(
-              interpreted,
-              locales,
-              searchLimit,
-              0,
-              timer,
-              undefined,
+            const missionSearch = await tryMissionSearchFromQuery(
               enhancedQuery || transcript,
+              locales,
+              timer,
+              missionOptions,
             );
+            const result =
+              missionSearch ??
+              (await executeSearch(
+                interpreted,
+                locales,
+                searchLimit,
+                0,
+                timer,
+                undefined,
+                enhancedQuery || transcript,
+              ));
 
             const voiceResult: VoiceSearchResult & { ttsText?: string } = {
               ...result,
@@ -714,12 +763,14 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
       });
 
       return withPropagatedAttributes(pipelineMeta, async () => {
+            const missionOptions = resolveMissionOptions(config.missions, options.enableMissions);
             const imageCacheKey = buildImageSearchCacheKey(
               hashUint8Array(image),
               mimeType,
               locales.queryLocale,
               locales.catalogLocale,
               searchLimit,
+              missionOptions.enabled,
             );
             const cachedImage = imageResultCache?.get(imageCacheKey);
             if (cachedImage) {
@@ -735,7 +786,14 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
             );
             timer.mark("ai_interpret_image");
 
-            const result = await executeSearch(interpreted, locales, searchLimit, 0, timer);
+            const missionSearch = await tryMissionSearchFromQuery(
+              interpreted.interpretation || interpreted.searchTerms.join(" "),
+              locales,
+              timer,
+              missionOptions,
+            );
+            const result =
+              missionSearch ?? (await executeSearch(interpreted, locales, searchLimit, 0, timer));
             const imageResult: ImageSearchResult = {
               ...withTimings(result, timer),
               interpretation: interpreted.interpretation,

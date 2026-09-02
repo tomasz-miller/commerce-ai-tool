@@ -96,6 +96,11 @@ export {
   SUGGESTION_MAX_LENGTH,
   SUGGESTION_MAX_WORDS,
 } from "./commercetools/suggestion-quality.js";
+export {
+  looksLikeCompoundShoppingList,
+  isUsableMission,
+  resolveMissionOptions,
+} from "./search/mission.js";
 export { createSearchOrchestrator } from "./search/orchestrator.js";
 export type { SearchOrchestrator, SearchOrchestratorDeps } from "./search/orchestrator.js";
 export {

@@ -243,24 +243,28 @@ flowchart LR
   image["POST /search/image"]
   suggest["POST /search/suggestions"]
   execute["executeSearch"]
+  mission["executeMissionSearch"]
 
   text -->|"fresh query"| execute
+  text -->|"missions"| mission
   text -->|"facet NL refine"| refine
   refine --> execute
   text -->|"facet chip session"| skipLlm
   skipLlm --> execute
   voice -->|"STT plus enhance or audio interpret"| execute
+  voice -->|"missions"| mission
   image -->|"vision interpretImageQuery"| execute
+  image -->|"missions"| mission
   suggest -->|"CT searchKeywords then AI fallback"| ctSuggest["not executeSearch"]
 ```
 
-**Facet refine.** After the first search, the widget keeps `searchTerms` in session. A chip click resubmits those terms plus `filters` and skips interpretation. Natural-language refine (`“height above 10 cm”`) calls `interpretRefineQuery` with the current terms, filters, and attribute catalog.
+**Facet refine.** After the first search, the widget keeps `searchTerms` in session. A chip click resubmits those terms plus `filters` and skips interpretation. Natural-language refine (`“height above 10 cm”`) calls `interpretRefineQuery` with the current terms, filters, and attribute catalog. When `enableMissions` is on, Enter runs a **fresh search** if the query looks like a compound shopping list (`and`, comma, `plus`); otherwise a facet session still refines (for example “taller glasses”). Facet chips still refine.
 
-**Shopping missions** (opt-in `enableMissions`). A fresh text search runs `interpretTextQuery` and `decomposeShoppingMission` in parallel. If the mission is usable (confidence, at least two intents), each intent runs its own bounded Product Search; otherwise the standard result is used. Voice, image, and Angular are not on this path yet. See the [worked example](#worked-example-compound-shopping-list).
+**Shopping missions** (opt-in `enableMissions`). A fresh text search runs `interpretTextQuery` and `decomposeShoppingMission` in parallel. Voice and image search run `decomposeShoppingMission` after the transcript or vision interpretation. If the mission is usable (confidence, at least two intents), each intent runs its own bounded Product Search; otherwise the standard result is used. Angular mission UI is not on this path yet. See the [worked example](#worked-example-compound-shopping-list).
 
-**Voice.** Default OpenRouter path: one `interpretVoiceAudio` call (transcript + `searchTerms`). ElevenLabs path: STT → `enhanceVoiceTranscript` → `interpretTextQuery`. Spoken summaries (`enableTts`) are voice-search only.
+**Voice.** Default OpenRouter path: one `interpretVoiceAudio` call (transcript + `searchTerms`). ElevenLabs path: STT → `enhanceVoiceTranscript` → `interpretTextQuery`. With missions on, the transcript/enhanced query then follows the same mission fan-out as text search. Spoken summaries (`enableTts`) are voice-search only.
 
-**Image.** Vision model returns the same `InterpretedSearchQuery` contract; `searchTerms` still use catalog language.
+**Image.** Vision model returns the same `InterpretedSearchQuery` contract; `searchTerms` still use catalog language. With missions on, the interpretation can fan out into intent searches the same way as text.
 
 **Autocomplete** (`POST /search/suggestions`). commercetools Search Term Suggestions on `searchKeywords` first (full prefix, then last-token retry kept only when every query token is still present). If nothing remains for a cross-locale or multi-word natural-language prefix, a lightweight `suggestSearchTerms` call proposes catalog-language phrases. This path does not run Product Search.
 
@@ -276,12 +280,12 @@ Typed-query passthrough does **not** apply: the sentence is too long / too many 
 
 ### With missions (`enableMissions`)
 
-The demo widget sets `enableMissions`. The orchestrator calls both models in parallel:
+The demo widget sets `enableMissions`. For **text**, the orchestrator calls both models in parallel:
 
 1. `interpretTextQuery` — backup if the mission is unused
 2. `decomposeShoppingMission` (`commerce-ai/mission-query`) — split into product intents
 
-A mission is used when `isMission` is true, `confidence` is at least `minConfidence` (default `0.6`), and there are **two or more** intents. This query matches that pattern (same idea as “a tennis racket, two golf balls and a bag” in the mission prompt).
+Spoken and image queries reuse step 2 after transcript or vision interpretation. A mission is used when `isMission` is true, `confidence` is at least `minConfidence` (default `0.6`), and there are **two or more** intents. This query matches that pattern (same idea as “a tennis racket, two golf balls and a bag” in the mission prompt).
 
 Illustrative `DecomposedShoppingMission` for `catalogLocale=en-GB`:
 
@@ -323,7 +327,7 @@ flowchart TD
   g1["Product Search: fancy glasses"]
   g2["Product Search: coffee table"]
   g3["Product Search: dining chairs"]
-  ui["UI: three groups plus Add all"]
+  ui["UI: intent lanes plus optional Add all"]
 
   q --> interpret
   q --> mission
@@ -339,7 +343,7 @@ Each intent uses the same builder as a normal search (OR of `name` / `searchKeyw
 
 Details:
 
-- **`quantity: 2` on chairs** is the cart quantity for “Add all” (`POST /cart/add-items`). It does not mean “fetch two products”; search still returns up to `perIntentLimit` cards.
+- **`quantity: 2` on chairs** is a lane hint (“Looking for 2”). Per-card add and “Add all” both use quantity 1. Search still returns up to `perIntentLimit` cards.
 - **“living room”** is context, not a fourth product. It may appear inside a chair phrase (`living room chairs`).
 - **“fancy”** usually stays on the glasses phrase. There is no generic `fancy` filter unless a Product Type attribute matches.
 - If every intent returns zero products, the orchestrator **falls back** to the standard `interpretTextQuery` result.

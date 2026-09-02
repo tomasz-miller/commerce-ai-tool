@@ -136,4 +136,4 @@ Keep Product Search API (REST) for search and facets. Use GraphQL only to fetch 
 ## v2.4 — Mission surfaces (current)
 
 - [ ] Angular widget grouped mission results and batched add-to-cart
-- [ ] Voice (and optionally image) shopping-mission decomposition
+- [x] Voice (and optionally image) shopping-mission decomposition

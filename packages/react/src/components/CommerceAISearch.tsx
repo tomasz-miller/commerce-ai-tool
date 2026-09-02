@@ -17,7 +17,7 @@ import type {
   ProductCard,
   ThemeMode,
 } from "@commerce-ai-tool/core";
-import { resolveCommerceAISearchMessages } from "@commerce-ai-tool/core";
+import { resolveCommerceAISearchMessages, looksLikeCompoundShoppingList } from "@commerce-ai-tool/core";
 import { useCommerceAISearch } from "../hooks/useCommerceAISearch.js";
 import { useCameraCapture } from "../hooks/useCameraCapture.js";
 import { useCart } from "../hooks/useCart.js";
@@ -58,7 +58,7 @@ export interface CommerceAISearchProps {
   enableTts?: boolean;
   /** Enable built-in add-to-cart buttons and cart preview panel. Default false. */
   enableCart?: boolean;
-  /** Enable multi-item shopping missions on text search. Default false. */
+  /** Enable multi-item shopping missions on text, voice, and image search. Default false. */
   enableMissions?: boolean;
   /** Currency for cart creation. Required when `enableCart` is true unless the server has a default. */
   currency?: string;
@@ -132,9 +132,6 @@ export function CommerceAISearch({
     meta,
     search,
     searchByImage,
-    setResults,
-    setMission,
-    setMeta,
     setError,
     setIsLoading,
     facets = [],
@@ -143,6 +140,7 @@ export function CommerceAISearch({
     refineFilters = async () => undefined,
     refine = async () => undefined,
     startNewSearch = async () => undefined,
+    applySearchResult = () => undefined,
   } = useCommerceAISearch({
     apiBaseUrl,
     catalogLocale,
@@ -160,11 +158,14 @@ export function CommerceAISearch({
     queryLocale,
     locale,
     enableTts,
-    onResults: (products, resultMeta) => {
+    enableMissions,
+    onResults: (products, resultMeta, extras) => {
       setLastSearchMode("voice");
-      setResults(products);
-      setMission(null);
-      setMeta(resultMeta);
+      applySearchResult({
+        products,
+        meta: resultMeta,
+        mission: extras?.mission,
+      });
       setError(null);
       setIsLoading(false);
       setHasSearched(true);
@@ -215,7 +216,7 @@ export function CommerceAISearch({
   );
 
   const displayResults = results;
-  const showMission = Boolean(mission && lastSearchMode === "text");
+  const showMission = Boolean(mission);
   const showEmptyResults =
     !isLoading &&
     !error &&
@@ -249,7 +250,11 @@ export function CommerceAISearch({
         return;
       }
 
-      if (enableFacets && hasFacetSession) {
+      if (
+        enableFacets &&
+        hasFacetSession &&
+        !(enableMissions && looksLikeCompoundShoppingList(query))
+      ) {
         void refine(query);
       } else {
         void search(query);
@@ -259,6 +264,7 @@ export function CommerceAISearch({
       activeSuggestionIndex,
       enableAutocomplete,
       enableFacets,
+      enableMissions,
       hasFacetSession,
       query,
       refine,
@@ -372,7 +378,14 @@ export function CommerceAISearch({
 
   return (
     <div
-      className={`cat-root cat-wrapper ${className ?? ""}`}
+      className={[
+        "cat-root",
+        "cat-wrapper",
+        showMission && !isLoading && !error ? "cat-root--mission" : "",
+        className ?? "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
       data-theme={theme}
       onDragOver={(e) => {
         if (!enableImageSearch) {
@@ -600,7 +613,23 @@ export function CommerceAISearch({
         />
       )}
 
-      {showResults && (
+      {showResults && isLoading && <div className="cat-status">{messages.searching}</div>}
+      {showResults && error && <div className="cat-status cat-status--error">{error}</div>}
+
+      {!isLoading && !error && showResults && showMission && mission ? (
+        <MissionResults
+          mission={mission}
+          messages={messages}
+          enableCart={enableCart}
+          isMutating={cart.isMutating}
+          addedProductIds={addedProductIds}
+          onProductSelect={onProductSelect}
+          onAddItem={(product) => void handleAddToCart(product)}
+          onAddAll={(items) => cart.addItems(items)}
+        />
+      ) : null}
+
+      {showResults && !showMission && !isLoading && !error && (
         <div
           className="cat-results"
           role={!isLoading && displayResults.length > 0 ? "list" : undefined}
@@ -610,22 +639,7 @@ export function CommerceAISearch({
               : undefined
           }
         >
-          {isLoading && <div className="cat-status">{messages.searching}</div>}
-          {error && <div className="cat-status cat-status--error">{error}</div>}
-
-          {!isLoading && !error && showMission && mission ? (
-            <MissionResults
-              mission={mission}
-              messages={messages}
-              enableCart={enableCart}
-              isMutating={cart.isMutating}
-              onProductSelect={onProductSelect}
-              onAddAll={(items) => cart.addItems(items)}
-            />
-          ) : null}
-
           {!isLoading &&
-            !showMission &&
             displayResults.map((product, index) => {
               const canAdd = Boolean(product.sku || product.id);
               const justAdded = Boolean(addedProductIds[product.id]);

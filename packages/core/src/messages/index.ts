@@ -151,7 +151,7 @@ export const DEFAULT_COMMERCE_AI_SEARCH_MESSAGES: CommerceAISearchMessages = {
   closeCart: "Close cart",
   unableToAddToCart: "This product cannot be added to the cart",
   missionTitle: "Shopping list",
-  missionQuantity: "Qty",
+  missionQuantity: "Looking for",
   missionAddAll: "Add all to cart",
   missionItemsAdded: "Added to cart",
   missionSelectProduct: "Select this product",

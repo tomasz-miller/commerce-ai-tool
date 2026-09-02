@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { MAX_LINE_ITEM_QUANTITY } from "../types/index.js";
 import {
   MAX_MISSION_INTENTS,
+  MISSION_QUERY_SYSTEM_PROMPT,
   buildMissionQueryUserMessage,
   parseDecomposedMission,
 } from "./index.js";
@@ -128,5 +129,13 @@ describe("buildMissionQueryUserMessage", () => {
     expect(message).toContain("Query: a racket and two balls");
     expect(message).toContain("catalog language: no");
     expect(message).toContain("Filterable attribute catalog");
+  });
+});
+
+describe("MISSION_QUERY_SYSTEM_PROMPT", () => {
+  it("treats spoken-style two-item lists as missions", () => {
+    expect(MISSION_QUERY_SYSTEM_PROMPT).toContain(
+      "I'm looking for some glasses and a coffee table",
+    );
   });
 });

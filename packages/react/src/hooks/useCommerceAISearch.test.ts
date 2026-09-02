@@ -207,4 +207,39 @@ describe("useCommerceAISearch", () => {
     expect(result.current.hasFacetSession).toBe(false);
     expect(result.current.mission).not.toBeNull();
   });
+
+  it("sends enableMissions on image search and stores grouped results", async () => {
+    const mission = {
+      interpretation: "glasses and table",
+      intents: [
+        {
+          intent: { id: "intent-0", label: "glasses", quantity: 1, searchTerms: ["glasses"] },
+          products: [{ id: "p1", name: "Glass" }],
+          total: 1,
+        },
+      ],
+    };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        products: [{ id: "p1", name: "Glass" }],
+        mission,
+        interpretation: "glasses and a coffee table",
+        meta: { queryInterpretation: "glasses and a coffee table" },
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() =>
+      useCommerceAISearch({ apiBaseUrl: "/api/commerce-ai", enableMissions: true }),
+    );
+
+    await act(async () => {
+      await result.current.searchByImage(new File(["img"], "photo.jpg", { type: "image/jpeg" }));
+    });
+
+    const formData = fetchMock.mock.calls[0]?.[1]?.body as FormData;
+    expect(formData.get("enableMissions")).toBe("true");
+    expect(result.current.mission).toEqual(mission);
+  });
 });

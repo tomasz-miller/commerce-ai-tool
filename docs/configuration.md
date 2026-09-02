@@ -74,9 +74,9 @@ Set `enableFacets` on the widget (or `CAT_FACETS_ENABLED` on the server). The pi
 
 ## Shopping missions
 
-Set `enableMissions` on the React widget or `CAT_MISSIONS_ENABLED=true` on the server. Config on `CommerceAIConfig.missions`: `enabled` (default `false`), `maxIntents` (5), `perIntentLimit` (4), `minConfidence` (0.6). The widget sends `enableMissions: true` as a per-request override.
+Set `enableMissions` on the React widget or `CAT_MISSIONS_ENABLED=true` on the server. Config on `CommerceAIConfig.missions`: `enabled` (default `false`), `maxIntents` (5), `perIntentLimit` (4), `minConfidence` (0.6). The widget sends `enableMissions: true` as a per-request override on text, voice, and image search. Results render as intent lanes (stacked below ~32rem, side-by-side columns when two 16rem lanes fit) with per-card add-to-cart. With missions on, Enter starts a fresh search when the query looks like a compound shopping list; otherwise a facet session still refines (for example “taller glasses”). Facet chips always refine.
 
-How compound queries are split and searched: [search pipeline](search-pipeline.md#worked-example-compound-shopping-list). Angular and voice/image missions are not in this release.
+How compound queries are split and searched: [search pipeline](search-pipeline.md#worked-example-compound-shopping-list). Angular mission UI is not in this release.
 
 ## Autocomplete (`searchKeywords`)
 

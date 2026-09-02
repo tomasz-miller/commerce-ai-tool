@@ -38,7 +38,7 @@ const mission: MissionSearchResult = {
 };
 
 describe("MissionResults", () => {
-  it("groups products and adds selected quantities", async () => {
+  it("adds the first product from each filled lane at quantity 1", async () => {
     const onAddAll = vi.fn().mockResolvedValue({ id: "cart-1" });
     render(
       <MissionResults
@@ -52,37 +52,39 @@ describe("MissionResults", () => {
 
     expect(screen.getByText("tennis racket")).toBeTruthy();
     expect(screen.getByText("golf balls")).toBeTruthy();
-    expect(screen.getByText("Qty 2")).toBeTruthy();
+    expect(screen.getByText("Looking for 2")).toBeTruthy();
+    expect(screen.queryByText("Looking for 1")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: /Select this product: Club Racket/i }));
     fireEvent.click(screen.getByRole("button", { name: /Add all to cart/i }));
 
     expect(onAddAll).toHaveBeenCalledWith([
-      { sku: "RACKET-2", quantity: 1 },
-      { sku: "BALL-1", quantity: 2 },
+      { sku: "RACKET-1", quantity: 1 },
+      { sku: "BALL-1", quantity: 1 },
     ]);
   });
 
-  it("opens the product callback only when the selected card is clicked again", () => {
+  it("adds a single card and opens PDP on the first card click", () => {
     const onProductSelect = vi.fn();
+    const onAddItem = vi.fn();
     render(
       <MissionResults
         mission={mission}
         messages={messages}
-        enableCart={false}
+        enableCart
         isMutating={false}
         onProductSelect={onProductSelect}
+        onAddItem={onAddItem}
         onAddAll={vi.fn()}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Select this product: Club Racket/i }));
-    expect(onProductSelect).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole("button", { name: "Club Racket" }));
+    fireEvent.click(screen.getByRole("button", { name: /Club Racket/i }));
     expect(onProductSelect).toHaveBeenCalledWith(
       expect.objectContaining({ id: "p2", sku: "RACKET-2" }),
     );
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Add to cart" })[1]!);
+    expect(onAddItem).toHaveBeenCalledWith(expect.objectContaining({ id: "p2", sku: "RACKET-2" }));
   });
 
   it("renders empty and failed intent states", () => {
@@ -123,5 +125,61 @@ describe("MissionResults", () => {
 
     expect(screen.getByText(messages.missionIntentEmpty)).toBeTruthy();
     expect(screen.getByText(messages.missionIntentFailed)).toBeTruthy();
+  });
+
+  it("skips empty and failed lanes and dedupes duplicate first products on add all", () => {
+    const onAddAll = vi.fn().mockResolvedValue({ id: "cart-1" });
+    render(
+      <MissionResults
+        mission={{
+          interpretation: "mixed",
+          intents: [
+            {
+              intent: { id: "intent-0", label: "glasses", quantity: 1, searchTerms: ["glasses"] },
+              products: [{ id: "p1", name: "Wine Glass", sku: "GLASS-1" }],
+              total: 1,
+            },
+            {
+              intent: { id: "intent-1", label: "missing", quantity: 1, searchTerms: ["missing"] },
+              products: [],
+              total: 0,
+            },
+            {
+              intent: { id: "intent-2", label: "failed", quantity: 1, searchTerms: ["failed"] },
+              products: [],
+              total: 0,
+              failed: true,
+            },
+            {
+              intent: { id: "intent-3", label: "more glasses", quantity: 1, searchTerms: ["glasses"] },
+              products: [{ id: "p9", name: "Same Glass", sku: "GLASS-1" }],
+              total: 1,
+            },
+          ],
+        }}
+        messages={messages}
+        enableCart
+        isMutating={false}
+        onAddAll={onAddAll}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Add all to cart/i }));
+    expect(onAddAll).toHaveBeenCalledWith([{ sku: "GLASS-1", quantity: 1 }]);
+  });
+
+  it("renders product cards as non-buttons when onProductSelect is omitted", () => {
+    render(
+      <MissionResults
+        mission={mission}
+        messages={messages}
+        enableCart={false}
+        isMutating={false}
+        onAddAll={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: /Pro Racket/i })).toBeNull();
+    expect(screen.getByText("Pro Racket")).toBeTruthy();
   });
 });

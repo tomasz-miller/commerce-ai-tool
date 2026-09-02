@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Check, Package, SearchX } from "lucide-react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { Check, Package, SearchX, ShoppingCart } from "lucide-react";
 import type {
   AddToCartLineItem,
   CommerceAISearchMessages,
@@ -13,19 +13,10 @@ export interface MissionResultsProps {
   messages: CommerceAISearchMessages;
   enableCart: boolean;
   isMutating: boolean;
+  addedProductIds?: Record<string, true>;
   onProductSelect?: (product: ProductCard) => void;
+  onAddItem?: (product: ProductCard) => void;
   onAddAll: (items: AddToCartLineItem[]) => Promise<unknown>;
-}
-
-function defaultSelection(mission: MissionSearchResult): Record<string, string> {
-  const selected: Record<string, string> = {};
-  for (const group of mission.intents) {
-    const first = group.products[0];
-    if (first) {
-      selected[group.intent.id] = first.id;
-    }
-  }
-  return selected;
 }
 
 function toCartItem(product: ProductCard, quantity: number): AddToCartLineItem {
@@ -34,57 +25,102 @@ function toCartItem(product: ProductCard, quantity: number): AddToCartLineItem {
     : { productId: product.id, variantId: product.variantId, quantity };
 }
 
+function lineItemKey(item: AddToCartLineItem): string {
+  if (item.sku) {
+    return `sku:${item.sku}`;
+  }
+  return `id:${item.productId ?? ""}:${item.variantId ?? ""}`;
+}
+
+function starterBundleItems(mission: MissionSearchResult): AddToCartLineItem[] {
+  const items: AddToCartLineItem[] = [];
+  const seen = new Set<string>();
+  for (const group of mission.intents) {
+    if (group.failed) {
+      continue;
+    }
+    const product = group.products[0];
+    if (!product || (!product.sku && !product.id)) {
+      continue;
+    }
+    const item = toCartItem(product, 1);
+    const key = lineItemKey(item);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    items.push(item);
+  }
+  return items;
+}
+
+function ProductCardBody({ product }: { product: ProductCard }) {
+  return (
+    <>
+      {product.imageUrl ? (
+        <img src={product.imageUrl} alt="" className="cat-result-image" loading="lazy" />
+      ) : (
+        <div className="cat-result-image cat-result-image--placeholder">
+          <Package size={20} strokeWidth={ICON_STROKE} color="var(--cat-text-muted)" />
+        </div>
+      )}
+      <div className="cat-result-info">
+        <div className="cat-result-name">{product.name}</div>
+        {product.price ? <div className="cat-result-price">{product.price.formatted}</div> : null}
+      </div>
+    </>
+  );
+}
+
 export function MissionResults({
   mission,
   messages,
   enableCart,
   isMutating,
+  addedProductIds,
   onProductSelect,
+  onAddItem,
   onAddAll,
 }: MissionResultsProps) {
-  const [selectedIds, setSelectedIds] = useState<Record<string, string>>(() =>
-    defaultSelection(mission),
-  );
-  const [justAdded, setJustAdded] = useState(false);
+  const titleId = useId();
+  const [justAddedAll, setJustAddedAll] = useState(false);
+  const addedAllTimeoutRef = useRef<number | null>(null);
+  const bundleItems = useMemo(() => starterBundleItems(mission), [mission]);
+  const totalQuantity = bundleItems.reduce((sum, item) => sum + (item.quantity ?? 1), 0);
 
   useEffect(() => {
-    setSelectedIds(defaultSelection(mission));
-    setJustAdded(false);
+    setJustAddedAll(false);
   }, [mission]);
 
-  const selectedItems = useMemo(() => {
-    const items: AddToCartLineItem[] = [];
-    for (const group of mission.intents) {
-      const productId = selectedIds[group.intent.id];
-      const product = group.products.find((item) => item.id === productId);
-      if (!product || (!product.sku && !product.id)) {
-        continue;
+  useEffect(() => {
+    return () => {
+      if (addedAllTimeoutRef.current !== null) {
+        window.clearTimeout(addedAllTimeoutRef.current);
       }
-      items.push(toCartItem(product, group.intent.quantity));
-    }
-    return items;
-  }, [mission.intents, selectedIds]);
-
-  const totalQuantity = selectedItems.reduce((sum, item) => sum + (item.quantity ?? 1), 0);
+    };
+  }, []);
 
   return (
-    <div className="cat-mission" role="list" aria-label={messages.missionTitle}>
+    <div className="cat-mission">
       <div className="cat-mission__header">
-        <h2 className="cat-mission__title">{messages.missionTitle}</h2>
+        <h2 id={titleId} className="cat-mission__title">
+          {messages.missionTitle}
+        </h2>
         {mission.interpretation ? (
           <p className="cat-mission__interpretation">{mission.interpretation}</p>
         ) : null}
       </div>
 
-      {mission.intents.map((group) => {
-        const selectedId = selectedIds[group.intent.id];
-        return (
+      <div className="cat-mission__lanes" role="list" aria-labelledby={titleId}>
+        {mission.intents.map((group) => (
           <section key={group.intent.id} className="cat-mission-group" role="listitem">
             <div className="cat-mission-group__header">
               <h3 className="cat-mission-group__label">{group.intent.label}</h3>
-              <span className="cat-mission-group__qty">
-                {messages.missionQuantity} {group.intent.quantity}
-              </span>
+              {group.intent.quantity > 1 ? (
+                <span className="cat-mission-group__qty">
+                  {messages.missionQuantity} {group.intent.quantity}
+                </span>
+              ) : null}
             </div>
 
             {group.failed ? (
@@ -102,62 +138,45 @@ export function MissionResults({
                 </div>
               </div>
             ) : (
-              <div className="cat-results cat-mission-group__products">
+              <div className="cat-mission-group__products">
                 {group.products.map((product) => {
-                  const selected = product.id === selectedId;
-                  const canSelect = Boolean(product.sku || product.id);
+                  const canAdd = Boolean(product.sku || product.id);
+                  const justAdded = Boolean(addedProductIds?.[product.id]);
+                  const body = <ProductCardBody product={product} />;
                   return (
-                    <article
-                      key={product.id}
-                      className={`cat-result-card${selected ? " cat-result-card--selected" : ""}`}
-                    >
+                    <article key={product.id} className="cat-result-card">
                       <div className="cat-result-card__core">
-                        <button
-                          type="button"
-                          className="cat-result-card__select"
-                          aria-pressed={selected}
-                          aria-label={
-                            selected ? product.name : `${messages.missionSelectProduct}: ${product.name}`
-                          }
-                          disabled={!canSelect}
-                          onClick={() => {
-                            if (selected) {
-                              onProductSelect?.(product);
-                              return;
+                        {onProductSelect ? (
+                          <button
+                            type="button"
+                            className="cat-result-card__select"
+                            onClick={() => onProductSelect(product)}
+                          >
+                            {body}
+                          </button>
+                        ) : (
+                          <div className="cat-result-card__select">{body}</div>
+                        )}
+                        {enableCart ? (
+                          <button
+                            type="button"
+                            className={`cat-icon-btn cat-result-card__add${justAdded ? " cat-result-card__add--added" : ""}`}
+                            aria-label={
+                              justAdded
+                                ? messages.itemAdded
+                                : canAdd
+                                  ? messages.addToCart
+                                  : messages.unableToAddToCart
                             }
-                            setSelectedIds((current) => ({
-                              ...current,
-                              [group.intent.id]: product.id,
-                            }));
-                          }}
-                        >
-                          {product.imageUrl ? (
-                            <img
-                              src={product.imageUrl}
-                              alt=""
-                              className="cat-result-image"
-                              loading="lazy"
-                            />
-                          ) : (
-                            <div className="cat-result-image cat-result-image--placeholder">
-                              <Package
-                                size={20}
-                                strokeWidth={ICON_STROKE}
-                                color="var(--cat-text-muted)"
-                              />
-                            </div>
-                          )}
-                          <div className="cat-result-info">
-                            <div className="cat-result-name">{product.name}</div>
-                            {product.price ? (
-                              <div className="cat-result-price">{product.price.formatted}</div>
-                            ) : null}
-                          </div>
-                        </button>
-                        {selected ? (
-                          <span className="cat-mission-group__check" aria-hidden="true">
-                            <Check size={14} strokeWidth={ICON_STROKE} />
-                          </span>
+                            disabled={!canAdd || isMutating}
+                            onClick={() => onAddItem?.(product)}
+                          >
+                            {justAdded ? (
+                              <Check size={16} strokeWidth={ICON_STROKE} />
+                            ) : (
+                              <ShoppingCart size={16} strokeWidth={ICON_STROKE} />
+                            )}
+                          </button>
                         ) : null}
                       </div>
                     </article>
@@ -166,25 +185,33 @@ export function MissionResults({
               </div>
             )}
           </section>
-        );
-      })}
+        ))}
+      </div>
 
       {enableCart ? (
         <div className="cat-mission__footer">
           <button
             type="button"
-            className={`cat-checkout-cta cat-mission__add-all${justAdded ? " cat-mission__add-all--added" : ""}`}
-            disabled={isMutating || selectedItems.length === 0}
+            className={`cat-checkout-cta cat-mission__add-all${justAddedAll ? " cat-mission__add-all--added" : ""}`}
+            disabled={isMutating || bundleItems.length === 0}
             onClick={() => {
-              void onAddAll(selectedItems).then((result) => {
+              void onAddAll(bundleItems).then((result) => {
                 if (result) {
-                  setJustAdded(true);
-                  window.setTimeout(() => setJustAdded(false), 1200);
+                  setJustAddedAll(true);
+                  if (addedAllTimeoutRef.current !== null) {
+                    window.clearTimeout(addedAllTimeoutRef.current);
+                  }
+                  addedAllTimeoutRef.current = window.setTimeout(() => {
+                    setJustAddedAll(false);
+                    addedAllTimeoutRef.current = null;
+                  }, 1200);
                 }
               });
             }}
           >
-            {justAdded ? messages.missionItemsAdded : `${messages.missionAddAll} (${totalQuantity})`}
+            {justAddedAll
+              ? messages.missionItemsAdded
+              : `${messages.missionAddAll} (${totalQuantity})`}
           </button>
         </div>
       ) : null}

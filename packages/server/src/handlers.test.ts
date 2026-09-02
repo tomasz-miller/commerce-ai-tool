@@ -421,6 +421,52 @@ describe("createHandlers HTTP", () => {
     expect(server.orchestrator.searchByVoice).toHaveBeenCalled();
   });
 
+  it("forwards enableMissions and returns mission from voice search", async () => {
+    const mission = {
+      interpretation: "glasses and table",
+      intents: [
+        {
+          intent: { id: "intent-0", label: "glasses", quantity: 1, searchTerms: ["glasses"] },
+          products: [{ id: "p1", name: "Glass" }],
+          total: 1,
+        },
+      ],
+    };
+    const server = createMockServer();
+    vi.mocked(server.orchestrator.searchByVoice).mockResolvedValue({
+      transcript: "glasses and a coffee table",
+      enhancedQuery: "glasses and coffee table",
+      products: [{ id: "p1", name: "Glass" }],
+      meta: {
+        total: 1,
+        limit: 20,
+        offset: 0,
+        locale: "en",
+        catalogLocale: "en",
+        queryLocale: "en",
+      },
+      mission,
+    });
+    const app = createTestApp(createHandlers(server));
+
+    const response = await request(app)
+      .post("/search/voice")
+      .field("enableTts", "false")
+      .field("enableMissions", "true")
+      .attach("audio", Buffer.from("voice-data"), {
+        filename: "clip.webm",
+        contentType: "audio/webm",
+      })
+      .expect(200);
+
+    expect(response.body.mission).toEqual(mission);
+    expect(server.orchestrator.searchByVoice).toHaveBeenCalledWith(
+      expect.any(Uint8Array),
+      "audio/webm",
+      expect.objectContaining({ enableMissions: true, enableTts: false }),
+    );
+  });
+
   it("express routes reject voice search without audio", async () => {
     const app = createTestApp(createHandlers(createMockServer()));
 

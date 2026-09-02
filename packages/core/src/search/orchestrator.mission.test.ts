@@ -255,3 +255,121 @@ describe("createSearchOrchestrator.searchByText missions", () => {
     expect(missionResult.mission?.intents).toHaveLength(2);
   });
 });
+
+describe("createSearchOrchestrator.searchByVoice missions", () => {
+  it("decomposes a spoken compound query into intent groups", async () => {
+    const searchProducts = vi
+      .fn()
+      .mockResolvedValueOnce({
+        productIds: ["p1"],
+        total: 3,
+        projections: [{ id: "p1", name: "Glass" }],
+      })
+      .mockResolvedValueOnce({
+        productIds: ["p2"],
+        total: 2,
+        projections: [{ id: "p2", name: "Table" }],
+      });
+    const ct = createMockCommercetoolsClient({ searchProducts });
+    const ai = createMockAi({
+      interpretVoiceAudio: vi.fn().mockResolvedValue({
+        transcript: "I am looking for some glasses and a coffee table",
+        enhancedQuery: "glasses and coffee table",
+        searchTerms: ["glasses", "coffee table"],
+        interpretation: "glasses and coffee table",
+        filters: {},
+      }),
+      decomposeShoppingMission: vi.fn().mockResolvedValue(twoIntents),
+    });
+    const orchestrator = createSearchOrchestrator({
+      config: { ...baseConfig, missions: { enabled: true, perIntentLimit: 4 } },
+      commercetoolsClient: ct,
+      aiProvider: ai as never,
+    });
+
+    const result = await orchestrator.searchByVoice(new Uint8Array([1, 2, 3]), "audio/webm", {
+      enableTts: false,
+    });
+
+    expect(ai.interpretVoiceAudio).toHaveBeenCalledOnce();
+    expect(ai.decomposeShoppingMission).toHaveBeenCalledWith(
+      "glasses and coffee table",
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(searchProducts).toHaveBeenCalledTimes(2);
+    expect(result.mission?.intents).toHaveLength(2);
+    expect(result.products.map((product) => product.id)).toEqual(["p1", "p2"]);
+  });
+
+  it("does not decompose when missions are off", async () => {
+    const searchProducts = vi.fn().mockResolvedValue({
+      productIds: ["p1"],
+      total: 1,
+      projections: [{ id: "p1", name: "Sports" }],
+    });
+    const ct = createMockCommercetoolsClient({ searchProducts });
+    const ai = createMockAi({
+      interpretVoiceAudio: vi.fn().mockResolvedValue({
+        transcript: "glasses and a coffee table",
+        enhancedQuery: "glasses and coffee table",
+        searchTerms: ["glasses", "coffee table"],
+        interpretation: "glasses and coffee table",
+        filters: {},
+      }),
+    });
+    const orchestrator = createSearchOrchestrator({
+      config: baseConfig,
+      commercetoolsClient: ct,
+      aiProvider: ai as never,
+    });
+
+    const result = await orchestrator.searchByVoice(new Uint8Array([1]), "audio/webm", {
+      enableTts: false,
+    });
+
+    expect(ai.decomposeShoppingMission).not.toHaveBeenCalled();
+    expect(result.mission).toBeUndefined();
+  });
+});
+
+describe("createSearchOrchestrator.searchByImage missions", () => {
+  it("decomposes a vision interpretation into intent groups", async () => {
+    const searchProducts = vi
+      .fn()
+      .mockResolvedValueOnce({
+        productIds: ["p1"],
+        total: 1,
+        projections: [{ id: "p1", name: "Glass" }],
+      })
+      .mockResolvedValueOnce({
+        productIds: ["p2"],
+        total: 1,
+        projections: [{ id: "p2", name: "Table" }],
+      });
+    const ct = createMockCommercetoolsClient({ searchProducts });
+    const ai = createMockAi({
+      interpretImageQuery: vi.fn().mockResolvedValue({
+        searchTerms: ["glasses", "coffee table"],
+        interpretation: "glasses and a coffee table",
+        filters: {},
+      }),
+      decomposeShoppingMission: vi.fn().mockResolvedValue(twoIntents),
+    });
+    const orchestrator = createSearchOrchestrator({
+      config: { ...baseConfig, missions: { enabled: true } },
+      commercetoolsClient: ct,
+      aiProvider: ai as never,
+    });
+
+    const result = await orchestrator.searchByImage(new Uint8Array([1, 2, 3]), "image/jpeg");
+
+    expect(ai.interpretImageQuery).toHaveBeenCalledOnce();
+    expect(ai.decomposeShoppingMission).toHaveBeenCalledWith(
+      "glasses and a coffee table",
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(result.mission?.intents).toHaveLength(2);
+  });
+});

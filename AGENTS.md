@@ -183,7 +183,7 @@ Canonical docs: [`docs/README.md`](docs/README.md). Read the relevant page befor
 | Cart, payments, orders | [docs/cart-and-checkout.md](docs/cart-and-checkout.md) |
 | `CAT_DEBUG` / Langfuse | [docs/observability.md](docs/observability.md) |
 
-Hard rules that still belong here: secrets never in the browser; widget modalities (`enableVoice`, `enableCameraSearch`, `enableImageSearch`) must not gate one another; `searchTerms` are catalog-language phrases, never split words.
+Hard rules that still belong here: secrets never in the browser; widget modalities (`enableVoice`, `enableCameraSearch`, `enableImageSearch`) must not gate one another; `searchTerms` are catalog-language phrases, never split words; shopping missions cover text, voice, and image (Angular mission UI is deferred).
 
 ## Key config files
 

@@ -84,6 +84,8 @@ export interface UseCommerceAISearchReturn {
   refine?: (query: string) => Promise<void>;
   /** Clear session and run a fresh AI search with the current query. */
   startNewSearch?: () => Promise<void>;
+  /** Apply a search payload (text, voice, or image) and clear the facet session for missions. */
+  applySearchResult: (data: SearchResult, queryOverride?: string) => void;
   clear: () => void;
 }
 
@@ -431,6 +433,9 @@ export function useCommerceAISearch(
         const formData = new FormData();
         formData.append("image", file);
         appendLocaleFields(formData, { queryLocale, catalogLocale, locale });
+        if (enableMissions) {
+          formData.append("enableMissions", "true");
+        }
 
         const response = await fetch(`${baseUrl}/search/image`, {
           method: "POST",
@@ -443,9 +448,7 @@ export function useCommerceAISearch(
         }
 
         const data = (await response.json()) as SearchResult & { interpretation?: string };
-        setResults(data.products);
-        setMission(null);
-        setMeta(data.meta);
+        applySearchResult(data, data.interpretation);
         if (data.interpretation) {
           setQueryState(data.interpretation);
         }
@@ -459,7 +462,7 @@ export function useCommerceAISearch(
         setHasSearched(true);
       }
     },
-    [baseUrl, catalogLocale, locale, queryLocale],
+    [applySearchResult, baseUrl, catalogLocale, enableMissions, locale, queryLocale],
   );
 
   const setQuery = useCallback(
@@ -558,6 +561,7 @@ export function useCommerceAISearch(
     refineFilters,
     refine,
     startNewSearch,
+    applySearchResult,
     clear,
   };
 }

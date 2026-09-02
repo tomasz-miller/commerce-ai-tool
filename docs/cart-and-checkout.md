@@ -58,7 +58,7 @@ Order creation and payment authorization are rate-limited (20 attempts per 15 mi
 - **Customer** — HMAC session token (`commerce-ai-tool:customerSession`) signed with `CAT_CART_SESSION_SECRET` (falls back to `CTP_CLIENT_SECRET`). A valid token wins over `anonymousId`. `GET /cart` sends it as `x-commerce-ai-cart-session` (never as a query parameter); mutations send `sessionToken` in the JSON body.
 - **Login** — commercetools `POST /{projectKey}/login` with `anonymousCartSignInMode: MergeWithExistingCustomerCart`. A client `cartId` is merged only after the cart is loaded and `cart.anonymousId` matches the request `anonymousId`. Passwords are never logged or sent to Langfuse. Catalog `storeKey` is not applied to login (cart CRUD is project-scoped). Manual testing needs a Customer account in the project (do not commit passwords).
 - **Logout** — token is dropped and a new guest `anonymousId` is created (stateless `POST /cart/logout`).
-- **Batch add** — `POST /cart/add-items` adds 1–20 line items in one Cart update (mission “Add all”).
+- **Batch add** — `POST /cart/add-items` adds 1–20 line items in one Cart update (mission “Add all”, first product per filled lane at quantity 1). Per-card add uses `POST /cart/add`.
 
 ## Payments
 
