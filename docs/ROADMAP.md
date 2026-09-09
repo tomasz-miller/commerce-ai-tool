@@ -2,6 +2,8 @@
 
 Shipped versions and remaining work. [Documentation index](README.md).
 
+Open TODOs are tracked as GitHub Issues: https://github.com/tomasz-miller/commerce-ai-tool/issues. Each unchecked item below must have a matching open issue.
+
 ## v1.0
 
 - [x] Product search via commercetools Product Search API
@@ -91,7 +93,7 @@ Integrate [Langfuse](https://langfuse.com) for every AI step in the search pipel
 - [x] Trace metadata: `queryLocale`, `catalogLocale`, search type, commercetools `projectKey`, model id
 - [x] Instrument all `AIProvider` methods: `interpretTextQuery`, `interpretImageQuery`, `enhanceVoiceTranscript`, `summarizeVoiceResults`, `suggestSearchTerms`
 - [x] Link server voice handler span to core child spans (single trace id returned optionally in dev)
-- [x] Document setup in `.env.example` and [observability](observability.md); note relationship to existing `CAT_DEBUG` dev tracing
+- [x] Document setup in `.env.example` and [observability](OBSERVABILITY.md); note relationship to existing `CAT_DEBUG` dev tracing
 - [x] Optional: Langfuse prompt labels synced with `packages/core/src/prompts` for managed prompts (`LANGFUSE_PROMPTS`, `pnpm sync:langfuse-prompts`)
 
 ## v1.3 — Cart
@@ -135,5 +137,11 @@ Keep Product Search API (REST) for search and facets. Use GraphQL only to fetch 
 
 ## v2.4 — Mission surfaces (current)
 
-- [ ] Angular widget grouped mission results and batched add-to-cart
+- [x] Angular widget grouped mission results and batched add-to-cart
 - [x] Voice (and optionally image) shopping-mission decomposition
+
+## v2.5 — Angular demo host (planned)
+
+Local `pnpm dev` still runs the React host (`apps/demo-next`). An Angular host is not required for the v2.4 widget work.
+
+- [ ] Add `apps/demo-angular` (or equivalent) that mounts `@commerce-ai-tool/angular` against the same `/api/commerce-ai` BFF as `demo-next` ([#18](https://github.com/tomasz-miller/commerce-ai-tool/issues/18))
