@@ -4,6 +4,9 @@ import {
   ElementRef,
   EventEmitter,
   Input,
+  OnChanges,
+  OnDestroy,
+  OnInit,
   Output,
   ViewChild,
   ViewEncapsulation,
@@ -11,21 +14,29 @@ import {
 } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import type {
+  AddToCartLineItem,
+  CartSnapshot,
   CommerceAISearchMessages,
   InterpretedSearchFilters,
+  MissionSearchResult,
   ProductCard,
   SearchFacetGroup,
+  SearchResult,
   SuggestedFacet,
   ThemeMode,
 } from "@commerce-ai-tool/core";
 import {
   hexColorSwatchValue,
   isColorLikeFacetName,
-  resolveCommerceAISearchMessages,
   isFacetFilterSelected,
+  looksLikeCompoundShoppingList,
+  resolveCommerceAISearchMessages,
   toggleFacetFilter,
 } from "@commerce-ai-tool/core";
 import { CommerceAiApiService } from "./commerce-ai-api.service.js";
+import { CommerceAiCartPanelComponent } from "./commerce-ai-cart-panel.component.js";
+import { CommerceAiCartService } from "./commerce-ai-cart.service.js";
+import { CommerceAiMissionResultsComponent } from "./commerce-ai-mission-results.component.js";
 import {
   buildCameraConstraints,
   createJpegFileFromVideo,
@@ -34,16 +45,24 @@ import {
   stopMediaStream,
   type CameraFacingMode,
 } from "./camera.util.js";
+import { toCartItem } from "./mission.util.js";
 
 type SearchMode = "text" | "image" | "voice" | null;
 
 @Component({
   selector: "commerce-ai-search",
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, CommerceAiMissionResultsComponent, CommerceAiCartPanelComponent],
+  providers: [CommerceAiCartService],
   template: `
     <div
       class="cat-root cat-wrapper"
+      [class.cat-root--mission]="showMissionVisible"
+      [class.cat-root--mission-lanes-1]="missionLaneCount === 1"
+      [class.cat-root--mission-lanes-2]="missionLaneCount === 2"
+      [class.cat-root--mission-lanes-3]="missionLaneCount === 3"
+      [class.cat-root--mission-lanes-4]="missionLaneCount === 4"
+      [class.cat-root--mission-lanes-5]="missionLaneCount >= 5"
       [attr.data-theme]="theme"
       role="search"
       [attr.aria-label]="resolvedMessages.productSearchAriaLabel"
@@ -167,6 +186,27 @@ type SearchMode = "text" | "image" | "voice" | null;
           </button>
         }
 
+        @if (enableCart) {
+          <button
+            type="button"
+            class="cat-icon-btn cat-cart-toggle"
+            [class.cat-cart-toggle--open]="cart.isCartOpen()"
+            [attr.aria-label]="cartAriaLabel"
+            [attr.aria-expanded]="cart.isCartOpen()"
+            [attr.aria-pressed]="cart.isCartOpen()"
+            (click)="cart.toggleCart()"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <circle cx="8" cy="21" r="1" />
+              <circle cx="19" cy="21" r="1" />
+              <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" />
+            </svg>
+            @if (cartQuantity > 0) {
+              <span class="cat-cart-badge" aria-hidden="true">{{ cartBadgeLabel }}</span>
+            }
+          </button>
+        }
+
         @if (showSuggestions) {
           <div
             id="cat-suggestions-listbox"
@@ -253,7 +293,26 @@ type SearchMode = "text" | "image" | "voice" | null;
         </div>
       }
 
-      @if (enableFacets && lastSearchMode === "text" && hasSearched && facets.length) {
+      @if (enableCart && cart.isCartOpen()) {
+        <commerce-ai-cart-panel
+          [cart]="cart.cart()"
+          [customer]="cart.customer()"
+          [isLoading]="cart.isLoading() || cart.isMutating()"
+          [isLoggingIn]="cart.isLoggingIn()"
+          [error]="cart.error()"
+          [messages]="resolvedMessages"
+          [catalogLocale]="catalogLocale"
+          [showCheckout]="checkout.observed"
+          (close)="cart.closeCart()"
+          (remove)="onCartRemove($event)"
+          (quantityChange)="onCartQuantityChange($event)"
+          (login)="onCartLogin($event)"
+          (logout)="onCartLogout()"
+          (checkout)="checkout.emit($event)"
+        />
+      }
+
+      @if (enableFacets && lastSearchMode === "text" && hasSearched && facets.length && !showMission) {
         <section class="cat-facets" [attr.aria-label]="resolvedMessages.filtersAriaLabel">
           <div class="cat-facets__header">
             <span>{{ resolvedMessages.narrowResults }}</span>
@@ -292,37 +351,75 @@ type SearchMode = "text" | "image" | "voice" | null;
         </section>
       }
 
-      @if (showResults) {
-        <div class="cat-results" role="listbox" [attr.aria-label]="resolvedMessages.searchResultsAriaLabel">
-          @if (isLoading) {
-            <div class="cat-status">{{ resolvedMessages.searching }}</div>
-          }
-          @if (error) {
-            <div class="cat-status cat-status--error">{{ error }}</div>
-          }
+      @if (showResults && isLoading) {
+        <div class="cat-status">{{ resolvedMessages.searching }}</div>
+      }
+      @if (showResults && error) {
+        <div class="cat-status cat-status--error">{{ error }}</div>
+      }
 
+      @if (!isLoading && !error && showResults && showMission && mission) {
+        <commerce-ai-mission-results
+          [mission]="mission"
+          [messages]="resolvedMessages"
+          [enableCart]="enableCart"
+          [isMutating]="cart.isMutating()"
+          [addedProductIds]="addedProductIds"
+          [addAllHandler]="addMissionItems"
+          (productSelect)="productSelect.emit($event)"
+          (addItem)="onAddItem($event)"
+        />
+      }
+
+      @if (showResults && !showMission && !isLoading && !error) {
+        <div
+          class="cat-results"
+          role="listbox"
+          [attr.aria-label]="resolvedMessages.searchResultsAriaLabel"
+        >
           @for (product of results; track product.id) {
-            <button
-              type="button"
-              class="cat-result-item"
-              role="option"
-              (click)="productSelect.emit(product)"
-            >
-              @if (product.imageUrl) {
-                <img [src]="product.imageUrl" alt="" class="cat-result-image" loading="lazy" />
-              } @else {
-                <div class="cat-result-image cat-result-image--placeholder">📦</div>
-              }
-              <div class="cat-result-info">
-                <div class="cat-result-name">{{ product.name }}</div>
-                @if (product.price) {
-                  <div class="cat-result-price">{{ product.price.formatted }}</div>
+            <article class="cat-result-card">
+              <div class="cat-result-card__core">
+                <button type="button" class="cat-result-card__select" (click)="productSelect.emit(product)">
+                  @if (product.imageUrl) {
+                    <img [src]="product.imageUrl" alt="" class="cat-result-image" loading="lazy" />
+                  } @else {
+                    <div class="cat-result-image cat-result-image--placeholder">📦</div>
+                  }
+                  <div class="cat-result-info">
+                    <div class="cat-result-name">{{ product.name }}</div>
+                    @if (product.price) {
+                      <div class="cat-result-price">{{ product.price.formatted }}</div>
+                    }
+                  </div>
+                </button>
+                @if (enableCart) {
+                  <button
+                    type="button"
+                    class="cat-icon-btn cat-result-card__add"
+                    [class.cat-result-card__add--added]="addedProductIds[product.id]"
+                    [attr.aria-label]="addToCartLabel(product)"
+                    [disabled]="!(product.sku || product.id) || cart.isMutating()"
+                    (click)="onAddItem(product)"
+                  >
+                    @if (addedProductIds[product.id]) {
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <path d="M20 6 9 17l-5-5" />
+                      </svg>
+                    } @else {
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <circle cx="8" cy="21" r="1" />
+                        <circle cx="19" cy="21" r="1" />
+                        <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" />
+                      </svg>
+                    }
+                  </button>
                 }
               </div>
-            </button>
+            </article>
           }
 
-          @if (!isLoading && !error && results.length === 0 && hasSearched && query.trim()) {
+          @if (results.length === 0 && hasSearched && query.trim()) {
             <div class="cat-status cat-status--empty" role="status" aria-live="polite">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <circle cx="11" cy="11" r="8" />
@@ -346,9 +443,10 @@ type SearchMode = "text" | "image" | "voice" | null;
   `,
   encapsulation: ViewEncapsulation.None,
 })
-export class CommerceAiSearchComponent {
+export class CommerceAiSearchComponent implements OnInit, OnChanges, OnDestroy {
   private readonly api = inject(CommerceAiApiService);
   private readonly cdr = inject(ChangeDetectorRef);
+  readonly cart = inject(CommerceAiCartService);
 
   @Input() apiBaseUrl = "/api/commerce-ai";
   @Input() theme: ThemeMode = "auto";
@@ -368,8 +466,20 @@ export class CommerceAiSearchComponent {
   @Input() enableCameraSearch = true;
   @Input() cameraFacingMode: CameraFacingMode = "environment";
   @Input() enableTts = true;
+  /** Enable built-in add-to-cart buttons and cart preview panel. Default false. */
+  @Input() enableCart = false;
+  /** Enable multi-item shopping missions on text, voice, and image search. Default false. */
+  @Input() enableMissions = false;
+  /** Currency for cart creation. Required when `enableCart` is true unless the server has a default. */
+  @Input() currency?: string;
+  /** Optional ISO country code used for commercetools price selection. */
+  @Input() country?: string;
 
   @Output() productSelect = new EventEmitter<ProductCard>();
+  /** Fires after every cart fetch or mutation when `enableCart` is true. */
+  @Output() cartChange = new EventEmitter<CartSnapshot | null>();
+  /** Opens the host-owned checkout route for the current non-empty cart. */
+  @Output() checkout = new EventEmitter<CartSnapshot>();
 
   @ViewChild("cameraInput") cameraInputRef?: ElementRef<HTMLInputElement>;
   @ViewChild("cameraVideo") cameraVideoRef?: ElementRef<HTMLVideoElement>;
@@ -382,6 +492,9 @@ export class CommerceAiSearchComponent {
   suggestionsReady = false;
   suggestionsDismissed = false;
   results: ProductCard[] = [];
+  mission: MissionSearchResult | null = null;
+  hasFacetSession = false;
+  addedProductIds: Record<string, true> = {};
   meta: {
     queryInterpretation?: string;
     searchTerms?: string[];
@@ -409,6 +522,26 @@ export class CommerceAiSearchComponent {
   private suggestionsAbort: AbortController | null = null;
   private searchRequestId = 0;
   private suggestionsRequestId = 0;
+  private addedTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
+
+  readonly addMissionItems = (items: AddToCartLineItem[]) => this.cart.addItems(items);
+
+  ngOnInit(): void {
+    this.syncCart();
+  }
+
+  ngOnChanges(): void {
+    this.syncCart();
+  }
+
+  ngOnDestroy(): void {
+    for (const timeout of this.addedTimeouts.values()) {
+      clearTimeout(timeout);
+    }
+    this.closeCamera();
+    this.searchAbort?.abort();
+    this.suggestionsAbort?.abort();
+  }
 
   get resolvedMessages(): CommerceAISearchMessages {
     return resolveCommerceAISearchMessages({
@@ -436,14 +569,52 @@ export class CommerceAiSearchComponent {
       : null;
   }
 
+  get showMission(): boolean {
+    return Boolean(this.mission);
+  }
+
+  get showMissionVisible(): boolean {
+    return this.showMission && !this.isLoading && !this.error;
+  }
+
+  get missionLaneCount(): number {
+    if (!this.showMissionVisible) {
+      return 0;
+    }
+    return Math.min(Math.max(this.mission?.intents.length ?? 1, 1), 5);
+  }
+
+  get cartQuantity(): number {
+    return this.cart.cart()?.totalQuantity ?? 0;
+  }
+
+  get cartBadgeLabel(): string {
+    return this.cartQuantity > 99 ? "99+" : String(this.cartQuantity);
+  }
+
+  get cartAriaLabel(): string {
+    return this.cartQuantity > 0
+      ? `${this.resolvedMessages.cartAriaLabel} (${this.cartBadgeLabel})`
+      : this.resolvedMessages.cartAriaLabel;
+  }
+
   get showResults(): boolean {
     const hasQuery = this.query.trim().length > 0;
     const showEmptyResults =
-      !this.isLoading && !this.error && this.hasSearched && this.results.length === 0 && hasQuery;
+      !this.isLoading &&
+      !this.error &&
+      this.hasSearched &&
+      this.results.length === 0 &&
+      !this.showMission &&
+      hasQuery;
 
     return (
       hasQuery &&
-      (this.results.length > 0 || this.isLoading || !!this.error || showEmptyResults)
+      (this.results.length > 0 ||
+        this.isLoading ||
+        !!this.error ||
+        showEmptyResults ||
+        this.showMission)
     );
   }
 
@@ -478,6 +649,7 @@ export class CommerceAiSearchComponent {
     if (this.enableAutocomplete) {
       // Hide previous results so autocomplete can show while typing after a search.
       this.results = [];
+      this.mission = null;
       this.error = null;
       this.isLoading = false;
       this.hasSearched = false;
@@ -489,6 +661,7 @@ export class CommerceAiSearchComponent {
     this.isLoading = true;
     this.error = null;
     this.results = [];
+    this.mission = null;
     this.meta = null;
     this.debounceTimer = setTimeout(() => this.onSubmit(), 250);
   }
@@ -582,6 +755,8 @@ export class CommerceAiSearchComponent {
       this.suggestionsTimer = null;
     }
     this.results = [];
+    this.mission = null;
+    this.hasFacetSession = false;
     this.meta = null;
     this.error = null;
     this.isLoading = false;
@@ -645,17 +820,16 @@ export class CommerceAiSearchComponent {
     this.isLoading = true;
     this.error = null;
     this.results = [];
+    this.mission = null;
 
     void this.api
       .search(this.apiBaseUrl, q, this.localeFields, controller.signal, {
         includeFacets: this.enableFacets,
+        ...(this.enableMissions ? { enableMissions: true } : {}),
       })
       .then((data) => {
         if (requestId !== this.searchRequestId) return;
-        this.results = data.products;
-        this.meta = data.meta;
-        this.facets = data.facets ?? [];
-        this.suggestedFacets = data.suggestedFacets ?? [];
+        this.applySearchResult(data);
         this.isLoading = false;
         this.hasSearched = true;
         this.cdr.detectChanges();
@@ -665,6 +839,8 @@ export class CommerceAiSearchComponent {
         if (requestId !== this.searchRequestId) return;
         this.error = err.message;
         this.results = [];
+        this.mission = null;
+        this.hasFacetSession = false;
         this.meta = null;
         this.isLoading = false;
         this.hasSearched = true;
@@ -691,10 +867,7 @@ export class CommerceAiSearchComponent {
       })
       .then((data) => {
         if (requestId !== this.searchRequestId) return;
-        this.results = data.products;
-        this.meta = data.meta;
-        this.facets = data.facets ?? [];
-        this.suggestedFacets = data.suggestedFacets ?? [];
+        this.applySearchResult(data);
         this.isLoading = false;
         this.hasSearched = true;
         this.cdr.detectChanges();
@@ -733,10 +906,14 @@ export class CommerceAiSearchComponent {
     this.isLoading = true;
     this.error = null;
     this.results = [];
+    this.mission = null;
     const previousMeta = this.meta;
     this.meta = null;
 
-    const isRefinement = this.enableFacets && Boolean(previousMeta?.searchTerms);
+    const isRefinement =
+      this.enableFacets &&
+      this.hasFacetSession &&
+      !(this.enableMissions && looksLikeCompoundShoppingList(q));
     void this.api.search(
       this.apiBaseUrl,
       isRefinement ? previousMeta?.queryInterpretation ?? q : q,
@@ -750,14 +927,14 @@ export class CommerceAiSearchComponent {
             suggestedFacets: this.suggestedFacets,
             includeFacets: true,
           }
-        : { includeFacets: this.enableFacets },
+        : {
+            includeFacets: this.enableFacets,
+            ...(this.enableMissions ? { enableMissions: true } : {}),
+          },
     ).then(
       (data) => {
         if (requestId !== this.searchRequestId) return;
-        this.results = data.products;
-        this.meta = data.meta;
-        this.facets = data.facets ?? [];
-        this.suggestedFacets = data.suggestedFacets ?? [];
+        this.applySearchResult(data);
         this.isLoading = false;
         this.hasSearched = true;
       },
@@ -766,6 +943,8 @@ export class CommerceAiSearchComponent {
         if (requestId !== this.searchRequestId) return;
         this.error = err.message;
         this.results = [];
+        this.mission = null;
+        this.hasFacetSession = false;
         this.meta = null;
         this.isLoading = false;
         this.hasSearched = true;
@@ -881,12 +1060,12 @@ export class CommerceAiSearchComponent {
     this.isLoading = true;
     this.error = null;
     this.results = [];
+    this.mission = null;
     this.meta = null;
 
-    void this.api.searchByImage(this.apiBaseUrl, file, this.localeFields).then(
+    void this.api.searchByImage(this.apiBaseUrl, file, this.localeFields, this.enableMissions).then(
       (data) => {
-        this.results = data.products;
-        this.meta = data.meta;
+        this.applySearchResult(data);
         if (data.interpretation) this.query = data.interpretation;
         this.isLoading = false;
         this.hasSearched = true;
@@ -922,12 +1101,15 @@ export class CommerceAiSearchComponent {
         this.clearVoiceAudio();
 
         void this.api
-          .searchByVoice(this.apiBaseUrl, blob, this.localeFields, this.enableTts)
+          .searchByVoice(this.apiBaseUrl, blob, this.localeFields, this.enableTts, this.enableMissions)
           .then(async (data) => {
             this.lastSearchMode = "voice";
             this.query = data.transcript;
-            this.results = data.products;
-            this.meta = data.meta;
+            this.applySearchResult({
+              products: data.products,
+              meta: data.meta,
+              mission: data.mission,
+            });
             this.error = null;
             this.hasSearched = true;
             if (data.audioSummary) {
@@ -971,6 +1153,80 @@ export class CommerceAiSearchComponent {
 
     const audio = new Audio(`data:audio/mpeg;base64,${this.audioSummary}`);
     void audio.play();
+  }
+
+  addToCartLabel(product: ProductCard): string {
+    if (this.addedProductIds[product.id]) {
+      return this.resolvedMessages.itemAdded;
+    }
+    return product.sku || product.id
+      ? this.resolvedMessages.addToCart
+      : this.resolvedMessages.unableToAddToCart;
+  }
+
+  onAddItem(product: ProductCard): void {
+    void this.handleAddToCart(product);
+  }
+
+  onCartRemove(lineItemId: string): void {
+    void this.cart.removeFromCart(lineItemId);
+  }
+
+  onCartQuantityChange(event: { lineItemId: string; quantity: number }): void {
+    void this.cart.updateQuantity(event.lineItemId, event.quantity);
+  }
+
+  onCartLogin(input: { email: string; password: string }): void {
+    void this.cart.login(input);
+  }
+
+  onCartLogout(): void {
+    void this.cart.logout();
+  }
+
+  private applySearchResult(data: Pick<SearchResult, "products" | "meta" | "mission" | "facets" | "suggestedFacets">): void {
+    this.results = data.products;
+    this.mission = data.mission ?? null;
+    this.meta = data.meta;
+    this.facets = data.facets ?? [];
+    this.suggestedFacets = data.suggestedFacets ?? [];
+    this.hasFacetSession = !data.mission && this.enableFacets && Boolean(data.meta.searchTerms);
+  }
+
+  private syncCart(): void {
+    this.cart.configure({
+      apiBaseUrl: this.apiBaseUrl,
+      currency: this.currency,
+      country: this.country,
+      catalogLocale: this.catalogLocale,
+      enabled: this.enableCart,
+      onCartChange: (snapshot) => this.cartChange.emit(snapshot),
+    });
+  }
+
+  private async handleAddToCart(product: ProductCard): Promise<void> {
+    if (!product.sku && !product.id) {
+      return;
+    }
+    const next = await this.cart.addToCart(toCartItem(product, 1));
+    if (!next) {
+      return;
+    }
+    this.addedProductIds = { ...this.addedProductIds, [product.id]: true };
+    const existing = this.addedTimeouts.get(product.id);
+    if (existing) {
+      clearTimeout(existing);
+    }
+    this.addedTimeouts.set(
+      product.id,
+      setTimeout(() => {
+        const { [product.id]: _removed, ...rest } = this.addedProductIds;
+        this.addedProductIds = rest;
+        this.addedTimeouts.delete(product.id);
+        this.cdr.detectChanges();
+      }, 1200),
+    );
+    this.cdr.detectChanges();
   }
 
   private clearVoiceAudio(): void {

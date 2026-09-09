@@ -2,7 +2,7 @@
 
 Locales, models, and environment variables. Host apps load secrets with `loadConfigFromEnv()` on the server.
 
-[Documentation index](README.md) · [Getting started](getting-started.md) · [Search pipeline](search-pipeline.md)
+[Documentation index](README.md) · [Getting started](GETTING-STARTED.md) · [Search pipeline](SEARCH-PIPELINE.md)
 
 ## Locales
 
@@ -17,7 +17,7 @@ Set `CAT_CATALOG_LOCALE` to a locale that exists on products (for example `en-GB
 
 `CAT_DEFAULT_LOCALE` is a deprecated alias for `CAT_CATALOG_LOCALE`.
 
-Resolver: `packages/core/src/locale/resolve.ts`. Pipeline details: [search pipeline](search-pipeline.md).
+Resolver: `packages/core/src/locale/resolve.ts`. Pipeline details: [search pipeline](SEARCH-PIPELINE.md).
 
 ## Default OpenRouter models
 
@@ -54,7 +54,7 @@ See [`apps/demo-next/.env.example`](../apps/demo-next/.env.example) for the copy
 | `CAT_CART_SESSION_SECRET` | HMAC secret for customer cart session tokens (optional; falls back to `CTP_CLIENT_SECRET`. Use a dedicated secret in production) |
 | `CAT_STORE_KEY` | Reserved for future store-scoped search (not applied until store scope is enabled in core) |
 | `CAT_DEBUG=true` | Structured console tracing for search and commercetools calls |
-| `LANGFUSE_*` | Opt-in AI observability — [observability](observability.md) |
+| `LANGFUSE_*` | Opt-in AI observability — [observability](OBSERVABILITY.md) |
 | `CAT_CACHE_ENABLED=true` | In-memory response cache (per server process) |
 | `CAT_CACHE_TTL_MS` | Cache TTL (default `60000`) |
 | `CAT_CACHE_MAX_ENTRIES` | Max cached entries per process (default `500`) |
@@ -76,7 +76,7 @@ Set `enableFacets` on the widget (or `CAT_FACETS_ENABLED` on the server). The pi
 
 Set `enableMissions` on the React widget or `CAT_MISSIONS_ENABLED=true` on the server. Config on `CommerceAIConfig.missions`: `enabled` (default `false`), `maxIntents` (5), `perIntentLimit` (4), `minConfidence` (0.6). The widget sends `enableMissions: true` as a per-request override on text, voice, and image search. Results render as intent lanes: the search control stays at about 46rem. One or two intents keep the mission canvas at that same width so product cards stay compact; three or more intents grow the canvas up to 72rem and fill it. Lanes stack in a single column below about 42rem of widget width and sit side by side when 16rem columns fit. The first product in each lane is the primary card; later matches render as compact alternatives. The footer CTA adds those primary picks (not every card in the lanes). With missions on, Enter starts a fresh search when the query looks like a compound shopping list; otherwise a facet session still refines (for example “taller glasses”). Facet chips always refine. Below 36rem, voice, camera, and image actions wrap under the query field so the input and cart stay full-width.
 
-How compound queries are split and searched: [search pipeline](search-pipeline.md#worked-example-compound-shopping-list). Angular mission UI is not in this release.
+How compound queries are split and searched: [search pipeline](SEARCH-PIPELINE.md#worked-example-compound-shopping-list). React and Angular widgets both render grouped mission lanes and batch add-to-cart.
 
 ## Autocomplete (`searchKeywords`)
 

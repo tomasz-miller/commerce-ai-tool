@@ -18,13 +18,13 @@ Browser Widget  →  Host /api/commerce-ai/*  →  AI + ElevenLabs + commercetoo
 
 | | |
 |--|--|
-| [Getting started](./docs/getting-started.md) | Install, routes, React / Angular / Express |
-| [Configuration](./docs/configuration.md) | Locales, env vars, facets, missions |
-| [Search pipeline](./docs/search-pipeline.md) | LLM interpretation and Product Search |
-| [Cart and checkout](./docs/cart-and-checkout.md) | Cart, payments, orders |
-| [Observability](./docs/observability.md) | `CAT_DEBUG`, Langfuse |
-| [Development](./docs/development.md) | Commands, evals, publishing |
-| [Roadmap](./docs/roadmap.md) | Shipped versions and current work |
+| [Getting started](./docs/GETTING-STARTED.md) | Install, routes, React / Angular / Express |
+| [Configuration](./docs/CONFIGURATION.md) | Locales, env vars, facets, missions |
+| [Search pipeline](./docs/SEARCH-PIPELINE.md) | LLM interpretation and Product Search |
+| [Cart and checkout](./docs/CART-AND-CHECKOUT.md) | Cart, payments, orders |
+| [Observability](./docs/OBSERVABILITY.md) | `CAT_DEBUG`, Langfuse |
+| [Development](./docs/DEVELOPMENT.md) | Commands, evals, publishing |
+| [Roadmap](./docs/ROADMAP.md) | Shipped versions and current work |
 
 ## Packages
 
@@ -52,7 +52,7 @@ Browser Widget  →  Host /api/commerce-ai/*  →  AI + ElevenLabs + commercetoo
 pnpm add @commerce-ai-tool/react @commerce-ai-tool/server
 ```
 
-Copy [`apps/demo-next/.env.example`](./apps/demo-next/.env.example), enable [Product Search](https://docs.commercetools.com/api/projects/product-search) on the commercetools project, then follow [Getting started](./docs/getting-started.md).
+Copy [`apps/demo-next/.env.example`](./apps/demo-next/.env.example), enable [Product Search](https://docs.commercetools.com/api/projects/product-search) on the commercetools project, then follow [Getting started](./docs/GETTING-STARTED.md).
 
 Local demo:
 

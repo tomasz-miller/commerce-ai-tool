@@ -2,7 +2,7 @@
 
 Thank you for your interest in contributing to Commerce AI Tool.
 
-Development setup, quality gates, publishing, and hosting live in **[docs/development.md](docs/development.md)**. Product behavior is documented under **[docs/](docs/README.md)**.
+Development setup, quality gates, publishing, and hosting live in **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)**. Product behavior is documented under **[docs/](docs/README.md)**.
 
 Agent working rules: [AGENTS.md](AGENTS.md).
 

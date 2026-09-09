@@ -4,13 +4,13 @@ Canonical documentation for Commerce AI Tool. The root [README](../README.md) is
 
 | Doc | Contents |
 |-----|----------|
-| [Getting started](getting-started.md) | Install, API routes, React / Angular / Express widgets |
-| [Configuration](configuration.md) | Locales, environment variables, models, autocomplete seeding |
-| [Search pipeline](search-pipeline.md) | Widget → BFF → LLM → Product Search → GraphQL hydrate |
-| [Cart and checkout](cart-and-checkout.md) | Guest/customer cart, payments, orders |
-| [Observability](observability.md) | `CAT_DEBUG`, Langfuse traces, managed prompts |
-| [Development](development.md) | Local commands, evals, publishing, hosting |
-| [Roadmap](roadmap.md) | Shipped versions and current work |
+| [Getting started](GETTING-STARTED.md) | Install, API routes, React / Angular / Express widgets |
+| [Configuration](CONFIGURATION.md) | Locales, environment variables, models, autocomplete seeding |
+| [Search pipeline](SEARCH-PIPELINE.md) | Widget → BFF → LLM → Product Search → GraphQL hydrate |
+| [Cart and checkout](CART-AND-CHECKOUT.md) | Guest/customer cart, payments, orders |
+| [Observability](OBSERVABILITY.md) | `CAT_DEBUG`, Langfuse traces, managed prompts |
+| [Development](DEVELOPMENT.md) | Local commands, evals, publishing, hosting |
+| [Roadmap](ROADMAP.md) | Shipped versions and current work |
 
 Promptfoo evals stay next to the harness: [`evals/README.md`](../evals/README.md).
 

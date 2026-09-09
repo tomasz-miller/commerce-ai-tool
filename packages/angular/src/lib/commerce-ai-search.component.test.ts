@@ -147,4 +147,87 @@ describe("CommerceAiSearchComponent", () => {
     expect(fixture.componentInstance.hasSearched).toBe(false);
     expect(fixture.componentInstance.isLoadingSuggestions).toBe(true);
   });
+
+  it("renders grouped mission results and hides the flat grid", async () => {
+    const search = vi.fn().mockResolvedValue({
+      products: [{ id: "p1", name: "Pro Racket", sku: "RACKET-1" }],
+      meta: { searchTerms: ["racket", "balls"], queryInterpretation: "racket and balls" },
+      mission: {
+        interpretation: "racket and balls",
+        intents: [
+          {
+            intent: { id: "intent-0", label: "racket", quantity: 1, searchTerms: ["racket"] },
+            products: [{ id: "p1", name: "Pro Racket", sku: "RACKET-1" }],
+            total: 1,
+          },
+          {
+            intent: { id: "intent-1", label: "balls", quantity: 2, searchTerms: ["balls"] },
+            products: [{ id: "p3", name: "Tour Balls", sku: "BALL-1" }],
+            total: 1,
+          },
+        ],
+      },
+    });
+
+    await TestBed.configureTestingModule({
+      imports: [CommerceAiSearchComponent],
+      providers: [{ provide: CommerceAiApiService, useValue: { suggest: vi.fn(), search } }],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(CommerceAiSearchComponent);
+    fixture.componentInstance.enableMissions = true;
+    fixture.componentInstance.enableFacets = true;
+    fixture.componentInstance.query = "racket and balls";
+    fixture.detectChanges();
+
+    fixture.componentInstance.onSubmit();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(search).toHaveBeenCalledWith(
+      "/api/commerce-ai",
+      "racket and balls",
+      expect.anything(),
+      expect.any(AbortSignal),
+      expect.objectContaining({ enableMissions: true }),
+    );
+    expect(fixture.componentInstance.mission?.intents).toHaveLength(2);
+    expect(fixture.componentInstance.hasFacetSession).toBe(false);
+    expect(fixture.nativeElement.querySelector(".cat-mission")).not.toBeNull();
+    expect(fixture.nativeElement.querySelector(".cat-results")).toBeNull();
+    expect(fixture.nativeElement.querySelector(".cat-root--mission-lanes-2")).not.toBeNull();
+  });
+
+  it("hides add-to-cart controls when enableCart is false", async () => {
+    await TestBed.configureTestingModule({
+      imports: [CommerceAiSearchComponent],
+      providers: [{ provide: CommerceAiApiService, useValue: { suggest: vi.fn(), search: vi.fn() } }],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(CommerceAiSearchComponent);
+    fixture.componentInstance.enableCart = false;
+    fixture.componentInstance.enableMissions = true;
+    fixture.componentInstance.query = "racket and balls";
+    fixture.componentInstance.hasSearched = true;
+    fixture.componentInstance.mission = {
+      interpretation: "racket and balls",
+      intents: [
+        {
+          intent: { id: "intent-0", label: "racket", quantity: 1, searchTerms: ["racket"] },
+          products: [{ id: "p1", name: "Pro Racket", sku: "RACKET-1" }],
+          total: 1,
+        },
+        {
+          intent: { id: "intent-1", label: "balls", quantity: 1, searchTerms: ["balls"] },
+          products: [{ id: "p3", name: "Tour Balls", sku: "BALL-1" }],
+          total: 1,
+        },
+      ],
+    };
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector(".cat-cart-toggle")).toBeNull();
+    expect(fixture.nativeElement.querySelector(".cat-mission__add-all")).toBeNull();
+    expect(fixture.nativeElement.querySelector(".cat-result-card__add")).toBeNull();
+  });
 });
