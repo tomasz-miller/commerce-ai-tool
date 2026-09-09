@@ -45,6 +45,7 @@ export interface UseCartReturn {
   closeCart: () => void;
   toggleCart: () => void;
   addToCart: (item: AddToCartItem) => Promise<CartSnapshot | null>;
+  addItems: (items: AddToCartItem[]) => Promise<CartSnapshot | null>;
   removeFromCart: (lineItemId: string) => Promise<CartSnapshot | null>;
   updateQuantity: (lineItemId: string, quantity: number) => Promise<CartSnapshot | null>;
   setAddresses: (
@@ -334,6 +335,11 @@ export function useCart(options: UseCartOptions): UseCartReturn {
         variantId: item.variantId,
         quantity: item.quantity,
       }),
+    [mutate],
+  );
+
+  const addItems = useCallback(
+    async (items: AddToCartItem[]) => mutate("/cart/add-items", { items }),
     [mutate],
   );
 
@@ -668,6 +674,7 @@ export function useCart(options: UseCartOptions): UseCartReturn {
     closeCart,
     toggleCart,
     addToCart,
+    addItems,
     removeFromCart,
     updateQuantity,
     setAddresses,

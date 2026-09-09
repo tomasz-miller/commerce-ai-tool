@@ -19,6 +19,7 @@
     "eval:promptfoo:image": "pnpm build && promptfoo eval -c evals/promptfooconfig.image.ts",
     "eval:promptfoo:voice-enhance": "pnpm build && promptfoo eval -c evals/promptfooconfig.voice-enhance.yaml",
     "eval:promptfoo:voice-tts": "pnpm build && promptfoo eval -c evals/promptfooconfig.voice-tts.yaml",
+    "eval:promptfoo:mission": "pnpm build && promptfoo eval -c evals/promptfooconfig.mission.yaml",
     "eval:promptfoo:redteam": "pnpm build && promptfoo redteam run -c evals/promptfooconfig.redteam.yaml",
     "eval:promptfoo:redteam:generate": "pnpm build && promptfoo redteam generate -c evals/promptfooconfig.redteam.yaml",
     "eval:promptfoo:view": "promptfoo view",

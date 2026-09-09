@@ -1,12 +1,17 @@
 import { useCallback, useRef, useState } from "react";
-import type { ProductCard, SearchResult } from "@commerce-ai-tool/core";
+import type { MissionSearchResult, ProductCard, SearchResult } from "@commerce-ai-tool/core";
 import { appendLocaleFields, type SearchLocaleProps } from "./useCommerceAISearch.js";
 
 export interface UseVoiceSearchOptions extends SearchLocaleProps {
   apiBaseUrl: string;
-  onResults?: (results: ProductCard[], meta: SearchResult["meta"]) => void;
+  onResults?: (
+    results: ProductCard[],
+    meta: SearchResult["meta"],
+    extras?: { mission?: MissionSearchResult },
+  ) => void;
   onTranscript?: (transcript: string) => void;
   enableTts?: boolean;
+  enableMissions?: boolean;
 }
 
 function playAudioSummary(base64: string): void {
@@ -45,6 +50,7 @@ export function useVoiceSearch(options: UseVoiceSearchOptions) {
     onResults,
     onTranscript,
     enableTts = true,
+    enableMissions = false,
   } = options;
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -99,6 +105,9 @@ export function useVoiceSearch(options: UseVoiceSearchOptions) {
           formData.append("audio", blob, "recording.webm");
           appendLocaleFields(formData, { queryLocale, catalogLocale, locale });
           formData.append("enableTts", String(enableTts));
+          if (enableMissions) {
+            formData.append("enableMissions", "true");
+          }
 
           const response = await fetch(`${baseUrl}/search/voice`, {
             method: "POST",
@@ -114,13 +123,14 @@ export function useVoiceSearch(options: UseVoiceSearchOptions) {
             transcript: string;
             products: ProductCard[];
             meta: SearchResult["meta"];
+            mission?: MissionSearchResult;
             ttsText?: string;
             audioSummary?: string;
             ttsPending?: boolean;
           };
 
           onTranscript?.(data.transcript);
-          onResults?.(data.products, data.meta);
+          onResults?.(data.products, data.meta, { mission: data.mission });
 
           if (data.audioSummary) {
             setAudioSummary(data.audioSummary);
@@ -152,7 +162,7 @@ export function useVoiceSearch(options: UseVoiceSearchOptions) {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Microphone access denied");
     }
-  }, [baseUrl, catalogLocale, enableTts, locale, onResults, onTranscript, queryLocale]);
+  }, [baseUrl, catalogLocale, enableMissions, enableTts, locale, onResults, onTranscript, queryLocale]);
 
   const toggleRecording = useCallback(async () => {
     if (isRecording) {

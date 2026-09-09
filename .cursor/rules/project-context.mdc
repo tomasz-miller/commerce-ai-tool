@@ -33,4 +33,8 @@ React and Angular widgets configure microphone, camera capture, and image upload
 
 Checkout is host-routed: `CommerceAISearch.onCheckout` navigates to a host page that can render `CommerceAICheckout`. Server checkout routes set addresses, list/select matching shipping methods, authorize payment through a host-injected `PaymentProvider` (commercetools Payment + `addPayment`), and create an Order from the Active Cart. `GET /orders` lists recent orders for the current session; `GET /orders?orderNumber=` returns confirmation and tracking for that order.
 
+Shopping missions (opt-in `enableMissions` / `CAT_MISSIONS_*`) split compound text, voice, and image queries into product intents, search in parallel, and batch-add via `POST /cart/add-items`. Angular mission UI is deferred.
+
 Never expose API keys in client-side code.
+
+Canonical documentation: `docs/README.md`.

@@ -103,6 +103,17 @@ export interface LangfuseConfig {
   promptCacheTtlSeconds?: number;
 }
 
+export interface MissionsConfig {
+  /** Opt-in. When true, every fresh text search also runs mission decomposition. */
+  enabled?: boolean;
+  /** Maximum product intents kept from a decomposed mission. Default 5. */
+  maxIntents?: number;
+  /** Product Search limit per intent. Default 4. */
+  perIntentLimit?: number;
+  /** Minimum AI confidence (0–1) required to keep a mission. Default 0.6. */
+  minConfidence?: number;
+}
+
 export interface CommerceAIConfig {
   commercetools: CommercetoolsConfig;
   ai: AIConfig;
@@ -114,6 +125,7 @@ export interface CommerceAIConfig {
   facets?: FacetConfig;
   langfuse?: LangfuseConfig;
   payments?: PaymentConfig;
+  missions?: MissionsConfig;
 }
 
 export interface ProductCard {
@@ -230,6 +242,9 @@ export interface CustomerSnapshot {
 /** HMAC cart session header for GET /cart — never send the token in the query string. */
 export const CART_SESSION_HEADER = "x-commerce-ai-cart-session";
 
+/** Upper bound for a single add-to-cart line quantity (mission add-all and batch add). */
+export const MAX_LINE_ITEM_QUANTITY = 99;
+
 export interface CartLoginRequest {
   email: string;
   password: string;
@@ -243,6 +258,13 @@ export interface CartLoginResult {
   customer: CustomerSnapshot;
 }
 
+export interface AddToCartLineItem {
+  sku?: string;
+  productId?: string;
+  variantId?: number;
+  quantity?: number;
+}
+
 export interface AddToCartRequest {
   anonymousId?: string;
   customerId?: string;
@@ -254,6 +276,17 @@ export interface AddToCartRequest {
   country?: string;
   catalogLocale?: string;
   /** When set, add to this cart instead of looking up by anonymousId / customerId. */
+  cartId?: string;
+  sessionToken?: string;
+}
+
+export interface AddItemsToCartRequest {
+  anonymousId?: string;
+  customerId?: string;
+  items: AddToCartLineItem[];
+  currency?: string;
+  country?: string;
+  catalogLocale?: string;
   cartId?: string;
   sessionToken?: string;
 }
@@ -351,6 +384,8 @@ export interface SearchResult {
   facets?: SearchFacetGroup[];
   suggestedFacets?: SuggestedFacet[];
   facetSchema?: FacetAttributeDefinition[];
+  /** Present when a compound shopping mission was executed. */
+  mission?: MissionSearchResult;
 }
 
 export interface SuggestionsRequest extends SearchLocaleOptions {
@@ -384,6 +419,8 @@ export interface TextSearchRequest {
   includeFacets?: boolean;
   /** AI-suggested facets from the active search session (chip refine). */
   suggestedFacets?: SuggestedFacet[];
+  /** Per-request override of `CommerceAIConfig.missions.enabled`. */
+  enableMissions?: boolean;
 }
 
 export interface SearchLocaleOptions {
@@ -427,6 +464,39 @@ export interface InterpretedSearchQuery {
   filters?: InterpretedSearchFilters;
   suggestedFacets?: SuggestedFacet[];
   sort?: "relevance" | "price_asc" | "price_desc";
+  interpretation: string;
+}
+
+export interface ShoppingIntent {
+  /** Stable id for UI keys and selection (`intent-0`, `intent-1`, …). */
+  id: string;
+  /** Short catalog-language label, e.g. "tennis racket". */
+  label: string;
+  /** Requested quantity, always >= 1. */
+  quantity: number;
+  searchTerms: string[];
+  filters?: InterpretedSearchFilters;
+  sort?: "relevance" | "price_asc" | "price_desc";
+}
+
+export interface DecomposedShoppingMission {
+  isMission: boolean;
+  /** 0–1. Missions below the configured minConfidence fall back to standard search. */
+  confidence: number;
+  intents: ShoppingIntent[];
+  interpretation: string;
+}
+
+export interface MissionIntentGroup {
+  intent: ShoppingIntent;
+  products: ProductCard[];
+  total: number;
+  /** True when this intent's Product Search failed; other groups still render. */
+  failed?: boolean;
+}
+
+export interface MissionSearchResult {
+  intents: MissionIntentGroup[];
   interpretation: string;
 }
 

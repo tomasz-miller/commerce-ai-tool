@@ -1,11 +1,13 @@
-import type {
-  AddToCartRequest,
-  CartLoginRequest,
-  CartMutationRequest,
-  CartSnapshot,
-  CustomerSnapshot,
-  GetCartRequest,
-  UpdateCartQuantityRequest,
+import {
+  MAX_LINE_ITEM_QUANTITY,
+  type AddItemsToCartRequest,
+  type AddToCartRequest,
+  type CartLoginRequest,
+  type CartMutationRequest,
+  type CartSnapshot,
+  type CustomerSnapshot,
+  type GetCartRequest,
+  type UpdateCartQuantityRequest,
 } from "@commerce-ai-tool/core";
 import type { CommerceAIServer } from "./server.js";
 import { ValidationError } from "./route-actions.js";
@@ -124,6 +126,56 @@ export async function executeAddToCart(
     productId,
     variantId: body.variantId,
     quantity,
+    currency: optionalString(body.currency) ?? server.cartDefaults.currency,
+    country: optionalString(body.country) ?? server.cartDefaults.country,
+    catalogLocale: resolveLocale(server, body.catalogLocale),
+    cartId: optionalString(body.cartId),
+  });
+
+  return { cart };
+}
+
+export const MAX_ADD_ITEMS = 20;
+
+export async function executeAddItemsToCart(
+  server: CommerceAIServer,
+  body: AddItemsToCartRequest,
+): Promise<CartResponse> {
+  const identity = resolveCartIdentity(server, body.sessionToken, body.anonymousId);
+  if (!Array.isArray(body.items) || body.items.length === 0) {
+    throw new ValidationError("items is required");
+  }
+  if (body.items.length > MAX_ADD_ITEMS) {
+    throw new ValidationError(`items must not exceed ${MAX_ADD_ITEMS}`);
+  }
+
+  const items = body.items.map((item, index) => {
+    const sku = optionalString(item.sku);
+    const productId = optionalString(item.productId);
+    if (!sku && !productId) {
+      throw new ValidationError(`items[${index}]: sku or productId is required`);
+    }
+    const quantity = optionalNumber(item.quantity) ?? 1;
+    if (quantity < 1) {
+      throw new ValidationError(`items[${index}]: quantity must be at least 1`);
+    }
+    if (quantity > MAX_LINE_ITEM_QUANTITY) {
+      throw new ValidationError(
+        `items[${index}]: quantity must be at most ${MAX_LINE_ITEM_QUANTITY}`,
+      );
+    }
+    return {
+      sku,
+      productId,
+      variantId: item.variantId,
+      quantity,
+    };
+  });
+
+  const cart = await server.commercetools.addItemsToCart({
+    anonymousId: identity.anonymousId,
+    customerId: identity.customerId,
+    items,
     currency: optionalString(body.currency) ?? server.cartDefaults.currency,
     country: optionalString(body.country) ?? server.cartDefaults.country,
     catalogLocale: resolveLocale(server, body.catalogLocale),

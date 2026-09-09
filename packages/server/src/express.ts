@@ -109,6 +109,11 @@ export function createExpressRouter(options: ExpressRouterOptions): Router {
     sendHandlerResponse(res, response);
   });
 
+  router.post(`${basePath}/cart/add-items`, async (req, res) => {
+    const response = await handlers.addItemsToCart(req);
+    sendHandlerResponse(res, response);
+  });
+
   router.post(`${basePath}/cart/remove`, async (req, res) => {
     const response = await handlers.removeFromCart(req);
     sendHandlerResponse(res, response);

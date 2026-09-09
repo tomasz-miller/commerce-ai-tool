@@ -27,6 +27,16 @@ import { logServerError, logServerWarning } from "./utils/log-error.js";
 import { parseSearchLocaleOptions } from "./utils/locale.js";
 import type { ParsedMultipart } from "./utils/multipart.js";
 
+function parseOptionalBoolean(value: string | undefined): boolean | undefined {
+  if (value === "true") {
+    return true;
+  }
+  if (value === "false") {
+    return false;
+  }
+  return undefined;
+}
+
 export class ValidationError extends Error {
   constructor(message: string) {
     super(message);
@@ -46,6 +56,7 @@ export interface SearchRequestBody {
   refineQuery?: string;
   includeFacets?: boolean;
   suggestedFacets?: SuggestedFacet[];
+  enableMissions?: boolean;
 }
 
 export interface SuggestionsRequestBody {
@@ -151,6 +162,7 @@ export async function executeSearch(
         refineQuery: body.refineQuery,
         includeFacets: body.includeFacets,
         suggestedFacets: body.suggestedFacets,
+        enableMissions: body.enableMissions,
       }),
   );
 }
@@ -246,6 +258,7 @@ export async function executeSearchVoice(
           ...localeOptions,
           limit: fields.limit ? Number(fields.limit) : undefined,
           enableTts: fields.enableTts !== "false",
+          enableMissions: parseOptionalBoolean(fields.enableMissions),
         },
       );
 
@@ -267,6 +280,7 @@ export async function executeSearchVoice(
         enhancedQuery: result.enhancedQuery,
         products: result.products,
         meta: result.meta,
+        mission: result.mission,
         ttsText: result.ttsText,
         audioSummary,
         ttsPending: Boolean(result.ttsText && !audioSummary),
@@ -306,6 +320,7 @@ export async function executeSearchImage(
       server.orchestrator.searchByImage(new Uint8Array(file.buffer), file.mimeType, {
         ...localeOptions,
         limit: fields.limit ? Number(fields.limit) : undefined,
+        enableMissions: parseOptionalBoolean(fields.enableMissions),
       }),
   );
 }

@@ -1,5 +1,5 @@
 export type * from "./types/index.js";
-export { CART_SESSION_HEADER } from "./types/index.js";
+export { CART_SESSION_HEADER, MAX_LINE_ITEM_QUANTITY } from "./types/index.js";
 export {
   DEFAULT_COMMERCE_AI_SEARCH_MESSAGES,
   resolveCommerceAISearchMessages,
@@ -96,12 +96,19 @@ export {
   SUGGESTION_MAX_LENGTH,
   SUGGESTION_MAX_WORDS,
 } from "./commercetools/suggestion-quality.js";
+export {
+  looksLikeCompoundShoppingList,
+  isUsableMission,
+  resolveMissionOptions,
+} from "./search/mission.js";
 export { createSearchOrchestrator } from "./search/orchestrator.js";
 export type { SearchOrchestrator, SearchOrchestratorDeps } from "./search/orchestrator.js";
 export {
   parseInterpretedQuery,
   parseVoiceAudioInterpretation,
   parseSuggestSearchTerms,
+  parseDecomposedMission,
+  MAX_MISSION_INTENTS,
   buildRefineQueryUserMessage,
   buildSchemaAwareTextQueryUserMessage,
   buildSuggestSearchTermsUserMessage,

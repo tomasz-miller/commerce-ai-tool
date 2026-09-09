@@ -94,6 +94,43 @@ describe("useCart", () => {
     expect(onCartChange).toHaveBeenCalledWith(updated);
   });
 
+  it("adds multiple items through /cart/add-items", async () => {
+    const updated = { ...sampleCart, version: 2, totalQuantity: 3 };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ cart: sampleCart }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ cart: updated }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useCart({ apiBaseUrl: "/api/commerce-ai", currency: "EUR" }));
+
+    await waitFor(() => {
+      expect(result.current.cart).toEqual(sampleCart);
+    });
+
+    await act(async () => {
+      await result.current.addItems([
+        { sku: "RACKET-1", quantity: 1 },
+        { sku: "BALL-1", quantity: 2 },
+      ]);
+    });
+
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "/api/commerce-ai/cart/add-items",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining("RACKET-1"),
+      }),
+    );
+    expect(result.current.cart).toEqual(updated);
+  });
+
   it("queues mutations so the second add sees the cart created by the first", async () => {
     let releaseFirst: ((value: unknown) => void) | undefined;
     const firstAdd = new Promise((resolve) => {

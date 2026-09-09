@@ -43,6 +43,14 @@ export interface CommerceAISearchMessages {
   decreaseQuantity: string;
   closeCart: string;
   unableToAddToCart: string;
+  missionTitle: string;
+  missionQuantity: string;
+  /** Adds the first (recommended) product from each filled lane. Use `{count}` for the number of picks. */
+  missionAddAll: string;
+  missionItemsAdded: string;
+  missionSelectProduct: string;
+  missionIntentEmpty: string;
+  missionIntentFailed: string;
   signIn: string;
   signInToSyncCart: string;
   signOut: string;
@@ -143,6 +151,13 @@ export const DEFAULT_COMMERCE_AI_SEARCH_MESSAGES: CommerceAISearchMessages = {
   decreaseQuantity: "Decrease quantity",
   closeCart: "Close cart",
   unableToAddToCart: "This product cannot be added to the cart",
+  missionTitle: "Shopping list",
+  missionQuantity: "Looking for",
+  missionAddAll: "Add {count} top picks to cart",
+  missionItemsAdded: "Added to cart",
+  missionSelectProduct: "Select this product",
+  missionIntentEmpty: "No matching products",
+  missionIntentFailed: "Couldn't search this item",
   signIn: "Sign in",
   signInToSyncCart: "Sign in to sync your cart",
   signOut: "Sign out",

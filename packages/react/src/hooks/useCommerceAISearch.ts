@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import type {
   InterpretedSearchFilters,
+  MissionSearchResult,
   ProductCard,
   SearchFacetGroup,
   SearchResult,
@@ -50,6 +51,7 @@ export interface UseCommerceAISearchOptions extends SearchLocaleProps {
   enableAutocomplete?: boolean;
   enableFacets?: boolean;
   persistSession?: boolean;
+  enableMissions?: boolean;
 }
 
 export interface UseCommerceAISearchReturn {
@@ -62,6 +64,8 @@ export interface UseCommerceAISearchReturn {
   selectSuggestion: (suggestion: string) => void;
   results: ProductCard[];
   setResults: Dispatch<SetStateAction<ProductCard[]>>;
+  mission: MissionSearchResult | null;
+  setMission: Dispatch<SetStateAction<MissionSearchResult | null>>;
   meta: SearchResult["meta"] | null;
   setMeta: Dispatch<SetStateAction<SearchResult["meta"] | null>>;
   isLoading: boolean;
@@ -72,12 +76,16 @@ export interface UseCommerceAISearchReturn {
   setError: Dispatch<SetStateAction<string | null>>;
   search: (query?: string) => Promise<void>;
   searchByImage: (file: File) => Promise<void>;
+  /** True when a facet refinement session is active (not set for mission results). */
+  hasFacetSession: boolean;
   facets?: SearchFacetGroup[];
   suggestedFacets?: SuggestedFacet[];
   refineFilters?: (filters: InterpretedSearchFilters) => Promise<void>;
   refine?: (query: string) => Promise<void>;
   /** Clear session and run a fresh AI search with the current query. */
   startNewSearch?: () => Promise<void>;
+  /** Apply a search payload (text, voice, or image) and clear the facet session for missions. */
+  applySearchResult: (data: SearchResult, queryOverride?: string) => void;
   clear: () => void;
 }
 
@@ -91,6 +99,7 @@ export function useCommerceAISearch(
     enableAutocomplete = false,
     enableFacets = false,
     persistSession = true,
+    enableMissions = false,
     queryLocale,
     catalogLocale,
     locale,
@@ -105,6 +114,7 @@ export function useCommerceAISearch(
   const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
   const [suggestionsReady, setSuggestionsReady] = useState(false);
   const [results, setResults] = useState<ProductCard[]>([]);
+  const [mission, setMission] = useState<MissionSearchResult | null>(null);
   const [meta, setMeta] = useState<SearchResult["meta"] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
@@ -154,6 +164,7 @@ export function useCommerceAISearch(
       suggestionsDebounceRef.current = null;
     }
     setResults([]);
+    setMission(null);
     setMeta(null);
     setError(null);
     setIsLoading(false);
@@ -226,10 +237,16 @@ export function useCommerceAISearch(
   const applySearchResult = useCallback(
     (data: SearchResult, sessionQuery?: string) => {
       setResults(data.products);
+      setMission(data.mission ?? null);
       setMeta(data.meta);
       setFacets(data.facets ?? []);
       setSuggestedFacets(data.suggestedFacets ?? []);
-      if (enableFacets && data.meta.searchTerms) {
+      if (data.mission) {
+        setSearchSession(null);
+        if (typeof window !== "undefined") {
+          window.sessionStorage.removeItem(sessionStorageKey);
+        }
+      } else if (enableFacets && data.meta.searchTerms) {
         setSearchSession({
           query: sessionQuery?.trim() || queryRef.current || data.meta.queryInterpretation || "",
           searchTerms: data.meta.searchTerms,
@@ -240,7 +257,7 @@ export function useCommerceAISearch(
         });
       }
     },
-    [enableFacets],
+    [enableFacets, sessionStorageKey],
   );
 
   const search = useCallback(
@@ -265,6 +282,7 @@ export function useCommerceAISearch(
       setIsLoading(true);
       setError(null);
       setResults([]);
+      setMission(null);
       setMeta(null);
       setSuggestions([]);
       setSuggestionsError(null);
@@ -273,7 +291,12 @@ export function useCommerceAISearch(
         const response = await fetch(`${baseUrl}/search`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: q, includeFacets: enableFacets, ...localePayload }),
+          body: JSON.stringify({
+            query: q,
+            includeFacets: enableFacets,
+            ...(enableMissions ? { enableMissions: true } : {}),
+            ...localePayload,
+          }),
           signal: controller.signal,
         });
 
@@ -292,6 +315,7 @@ export function useCommerceAISearch(
 
         setError(err instanceof Error ? err.message : "Search failed");
         setResults([]);
+        setMission(null);
         setMeta(null);
       } finally {
         if (requestId === requestIdRef.current) {
@@ -300,7 +324,7 @@ export function useCommerceAISearch(
         }
       }
     },
-    [applySearchResult, baseUrl, enableFacets, localePayload],
+    [applySearchResult, baseUrl, enableFacets, enableMissions, localePayload],
   );
 
   const submitRefinement = useCallback(
@@ -401,6 +425,7 @@ export function useCommerceAISearch(
       setIsLoading(true);
       setError(null);
       setResults([]);
+      setMission(null);
       setMeta(null);
       setSuggestions([]);
 
@@ -408,6 +433,9 @@ export function useCommerceAISearch(
         const formData = new FormData();
         formData.append("image", file);
         appendLocaleFields(formData, { queryLocale, catalogLocale, locale });
+        if (enableMissions) {
+          formData.append("enableMissions", "true");
+        }
 
         const response = await fetch(`${baseUrl}/search/image`, {
           method: "POST",
@@ -420,21 +448,21 @@ export function useCommerceAISearch(
         }
 
         const data = (await response.json()) as SearchResult & { interpretation?: string };
-        setResults(data.products);
-        setMeta(data.meta);
+        applySearchResult(data, data.interpretation);
         if (data.interpretation) {
           setQueryState(data.interpretation);
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Image search failed");
         setResults([]);
+        setMission(null);
         setMeta(null);
       } finally {
         setIsLoading(false);
         setHasSearched(true);
       }
     },
-    [baseUrl, catalogLocale, locale, queryLocale],
+    [applySearchResult, baseUrl, catalogLocale, enableMissions, locale, queryLocale],
   );
 
   const setQuery = useCallback(
@@ -465,6 +493,7 @@ export function useCommerceAISearch(
       if (enableAutocomplete) {
         // Hide previous results so autocomplete can show while typing after a search.
         setResults([]);
+        setMission(null);
         setError(null);
         setIsLoading(false);
         setHasSearched(false);
@@ -479,6 +508,7 @@ export function useCommerceAISearch(
       setIsLoading(true);
       setError(null);
       setResults([]);
+      setMission(null);
       setMeta(null);
 
       debounceRef.current = setTimeout(() => {
@@ -513,6 +543,8 @@ export function useCommerceAISearch(
     selectSuggestion,
     results,
     setResults,
+    mission,
+    setMission,
     meta,
     setMeta,
     isLoading,
@@ -525,9 +557,11 @@ export function useCommerceAISearch(
     searchByImage,
     facets,
     suggestedFacets,
+    hasFacetSession: searchSession !== null,
     refineFilters,
     refine,
     startNewSearch,
+    applySearchResult,
     clear,
   };
 }

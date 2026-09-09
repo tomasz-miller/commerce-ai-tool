@@ -5,6 +5,7 @@ import {
 } from "@commercetools/sdk-client-v2";
 import { createApiBuilderFromCtpClient, type ProductSearchRequest } from "@commercetools/platform-sdk";
 import type {
+  AddItemsToCartRequest,
   AddToCartRequest,
   AuthorizePaymentRequest,
   CartLoginRequest,
@@ -71,6 +72,7 @@ export interface CommercetoolsClient {
   getCart(anonymousId: string, locale?: string): Promise<CartSnapshot | null>;
   getCustomerCart(customerId: string, locale?: string): Promise<CartSnapshot | null>;
   addToCart(input: AddToCartRequest): Promise<CartSnapshot>;
+  addItemsToCart(input: AddItemsToCartRequest): Promise<CartSnapshot>;
   removeLineItem(input: CartMutationRequest): Promise<CartSnapshot>;
   changeLineItemQuantity(input: UpdateCartQuantityRequest): Promise<CartSnapshot>;
   loginAndMerge(input: CartLoginRequest): Promise<CartLoginResult>;
@@ -358,6 +360,7 @@ export function createCommercetoolsClient(
     getCart: cart.getCart,
     getCustomerCart: cart.getCustomerCart,
     addToCart: cart.addToCart,
+    addItemsToCart: cart.addItemsToCart,
     removeLineItem: cart.removeLineItem,
     changeLineItemQuantity: cart.changeLineItemQuantity,
     loginAndMerge: cart.loginAndMerge,
