@@ -4,7 +4,9 @@ import {
   createEvalAIProvider,
   createSkippedProviderResponse,
   loadEvalEnvFile,
+  parseAttributeCatalog,
   readProviderConfig,
+  toEvalProviderResponse,
 } from "./eval-utils.ts";
 
 loadEvalEnvFile();
@@ -37,14 +39,14 @@ export default class TextSearchEvalProvider {
     }
 
     try {
-      const result = await this.evalProvider.ai!.interpretTextQuery(query, {
-        queryLocale,
-        catalogLocale,
-      });
+      const startedAt = Date.now();
+      const result = await this.evalProvider.ai!.interpretTextQuery(
+        query,
+        { queryLocale, catalogLocale },
+        parseAttributeCatalog(vars),
+      );
 
-      return {
-        output: JSON.stringify(result, null, 2),
-      };
+      return toEvalProviderResponse(result, this.evalProvider.ai!, startedAt);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return { error: message };

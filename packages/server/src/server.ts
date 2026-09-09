@@ -180,6 +180,7 @@ export function loadConfigFromEnv(): CommerceAIConfig {
               model: process.env.OPENROUTER_MODEL,
               visionModel: process.env.OPENROUTER_VISION_MODEL,
               voiceModel: process.env.OPENROUTER_VOICE_MODEL,
+              jsonSchema: process.env.OPENROUTER_JSON_SCHEMA === "false" ? false : undefined,
             }
           : undefined,
       bedrock:

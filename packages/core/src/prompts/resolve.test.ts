@@ -21,11 +21,12 @@ vi.mock("@langfuse/tracing", () => ({
 import { updateActiveObservation } from "@langfuse/tracing";
 
 describe("SYSTEM_PROMPT_CATALOG", () => {
-  it("includes all seven managed system prompts", () => {
+  it("includes all managed system prompts", () => {
     const names = Object.values(SYSTEM_PROMPT_NAMES);
-    expect(names).toHaveLength(7);
-    expect(listSystemPromptEntries()).toHaveLength(7);
+    expect(names).toHaveLength(8);
+    expect(listSystemPromptEntries()).toHaveLength(8);
     expect(names).toContain(SYSTEM_PROMPT_NAMES.MISSION_QUERY);
+    expect(names).toContain(SYSTEM_PROMPT_NAMES.REFINE_QUERY);
     for (const name of names) {
       expect(getLocalSystemPrompt(name).length).toBeGreaterThan(20);
       expect(SYSTEM_PROMPT_CATALOG[name]).toBe(getLocalSystemPrompt(name));

@@ -1,0 +1,103 @@
+- description: Coffee table query returns table products in top-5
+  vars:
+    query: coffee table
+    queryLocale: en
+    catalogLocale: en-GB
+    expectedSkus: '["GMCT-01","ADCT-01"]'
+  assert:
+    - type: javascript
+      value: JSON.parse(output).total > 0
+    - type: javascript
+      value: |
+        const names = JSON.parse(output).products.map((p) => (p.name || '').toLowerCase()).join(' ');
+        return names.includes('table');
+    - type: javascript
+      value: |
+        const parsed = JSON.parse(output);
+        const terms = parsed.interpreted.searchTerms.join(' ').toLowerCase();
+        return terms.includes('table') && parsed.interpreted.searchTerms.length <= 3;
+    - type: javascript
+      value: |
+        const parsed = JSON.parse(output);
+        const top3 = parsed.topSkus.slice(0, 3);
+        return parsed.expectedSkus.some((sku) => top3.includes(sku));
+    - type: javascript
+      value: |
+        const parsed = JSON.parse(output);
+        return typeof parsed.precisionAtK === 'number' && parsed.precisionAtK >= 0.2;
+
+- description: Specific wine glass query stays specific
+  vars:
+    query: wine glass
+    queryLocale: en
+    catalogLocale: en-GB
+    expectedSkus: '["CWG-01"]'
+  assert:
+    - type: javascript
+      value: JSON.parse(output).total > 0
+    - type: javascript
+      value: |
+        const parsed = JSON.parse(output);
+        return parsed.interpreted.searchTerms.length === 1;
+    - type: javascript
+      value: |
+        const names = JSON.parse(output).products.slice(0, 3).map((p) => (p.name || '').toLowerCase()).join(' ');
+        return names.includes('glass') || names.includes('wine');
+    - type: javascript
+      value: |
+        const parsed = JSON.parse(output);
+        return parsed.topSkus.slice(0, 3).includes('CWG-01');
+    - type: javascript
+      value: |
+        const parsed = JSON.parse(output);
+        return typeof parsed.precisionAtK === 'number' && parsed.precisionAtK >= 0.2;
+
+- description: Polish drinkware need retrieves drinking vessels
+  vars:
+    query: Miałem w domu grubą imprezę, ludzie potłukli mi wszystkie naczynia i nie mam z czego pić. Znajdź coś z czego mógłbym się napić.
+    queryLocale: pl
+    catalogLocale: en-GB
+    expectedSkus: '["HDG-02","CDG-09","CWG-01","SBG-09","CBM-03","CCM-089"]'
+  assert:
+    - type: javascript
+      value: JSON.parse(output).total > 0
+    - type: javascript
+      value: |
+        const parsed = JSON.parse(output);
+        return parsed.interpreted.searchTerms.length >= 2;
+    - type: javascript
+      value: |
+        const names = JSON.parse(output).products.map((p) => (p.name || '').toLowerCase()).join(' ');
+        return names.includes('glass') || names.includes('mug') || names.includes('cup');
+    - type: javascript
+      value: |
+        const parsed = JSON.parse(output);
+        const top3 = parsed.topSkus.slice(0, 3);
+        return parsed.expectedSkus.some((sku) => top3.includes(sku));
+    - type: javascript
+      value: |
+        const parsed = JSON.parse(output);
+        return typeof parsed.precisionAtK === 'number' && parsed.precisionAtK >= 0.2;
+
+- description: Dining chairs query returns chairs
+  vars:
+    query: dining chairs
+    queryLocale: en
+    catalogLocale: en-GB
+    expectedSkus: '["RAM-094","BARM-03","CCH-093","NJOP-09","VARM-09","RLC-08","ADARM-04","BA-092"]'
+  assert:
+    - type: javascript
+      value: JSON.parse(output).total > 0
+    - type: javascript
+      value: |
+        const names = JSON.parse(output).products.map((p) => (p.name || '').toLowerCase()).join(' ');
+        return names.includes('chair');
+    - type: javascript
+      value: |
+        const parsed = JSON.parse(output);
+        const top3 = parsed.topSkus.slice(0, 3);
+        return parsed.expectedSkus.some((sku) => top3.includes(sku));
+    - type: javascript
+      value: |
+        const parsed = JSON.parse(output);
+        return typeof parsed.precisionAtK === 'number' && parsed.precisionAtK >= 0.4;

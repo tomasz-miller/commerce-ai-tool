@@ -22,6 +22,10 @@ import {
   parseInterpretedQuery,
   parseSuggestSearchTerms,
   parseDecomposedMission,
+  INTERPRETED_SEARCH_JSON_SCHEMA,
+  MISSION_JSON_SCHEMA,
+  SUGGEST_SEARCH_TERMS_JSON_SCHEMA,
+  withStructuredOutputInstruction,
 } from "../../prompts/index.js";
 import { SYSTEM_PROMPT_NAMES } from "../../prompts/catalog.js";
 import { resolveAndLinkSystemPrompt } from "../../prompts/resolve.js";
@@ -51,11 +55,12 @@ export class BedrockProvider implements AIProvider {
         role: "user",
         content: [
           {
-            text: `${system}\n\n${
+            text: `${system}\n\n${withStructuredOutputInstruction(
               attributeCatalog.length
                 ? buildSchemaAwareTextQueryUserMessage(text, locales, attributeCatalog)
-                : buildTextQueryUserMessage(text, locales)
-            }`,
+                : buildTextQueryUserMessage(text, locales),
+              INTERPRETED_SEARCH_JSON_SCHEMA,
+            )}`,
           },
         ],
       },
@@ -69,13 +74,16 @@ export class BedrockProvider implements AIProvider {
     context: Parameters<AIProvider["interpretRefineQuery"]>[1],
     locales: SearchLocaleContext,
   ) {
-    const system = await resolveAndLinkSystemPrompt(SYSTEM_PROMPT_NAMES.TEXT_QUERY);
+    const system = await resolveAndLinkSystemPrompt(SYSTEM_PROMPT_NAMES.REFINE_QUERY);
     const response = await this.converse(this.modelId, [
       {
         role: "user",
         content: [
           {
-            text: `${system}\n\n${buildRefineQueryUserMessage(text, locales, context)}`,
+            text: `${system}\n\n${withStructuredOutputInstruction(
+              buildRefineQueryUserMessage(text, locales, context),
+              INTERPRETED_SEARCH_JSON_SCHEMA,
+            )}`,
           },
         ],
       },
@@ -84,7 +92,12 @@ export class BedrockProvider implements AIProvider {
     return parseInterpretedQuery(this.extractText(response));
   }
 
-  async interpretImageQuery(imageBase64: string, mimeType: string, locales: SearchLocaleContext) {
+  async interpretImageQuery(
+    imageBase64: string,
+    mimeType: string,
+    locales: SearchLocaleContext,
+    attributeCatalog: FacetAttributeDefinition[] = [],
+  ) {
     const rawBase64 = imageBase64.replace(/^data:[^;]+;base64,/, "");
     const format = mimeType.includes("png") ? "png" : mimeType.includes("webp") ? "webp" : "jpeg";
 
@@ -93,7 +106,12 @@ export class BedrockProvider implements AIProvider {
       {
         role: "user",
         content: [
-          { text: `${system}\n\n${buildImageQueryUserMessage(locales)}` },
+          {
+            text: `${system}\n\n${withStructuredOutputInstruction(
+              buildImageQueryUserMessage(locales, attributeCatalog),
+              INTERPRETED_SEARCH_JSON_SCHEMA,
+            )}`,
+          },
           {
             image: {
               format,
@@ -111,6 +129,7 @@ export class BedrockProvider implements AIProvider {
     _audio: Uint8Array,
     _mimeType: string,
     _locales: SearchLocaleContext,
+    _attributeCatalog?: FacetAttributeDefinition[],
   ): Promise<VoiceAudioInterpretation> {
     throw new Error(
       "Direct voice audio interpretation requires OpenRouter with an audio-capable model (e.g. google/gemini-3.7-flash)",
@@ -140,7 +159,10 @@ export class BedrockProvider implements AIProvider {
         role: "user",
         content: [
           {
-            text: `${system}\n\n${buildSuggestSearchTermsUserMessage(query, locales, limit)}`,
+            text: `${system}\n\n${withStructuredOutputInstruction(
+              buildSuggestSearchTermsUserMessage(query, locales, limit),
+              SUGGEST_SEARCH_TERMS_JSON_SCHEMA,
+            )}`,
           },
         ],
       },
@@ -180,7 +202,10 @@ export class BedrockProvider implements AIProvider {
         role: "user",
         content: [
           {
-            text: `${system}\n\n${buildMissionQueryUserMessage(text, locales, attributeCatalog)}`,
+            text: `${system}\n\n${withStructuredOutputInstruction(
+              buildMissionQueryUserMessage(text, locales, attributeCatalog),
+              MISSION_JSON_SCHEMA,
+            )}`,
           },
         ],
       },

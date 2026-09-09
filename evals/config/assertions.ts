@@ -18,6 +18,6 @@ return Array.isArray(parsed.searchTerms);`,
 export const plainTextAssertions = [
   {
     type: "javascript",
-    value: `return typeof output === 'string' && output.trim().length > 0;`,
+    value: `typeof output === 'string' && output.trim().length > 0`,
   },
 ] as const;

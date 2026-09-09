@@ -90,27 +90,29 @@ The model must return JSON only (`InterpretedSearchQuery`):
 
 ```json
 {
+  "primaryTerm": "complete phrase in catalog language",
   "searchTerms": ["complete phrase in catalog language"],
-  "filters": {
-    "color": "optional",
-    "brand": "optional",
-    "category": "optional id or key",
-    "priceMin": "50",
-    "priceMax": "200"
-  },
+  "filters": [
+    { "name": "color", "value": "optional" },
+    { "name": "priceMax", "value": "200" }
+  ],
   "suggestedFacets": [{ "name": "color", "reason": "shopper mentioned appearance" }],
   "sort": "relevance",
   "interpretation": "brief explanation in queryLocale"
 }
 ```
 
+The parser also accepts the older `filters` object map and stores `InterpretedSearchFilters` as a record.
+
 Rules encoded in the prompt and parser:
 
+- `primaryTerm` is the catalog-language phrase closest to the shopper's intent. Product Search **boosts** it (name 6 / searchKeywords 4 / description 2) above alternates (3 / 2 / 1). Fuzzy matching runs on the primary phrase only.
 - Each `searchTerms` element is a **complete phrase**, never split words. `"red shoes"` → `["røde sko"]` for a Norwegian catalog, not `["red","shoes"]`.
-- Specific product, brand, or named item → **one phrase**. Broad need (something to drink from) → **3–5 synonym or hyponym phrases** so Product Search can OR them (`glasses` *or* `mugs` *or* `cups`).
-- Parser keeps at most **6** unique phrases (`MAX_INTERPRETED_SEARCH_TERMS`).
+- Specific product, brand, or named item → **one phrase** (same as `primaryTerm`). Broad need (something to drink from) → **3–5 hyponym or close-synonym phrases**. Alternates must not be broader hypernyms.
+- Parser keeps at most **6** unique phrases (`MAX_INTERPRETED_SEARCH_TERMS`) and always includes `primaryTerm` in `searchTerms`.
 - Off-topic queries (general knowledge, jailbreaks) → `searchTerms: []` and a refusal in `interpretation`. The orchestrator then skips commercetools (`hasSearchableContent`).
 - Structured constraints go in `filters`, using only attributes from the supplied catalog plus system keys (`category`, `priceMin` / `priceMax`). Dynamic attributes also support `attributeNameMin` / `attributeNameMax` ranges.
+- OpenRouter calls use `json_schema` (strict) with `temperature: 0`, falling back to `json_object` when the model rejects json_schema.
 
 The LLM does **not** build the Product Search JSON. `parseInterpretedQuery` validates the contract; `buildProductSearchRequest` is deterministic and unit-tested.
 
@@ -130,12 +132,19 @@ For each catalog phrase the builder emits an **OR** of:
 
 | Clause | Field | Notes |
 |--------|-------|--------|
-| `fullText` | `name` | `mustMatch: all`, boost **3** |
-| `fullText` | `searchKeywords` | boost **2** |
-| `fullText` | `description` | boost **1** |
-| `fuzzy` | `name` | `level: 1`, `mustMatch: all` (on by default) |
+| `fullText` | `name` | `mustMatch` from options (default `all`), boost **3** (or **6** for `primaryTerm`) |
+| `fullText` | `searchKeywords` | boost **2** (or **4** for `primaryTerm`) |
+| `fullText` | `description` | boost **1** (or **2** for `primaryTerm`) |
+| `fuzzy` | `name` | `level: 1`. On for every phrase when `primaryTerm` is absent; otherwise only the primary phrase. |
 
 Multiple phrases are OR’d. Filters are AND’d with the text query.
+
+When Product Search returns **zero hits**, the orchestrator retries without an extra LLM call (including when `offset > 0`, so page 2 uses the same relaxed query as page 1):
+
+1. Drop soft filters (color, brand, attributes) and keep price / category.
+2. If still empty, search only `primaryTerm` with `mustMatch: "any"`, still keeping price / category.
+
+`meta.relaxation` records which step produced hits (`drop_soft_filters` or `primary_any_match`).
 
 ```mermaid
 flowchart TD
@@ -258,7 +267,7 @@ flowchart LR
   suggest -->|"CT searchKeywords then AI fallback"| ctSuggest["not executeSearch"]
 ```
 
-**Facet refine.** After the first search, the widget keeps `searchTerms` in session. A chip click resubmits those terms plus `filters` and skips interpretation. Natural-language refine (`“height above 10 cm”`) calls `interpretRefineQuery` with the current terms, filters, and attribute catalog. When `enableMissions` is on, Enter runs a **fresh search** if the query looks like a compound shopping list (`and`, comma, `plus`); otherwise a facet session still refines (for example “taller glasses”). Facet chips still refine.
+**Facet refine.** After the first search, the widget keeps `searchTerms` in session. A chip click resubmits those terms plus `filters` and skips interpretation. Natural-language refine (`“height above 10 cm”`) calls `interpretRefineQuery` with prompt `commerce-ai/refine-query` (merge semantics: keep the product type, “cheaper” → `sort`, dropping a constraint removes that filter). When `enableMissions` is on, Enter runs a **fresh search** if the query looks like a compound shopping list (`and`, comma, `plus`); otherwise a facet session still refines (for example “taller glasses”). Facet chips still refine.
 
 **Shopping missions** (opt-in `enableMissions`). A fresh text search runs `interpretTextQuery` and `decomposeShoppingMission` in parallel. Voice and image search run `decomposeShoppingMission` after the transcript or vision interpretation. If the mission is usable (confidence, at least two intents), each intent runs its own bounded Product Search; otherwise the standard result is used. See the [worked example](#worked-example-compound-shopping-list).
 
@@ -365,6 +374,10 @@ One `interpretTextQuery` call. The text prompt treats a broad need as **3–5 ca
 
 commercetools then ranks glasses *or* coffee tables *or* chairs in a **single flat list**. There are no intent groups and no `quantity: 2`. That mixed ranking is why missions exist.
 
+## Model selection
+
+Defaults stay `openai/gpt-5.6-luna` (text) and `google/gemini-3.7-flash` (vision and voice audio). A 2026-09-09 retrieval matrix on the demo `en-GB` catalog found `openai/gpt-4.1-mini` matching Luna on precision@5 at lower latency; Gemini Flash over-expanded named products (`wine glass` → four phrases). Re-run `pnpm eval:models` before changing defaults. Notes: [`evals/baselines/MODEL-SELECTION.md`](../evals/baselines/MODEL-SELECTION.md).
+
 ## Debugging
 
-See [observability](OBSERVABILITY.md) for `CAT_DEBUG` and Langfuse. Search responses may include `meta.traceId`, `meta.queryInterpretation`, `meta.searchTerms`, and `meta.appliedFilters` for local linking (not a stable public contract).
+See [observability](OBSERVABILITY.md) for `CAT_DEBUG` and Langfuse. Search responses may include `meta.traceId`, `meta.queryInterpretation`, `meta.searchTerms`, `meta.primaryTerm`, `meta.relaxation`, and `meta.appliedFilters` for local linking (not a stable public contract).

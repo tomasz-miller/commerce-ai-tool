@@ -1,0 +1,379 @@
+{
+  "evalId": "eval-bgJ-2026-09-09T13:22:06",
+  "ranAt": "2026-09-09T13:22:06.343Z",
+  "catalogLocale": "en-GB",
+  "suite": "retrieval",
+  "note": "OpenRouter usage.cost was not present on these responses; compare tokensPerQuery and latency as cost proxies. USD should appear in later runs when usage.cost is populated.",
+  "models": [
+    {
+      "label": "google-gemini-25-flash",
+      "pass": 3,
+      "n": 4,
+      "passRate": 0.75,
+      "avgPrecisionAt5": 0.5166666666666666,
+      "avgRecallAt5": 0.6041666666666666,
+      "avgLatencyMs": 1772,
+      "promptTokens": 3878,
+      "completionTokens": 674,
+      "totalTokens": 4552,
+      "tokensPerQuery": 1138,
+      "cases": [
+        {
+          "query": "coffee table",
+          "success": true,
+          "primaryTerm": "coffee table",
+          "searchTerms": [
+            "coffee table"
+          ],
+          "precisionAtK": 0.6666666666666666,
+          "recallAtK": 1,
+          "topSkus": [
+            "GMCT-01",
+            "ADCT-01",
+            "MTSS-01"
+          ],
+          "latencyMs": 2155,
+          "failReason": null
+        },
+        {
+          "query": "wine glass",
+          "success": false,
+          "primaryTerm": "wine glass",
+          "searchTerms": [
+            "wine glass",
+            "wine glasses",
+            "stemware",
+            "drinkware"
+          ],
+          "precisionAtK": 0.2,
+          "recallAtK": 1,
+          "topSkus": [
+            "CWG-01",
+            "CCG-02",
+            "SCG-09",
+            "CCG-01",
+            "GRCG-01"
+          ],
+          "latencyMs": 1801,
+          "failReason": "Custom function returned false"
+        },
+        {
+          "query": "Miałem w domu grubą imprezę, ludzie potłukli mi wszystkie naczynia i nie mam z czego pić. Znajdź coś z czego mógłbym się napić.",
+          "success": true,
+          "primaryTerm": "drinkware",
+          "searchTerms": [
+            "drinkware",
+            "glasses",
+            "mugs",
+            "cups"
+          ],
+          "precisionAtK": 0.2,
+          "recallAtK": 0.16666666666666666,
+          "topSkus": [
+            "STM-09",
+            "CCM-089",
+            "SCM-02",
+            "TCM-03",
+            "CCC-09"
+          ],
+          "latencyMs": 1567,
+          "failReason": null
+        },
+        {
+          "query": "dining chairs",
+          "success": true,
+          "primaryTerm": "dining chairs",
+          "searchTerms": [
+            "dining chairs",
+            "kitchen chairs",
+            "dining room chairs"
+          ],
+          "precisionAtK": 1,
+          "recallAtK": 0.25,
+          "topSkus": [
+            "CCH-093",
+            "BARM-03"
+          ],
+          "latencyMs": 1565,
+          "failReason": null
+        }
+      ]
+    },
+    {
+      "label": "openai-gpt-56-luna",
+      "pass": 4,
+      "n": 4,
+      "passRate": 1,
+      "avgPrecisionAt5": 0.5166666666666666,
+      "avgRecallAt5": 0.6041666666666666,
+      "avgLatencyMs": 3999,
+      "promptTokens": 4264,
+      "completionTokens": 423,
+      "totalTokens": 4687,
+      "tokensPerQuery": 1172,
+      "cases": [
+        {
+          "query": "coffee table",
+          "success": true,
+          "primaryTerm": "coffee table",
+          "searchTerms": [
+            "coffee table"
+          ],
+          "precisionAtK": 0.6666666666666666,
+          "recallAtK": 1,
+          "topSkus": [
+            "GMCT-01",
+            "ADCT-01",
+            "MTSS-01"
+          ],
+          "latencyMs": 2396,
+          "failReason": null
+        },
+        {
+          "query": "wine glass",
+          "success": true,
+          "primaryTerm": "wine glass",
+          "searchTerms": [
+            "wine glass"
+          ],
+          "precisionAtK": 0.2,
+          "recallAtK": 1,
+          "topSkus": [
+            "CWG-01",
+            "CCG-01",
+            "CCG-02",
+            "SCG-09",
+            "GRCG-01"
+          ],
+          "latencyMs": 2305,
+          "failReason": null
+        },
+        {
+          "query": "Miałem w domu grubą imprezę, ludzie potłukli mi wszystkie naczynia i nie mam z czego pić. Znajdź coś z czego mógłbym się napić.",
+          "success": true,
+          "primaryTerm": "drinkware",
+          "searchTerms": [
+            "drinkware",
+            "glasses",
+            "mugs",
+            "cups"
+          ],
+          "precisionAtK": 0.2,
+          "recallAtK": 0.16666666666666666,
+          "topSkus": [
+            "STM-09",
+            "CCM-089",
+            "SCM-02",
+            "TCM-03",
+            "CCC-09"
+          ],
+          "latencyMs": 3908,
+          "failReason": null
+        },
+        {
+          "query": "dining chairs",
+          "success": true,
+          "primaryTerm": "dining chairs",
+          "searchTerms": [
+            "dining chairs"
+          ],
+          "precisionAtK": 1,
+          "recallAtK": 0.25,
+          "topSkus": [
+            "CCH-093",
+            "BARM-03"
+          ],
+          "latencyMs": 7388,
+          "failReason": null
+        }
+      ]
+    },
+    {
+      "label": "openai-gpt-41-mini",
+      "pass": 4,
+      "n": 4,
+      "passRate": 1,
+      "avgPrecisionAt5": 0.5166666666666666,
+      "avgRecallAt5": 0.6041666666666666,
+      "avgLatencyMs": 2729,
+      "promptTokens": 4272,
+      "completionTokens": 486,
+      "totalTokens": 4758,
+      "tokensPerQuery": 1190,
+      "cases": [
+        {
+          "query": "coffee table",
+          "success": true,
+          "primaryTerm": "coffee table",
+          "searchTerms": [
+            "coffee table"
+          ],
+          "precisionAtK": 0.6666666666666666,
+          "recallAtK": 1,
+          "topSkus": [
+            "GMCT-01",
+            "ADCT-01",
+            "MTSS-01"
+          ],
+          "latencyMs": 2493,
+          "failReason": null
+        },
+        {
+          "query": "wine glass",
+          "success": true,
+          "primaryTerm": "wine glass",
+          "searchTerms": [
+            "wine glass"
+          ],
+          "precisionAtK": 0.2,
+          "recallAtK": 1,
+          "topSkus": [
+            "CWG-01",
+            "CCG-01",
+            "CCG-02",
+            "SCG-09",
+            "GRCG-01"
+          ],
+          "latencyMs": 2374,
+          "failReason": null
+        },
+        {
+          "query": "Miałem w domu grubą imprezę, ludzie potłukli mi wszystkie naczynia i nie mam z czego pić. Znajdź coś z czego mógłbym się napić.",
+          "success": true,
+          "primaryTerm": "drinkware",
+          "searchTerms": [
+            "drinkware",
+            "glasses",
+            "mugs",
+            "cups"
+          ],
+          "precisionAtK": 0.2,
+          "recallAtK": 0.16666666666666666,
+          "topSkus": [
+            "STM-09",
+            "CCM-089",
+            "SCM-02",
+            "TCM-03",
+            "CCC-09"
+          ],
+          "latencyMs": 3665,
+          "failReason": null
+        },
+        {
+          "query": "dining chairs",
+          "success": true,
+          "primaryTerm": "dining chair",
+          "searchTerms": [
+            "dining chair",
+            "dining chairs",
+            "kitchen chair",
+            "kitchen chairs"
+          ],
+          "precisionAtK": 1,
+          "recallAtK": 0.25,
+          "topSkus": [
+            "CCH-093",
+            "BARM-03"
+          ],
+          "latencyMs": 2384,
+          "failReason": null
+        }
+      ]
+    },
+    {
+      "label": "google-gemini-37-flash",
+      "pass": 3,
+      "n": 4,
+      "passRate": 0.75,
+      "avgPrecisionAt5": 0.6166666666666667,
+      "avgRecallAt5": 0.6875,
+      "avgLatencyMs": 4400,
+      "promptTokens": 5290,
+      "completionTokens": 1436,
+      "totalTokens": 6726,
+      "tokensPerQuery": 1682,
+      "cases": [
+        {
+          "query": "coffee table",
+          "success": true,
+          "primaryTerm": "coffee table",
+          "searchTerms": [
+            "coffee table"
+          ],
+          "precisionAtK": 0.6666666666666666,
+          "recallAtK": 1,
+          "topSkus": [
+            "GMCT-01",
+            "ADCT-01",
+            "MTSS-01"
+          ],
+          "latencyMs": 4541,
+          "failReason": null
+        },
+        {
+          "query": "wine glass",
+          "success": false,
+          "primaryTerm": "wine glass",
+          "searchTerms": [
+            "wine glass",
+            "wine glasses",
+            "red wine glass",
+            "white wine glass"
+          ],
+          "precisionAtK": 0.2,
+          "recallAtK": 1,
+          "topSkus": [
+            "CWG-01",
+            "CCG-01",
+            "CCG-02",
+            "SCG-09",
+            "GRCG-01"
+          ],
+          "latencyMs": 4406,
+          "failReason": "Custom function returned false"
+        },
+        {
+          "query": "Miałem w domu grubą imprezę, ludzie potłukli mi wszystkie naczynia i nie mam z czego pić. Znajdź coś z czego mógłbym się napić.",
+          "success": true,
+          "primaryTerm": "drinkware",
+          "searchTerms": [
+            "drinkware",
+            "drinking glasses",
+            "mugs",
+            "cups",
+            "tumblers"
+          ],
+          "precisionAtK": 0.6,
+          "recallAtK": 0.5,
+          "topSkus": [
+            "HDG-02",
+            "CDG-09",
+            "STM-09",
+            "CCM-089",
+            "SCM-02"
+          ],
+          "latencyMs": 4311,
+          "failReason": null
+        },
+        {
+          "query": "dining chairs",
+          "success": true,
+          "primaryTerm": "dining chairs",
+          "searchTerms": [
+            "dining chairs",
+            "dining room chairs",
+            "kitchen chairs"
+          ],
+          "precisionAtK": 1,
+          "recallAtK": 0.25,
+          "topSkus": [
+            "CCH-093",
+            "BARM-03"
+          ],
+          "latencyMs": 4342,
+          "failReason": null
+        }
+      ]
+    }
+  ]
+}

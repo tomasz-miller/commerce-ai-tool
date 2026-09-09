@@ -1,0 +1,36 @@
+- description: Cross-locale prefix becomes catalog-language suggestions
+  vars:
+    query: szukam drewnianego stołu
+    queryLocale: pl
+    catalogLocale: en-GB
+    limit: 4
+  assert:
+    - type: javascript
+      value: JSON.parse(output).suggestions.length >= 1
+    - type: javascript
+      value: |
+        const suggestions = JSON.parse(output).suggestions.join(' ').toLowerCase();
+        return suggestions.includes('table') || suggestions.includes('wood');
+
+- description: Catalog-language product type stays in catalog language
+  vars:
+    query: red shoes
+    queryLocale: en
+    catalogLocale: no
+    limit: 4
+  assert:
+    - type: javascript
+      value: JSON.parse(output).suggestions.length >= 1
+    - type: javascript
+      value: |
+        const suggestions = JSON.parse(output).suggestions.join(' ').toLowerCase();
+        return suggestions.includes('sko') || suggestions.includes('rød');
+
+- description: Off-topic input returns no suggestions
+  vars:
+    query: explain RAM vs SSD
+    queryLocale: en
+    catalogLocale: en-GB
+  assert:
+    - type: javascript
+      value: JSON.parse(output).suggestions.length === 0

@@ -29,6 +29,8 @@ Override with env:
 | `OPENROUTER_VISION_MODEL` | `google/gemini-3.7-flash` | Image search |
 | `OPENROUTER_VOICE_MODEL` | `google/gemini-3.7-flash` | Direct audio interpretation |
 
+Structured interpretation uses OpenRouter `json_schema` with `temperature: 0`. Set `OPENROUTER_JSON_SCHEMA=false` (or retry fallback kicks in) when a model rejects json_schema. Compare cheaper models with `pnpm eval:models` before changing these defaults.
+
 ## Voice search TTS
 
 Spoken summaries are **voice-search only** (text and image search stay visual).
@@ -47,6 +49,7 @@ See [`apps/demo-next/.env.example`](../apps/demo-next/.env.example) for the copy
 | `CTP_PROJECT_KEY`, `CTP_CLIENT_ID`, `CTP_CLIENT_SECRET`, `CTP_REGION` | commercetools API |
 | `CAT_AI_PROVIDER` | `openrouter` or `bedrock` |
 | `OPENROUTER_API_KEY` | OpenRouter (when using that provider) |
+| `OPENROUTER_JSON_SCHEMA=false` | Disable OpenRouter `json_schema` and send the JSON schema in the prompt instead |
 | `ELEVENLABS_API_KEY` | Voice STT / TTS |
 | `CAT_CATALOG_LOCALE` | Primary catalog language |
 | `CAT_DEFAULT_CURRENCY` | Default cart and price currency (e.g. `EUR`) |
