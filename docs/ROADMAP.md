@@ -2,6 +2,8 @@
 
 Shipped versions and remaining work. [Documentation index](README.md).
 
+Open TODOs are tracked as GitHub Issues: https://github.com/tomasz-miller/commerce-ai-tool/issues. Each unchecked item below must have a matching open issue.
+
 ## v1.0
 
 - [x] Product search via commercetools Product Search API
@@ -142,4 +144,4 @@ Keep Product Search API (REST) for search and facets. Use GraphQL only to fetch 
 
 Local `pnpm dev` still runs the React host (`apps/demo-next`). An Angular host is not required for the v2.4 widget work.
 
-- [ ] Add `apps/demo-angular` (or equivalent) that mounts `@commerce-ai-tool/angular` against the same `/api/commerce-ai` BFF as `demo-next`
+- [ ] Add `apps/demo-angular` (or equivalent) that mounts `@commerce-ai-tool/angular` against the same `/api/commerce-ai` BFF as `demo-next` ([#18](https://github.com/tomasz-miller/commerce-ai-tool/issues/18))
