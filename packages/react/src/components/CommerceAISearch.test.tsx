@@ -578,7 +578,7 @@ describe("CommerceAISearch cart", () => {
     expect(refine).not.toHaveBeenCalled();
   });
 
-  it("renders mission lanes outside the product grid and widens the root", () => {
+  it("renders mission lanes outside the product grid without stretching two lanes", () => {
     mockUseCommerceAISearch.mockReturnValue({
       ...defaultSearchReturn,
       query: "glasses, a table, and chairs",
@@ -609,11 +609,53 @@ describe("CommerceAISearch cart", () => {
     );
 
     expect(container.querySelector(".cat-root--mission")).not.toBeNull();
+    expect(container.querySelector(".cat-root--mission-lanes-2")).not.toBeNull();
     expect(container.querySelector(".cat-mission")).not.toBeNull();
     expect(container.querySelector(".cat-results")).toBeNull();
     expect(container.querySelector(".cat-results .cat-mission")).toBeNull();
+    expect(container.querySelector(".cat-result-card--primary")).not.toBeNull();
     expect(screen.getByText("glasses")).not.toBeNull();
     expect(screen.getByText("table")).not.toBeNull();
+  });
+
+  it("widens the root when a mission has three or more lanes", () => {
+    mockUseCommerceAISearch.mockReturnValue({
+      ...defaultSearchReturn,
+      query: "glasses, a table, and chairs",
+      hasSearched: true,
+      results: [
+        { id: "p1", name: "Wine Glass", sku: "GLASS-1" },
+        { id: "p2", name: "Dining Table", sku: "TABLE-1" },
+        { id: "p3", name: "Lounge Chair", sku: "CHAIR-1" },
+      ],
+      mission: {
+        interpretation: "glasses, table, and chairs",
+        intents: [
+          {
+            intent: { id: "intent-0", label: "glasses", quantity: 1, searchTerms: ["glasses"] },
+            products: [{ id: "p1", name: "Wine Glass", sku: "GLASS-1" }],
+            total: 1,
+          },
+          {
+            intent: { id: "intent-1", label: "table", quantity: 1, searchTerms: ["table"] },
+            products: [{ id: "p2", name: "Dining Table", sku: "TABLE-1" }],
+            total: 1,
+          },
+          {
+            intent: { id: "intent-2", label: "chairs", quantity: 1, searchTerms: ["chairs"] },
+            products: [{ id: "p3", name: "Lounge Chair", sku: "CHAIR-1" }],
+            total: 1,
+          },
+        ],
+      },
+    });
+
+    const { container } = render(
+      <CommerceAISearch apiBaseUrl="/api/commerce-ai" enableCart enableMissions />,
+    );
+
+    expect(container.querySelector(".cat-root--mission-lanes-3")).not.toBeNull();
+    expect(container.querySelector(".cat-root--mission-lanes-2")).toBeNull();
   });
 
   it("refines on submit when a facet session is active", () => {

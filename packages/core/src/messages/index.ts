@@ -45,6 +45,7 @@ export interface CommerceAISearchMessages {
   unableToAddToCart: string;
   missionTitle: string;
   missionQuantity: string;
+  /** Adds the first (recommended) product from each filled lane. Use `{count}` for the number of picks. */
   missionAddAll: string;
   missionItemsAdded: string;
   missionSelectProduct: string;
@@ -152,7 +153,7 @@ export const DEFAULT_COMMERCE_AI_SEARCH_MESSAGES: CommerceAISearchMessages = {
   unableToAddToCart: "This product cannot be added to the cart",
   missionTitle: "Shopping list",
   missionQuantity: "Looking for",
-  missionAddAll: "Add all to cart",
+  missionAddAll: "Add {count} top picks to cart",
   missionItemsAdded: "Added to cart",
   missionSelectProduct: "Select this product",
   missionIntentEmpty: "No matching products",

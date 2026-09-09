@@ -55,7 +55,12 @@ describe("MissionResults", () => {
     expect(screen.getByText("Looking for 2")).toBeTruthy();
     expect(screen.queryByText("Looking for 1")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: /Add all to cart/i }));
+    const cards = document.querySelectorAll(".cat-mission-group__products .cat-result-card");
+    expect(cards[0]?.className).toContain("cat-result-card--primary");
+    expect(cards[1]?.className).toContain("cat-result-card--compact");
+    expect(cards[2]?.className).toContain("cat-result-card--primary");
+
+    fireEvent.click(screen.getByRole("button", { name: "Add 2 top picks to cart" }));
 
     expect(onAddAll).toHaveBeenCalledWith([
       { sku: "RACKET-1", quantity: 1 },
@@ -164,7 +169,7 @@ describe("MissionResults", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Add all to cart/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Add 1 top pick to cart" }));
     expect(onAddAll).toHaveBeenCalledWith([{ sku: "GLASS-1", quantity: 1 }]);
   });
 

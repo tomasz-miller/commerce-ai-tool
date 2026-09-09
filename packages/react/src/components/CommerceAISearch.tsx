@@ -217,6 +217,7 @@ export function CommerceAISearch({
 
   const displayResults = results;
   const showMission = Boolean(mission);
+  const missionLaneCount = mission?.intents.length ?? 0;
   const showEmptyResults =
     !isLoading &&
     !error &&
@@ -381,7 +382,9 @@ export function CommerceAISearch({
       className={[
         "cat-root",
         "cat-wrapper",
-        showMission && !isLoading && !error ? "cat-root--mission" : "",
+        showMission && !isLoading && !error
+          ? `cat-root--mission cat-root--mission-lanes-${Math.min(Math.max(missionLaneCount, 1), 5)}`
+          : "",
         className ?? "",
       ]
         .filter(Boolean)

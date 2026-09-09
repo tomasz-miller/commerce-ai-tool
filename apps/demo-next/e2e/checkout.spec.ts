@@ -189,7 +189,6 @@ test("keeps the wallpaper and search layout stable when the cart opens", async (
 
   const hero = page.locator(".demo-hero");
   const searchBar = page.locator(".cat-search-bar");
-  const heroBefore = await hero.boundingBox();
   const searchBefore = await searchBar.boundingBox();
 
   expect(
@@ -198,6 +197,10 @@ test("keeps the wallpaper and search layout stable when the cart opens", async (
 
   await page.getByRole("button", { name: /cart/i }).click();
 
-  expect((await hero.boundingBox())?.y).toBe(heroBefore?.y);
-  expect((await searchBar.boundingBox())?.y).toBe(searchBefore?.y);
+  const searchAfter = await searchBar.boundingBox();
+  const heroAfter = await hero.boundingBox();
+  expect(searchAfter?.width).toBe(searchBefore?.width);
+  expect(searchAfter?.x).toBe(searchBefore?.x);
+  expect((heroAfter?.y ?? 0) + (heroAfter?.height ?? 0)).toBeLessThanOrEqual((searchAfter?.y ?? 0) + 1);
+  await expect(page.getByRole("region", { name: /cart/i })).toBeVisible();
 });

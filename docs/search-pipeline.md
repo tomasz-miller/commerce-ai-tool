@@ -327,7 +327,7 @@ flowchart TD
   g1["Product Search: fancy glasses"]
   g2["Product Search: coffee table"]
   g3["Product Search: dining chairs"]
-  ui["UI: intent lanes plus optional Add all"]
+  ui["UI: intent lanes plus optional Add top picks"]
 
   q --> interpret
   q --> mission
@@ -343,7 +343,7 @@ Each intent uses the same builder as a normal search (OR of `name` / `searchKeyw
 
 Details:
 
-- **`quantity: 2` on chairs** is a lane hint (“Looking for 2”). Per-card add and “Add all” both use quantity 1. Search still returns up to `perIntentLimit` cards.
+- **`quantity: 2` on chairs** is a lane hint (“Looking for 2”). Per-card add and “Add top picks” both use quantity 1. Search still returns up to `perIntentLimit` cards.
 - **“living room”** is context, not a fourth product. It may appear inside a chair phrase (`living room chairs`).
 - **“fancy”** usually stays on the glasses phrase. There is no generic `fancy` filter unless a Product Type attribute matches.
 - If every intent returns zero products, the orchestrator **falls back** to the standard `interpretTextQuery` result.

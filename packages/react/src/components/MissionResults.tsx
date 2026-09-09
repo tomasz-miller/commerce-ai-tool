@@ -19,6 +19,14 @@ export interface MissionResultsProps {
   onAddAll: (items: AddToCartLineItem[]) => Promise<unknown>;
 }
 
+function formatMissionAddAll(template: string, count: number): string {
+  const withPlural = count === 1 ? template.replaceAll("top picks", "top pick") : template;
+  if (withPlural.includes("{count}")) {
+    return withPlural.replaceAll("{count}", String(count));
+  }
+  return `${withPlural} (${count})`;
+}
+
 function toCartItem(product: ProductCard, quantity: number): AddToCartLineItem {
   return product.sku
     ? { sku: product.sku, quantity }
@@ -139,12 +147,15 @@ export function MissionResults({
               </div>
             ) : (
               <div className="cat-mission-group__products">
-                {group.products.map((product) => {
+                {group.products.map((product, index) => {
                   const canAdd = Boolean(product.sku || product.id);
                   const justAdded = Boolean(addedProductIds?.[product.id]);
                   const body = <ProductCardBody product={product} />;
                   return (
-                    <article key={product.id} className="cat-result-card">
+                    <article
+                      key={product.id}
+                      className={`cat-result-card ${index === 0 ? "cat-result-card--primary" : "cat-result-card--compact"}`}
+                    >
                       <div className="cat-result-card__core">
                         {onProductSelect ? (
                           <button
@@ -211,7 +222,7 @@ export function MissionResults({
           >
             {justAddedAll
               ? messages.missionItemsAdded
-              : `${messages.missionAddAll} (${totalQuantity})`}
+              : formatMissionAddAll(messages.missionAddAll, totalQuantity)}
           </button>
         </div>
       ) : null}
