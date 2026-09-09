@@ -196,6 +196,32 @@ export function wrapAIProvider(provider: AIProvider, meta: AIProviderTraceMeta):
         { asType: "generation" },
       );
     },
+
+    decomposeShoppingMission(text, locales, attributeCatalog = []) {
+      return startActiveObservation(
+        "ai.decomposeShoppingMission",
+        async (generation) => {
+          generation.update({
+            model: meta.textModel,
+            metadata: { provider: meta.provider },
+            input: {
+              text,
+              locales,
+              attributeCatalogSize: attributeCatalog.length,
+            },
+          });
+          try {
+            const result = await provider.decomposeShoppingMission(text, locales, attributeCatalog);
+            generation.update({ output: result });
+            return result;
+          } catch (error) {
+            markGenerationError(generation, error);
+            throw error;
+          }
+        },
+        { asType: "generation" },
+      );
+    },
   };
 }
 

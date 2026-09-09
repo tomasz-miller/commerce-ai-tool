@@ -5,6 +5,7 @@ import type {
   LineItem,
 } from "@commercetools/platform-sdk";
 import type {
+  AddItemsToCartRequest,
   AddToCartRequest,
   CartLoginRequest,
   CartLoginResult,
@@ -44,6 +45,7 @@ export interface CartOperations {
   getCart(anonymousId: string, locale?: string): Promise<CartSnapshot | null>;
   getCustomerCart(customerId: string, locale?: string): Promise<CartSnapshot | null>;
   addToCart(input: AddToCartRequest): Promise<CartSnapshot>;
+  addItemsToCart(input: AddItemsToCartRequest): Promise<CartSnapshot>;
   removeLineItem(input: CartMutationRequest): Promise<CartSnapshot>;
   changeLineItemQuantity(input: UpdateCartQuantityRequest): Promise<CartSnapshot>;
   loginAndMerge(input: CartLoginRequest): Promise<CartLoginResult>;
@@ -208,15 +210,15 @@ function toLineItemIdentifier(input: ReturnType<typeof resolveLineItemDraft>): {
 
 function addLineItemActions(
   cart: Cart,
-  input: AddToCartRequest,
-  addAction: CartUpdateAction,
+  input: { country?: string },
+  addActions: CartUpdateAction[],
 ): CartUpdateAction[] {
   const country = input.country?.trim();
   const actions: CartUpdateAction[] = [];
   if (country && cart.country !== country) {
     actions.push({ action: "setCountry", country });
   }
-  actions.push(addAction);
+  actions.push(...addActions);
   return actions;
 }
 
@@ -410,8 +412,13 @@ export function createCartOperations(gateway: CartGateway): CartOperations {
   }
 
   async function createCartWithPriceFallback(
-    input: AddToCartRequest,
-    lineItem: ReturnType<typeof toLineItemIdentifier>,
+    input: {
+      country?: string;
+      currency?: string;
+      anonymousId?: string;
+      customerId?: string;
+    },
+    lineItems: Array<ReturnType<typeof toLineItemIdentifier>>,
   ): Promise<Cart> {
     const country = input.country?.trim() || undefined;
     const draft = {
@@ -419,7 +426,7 @@ export function createCartOperations(gateway: CartGateway): CartOperations {
       country,
       anonymousId: input.customerId ? undefined : input.anonymousId,
       customerId: input.customerId,
-      lineItems: [lineItem],
+      lineItems,
     };
 
     try {
@@ -438,10 +445,10 @@ export function createCartOperations(gateway: CartGateway): CartOperations {
 
   async function addLineItemWithPriceFallback(
     cart: Cart,
-    input: AddToCartRequest,
-    addAction: CartUpdateAction,
+    input: { country?: string },
+    addActions: CartUpdateAction[],
   ): Promise<Cart> {
-    const actions = addLineItemActions(cart, input, addAction);
+    const actions = addLineItemActions(cart, input, addActions);
     try {
       return await updateWithRetry(cart, actions);
     } catch (error) {
@@ -452,7 +459,7 @@ export function createCartOperations(gateway: CartGateway): CartOperations {
       const changedCountry = actions.some((action) => action.action === "setCountry");
       if (changedCountry) {
         try {
-          return await updateWithRetry(cart, [addAction]);
+          return await updateWithRetry(cart, addActions);
         } catch (retryError) {
           if (!isMatchingPriceNotFound(retryError)) {
             throw retryError;
@@ -462,7 +469,7 @@ export function createCartOperations(gateway: CartGateway): CartOperations {
 
       if (cart.country || changedCountry) {
         try {
-          return await updateWithRetry(cart, [{ action: "setCountry" }, addAction]);
+          return await updateWithRetry(cart, [{ action: "setCountry" }, ...addActions]);
         } catch (retryError) {
           if (!isMatchingPriceNotFound(retryError)) {
             throw retryError;
@@ -472,6 +479,16 @@ export function createCartOperations(gateway: CartGateway): CartOperations {
 
       throw toMissingPriceError(error);
     }
+  }
+
+  function lineItemDraftsFromItems(
+    items: Array<{ sku?: string; productId?: string; variantId?: number; quantity?: number }>,
+  ) {
+    return items.map((item) => {
+      const lineItem = resolveLineItemDraft(item);
+      assertAddToCartTarget(lineItem);
+      return toLineItemIdentifier(lineItem);
+    });
   }
 
   return {
@@ -490,29 +507,62 @@ export function createCartOperations(gateway: CartGateway): CartOperations {
       const lineItem = resolveLineItemDraft(input);
       assertAddToCartTarget(lineItem);
       const draft = toLineItemIdentifier(lineItem);
-      const addAction: CartUpdateAction = { action: "addLineItem", ...draft };
+      const addActions: CartUpdateAction[] = [{ action: "addLineItem", ...draft }];
 
       if (input.cartId) {
         const cart = await requireActiveCart(input);
-        const updated = await addLineItemWithPriceFallback(cart, input, addAction);
+        const updated = await addLineItemWithPriceFallback(cart, input, addActions);
         return mapCartToSnapshot(updated, locale);
       }
 
       const existing = await findExistingCart(input);
       if (existing) {
-        const updated = await addLineItemWithPriceFallback(existing, input, addAction);
+        const updated = await addLineItemWithPriceFallback(existing, input, addActions);
         return mapCartToSnapshot(updated, locale);
       }
 
       try {
-        const created = await createCartWithPriceFallback(input, draft);
+        const created = await createCartWithPriceFallback(input, [draft]);
         return mapCartToSnapshot(created, locale);
       } catch (error) {
         const raced = await findExistingCart(input);
         if (!raced) {
           throw error;
         }
-        const updated = await addLineItemWithPriceFallback(raced, input, addAction);
+        const updated = await addLineItemWithPriceFallback(raced, input, addActions);
+        return mapCartToSnapshot(updated, locale);
+      }
+    },
+
+    async addItemsToCart(input) {
+      const locale = resolveCartLocale(input.catalogLocale);
+      const drafts = lineItemDraftsFromItems(input.items);
+      const addActions: CartUpdateAction[] = drafts.map((draft) => ({
+        action: "addLineItem",
+        ...draft,
+      }));
+
+      if (input.cartId) {
+        const cart = await requireActiveCart(input);
+        const updated = await addLineItemWithPriceFallback(cart, input, addActions);
+        return mapCartToSnapshot(updated, locale);
+      }
+
+      const existing = await findExistingCart(input);
+      if (existing) {
+        const updated = await addLineItemWithPriceFallback(existing, input, addActions);
+        return mapCartToSnapshot(updated, locale);
+      }
+
+      try {
+        const created = await createCartWithPriceFallback(input, drafts);
+        return mapCartToSnapshot(created, locale);
+      } catch (error) {
+        const raced = await findExistingCart(input);
+        if (!raced) {
+          throw error;
+        }
+        const updated = await addLineItemWithPriceFallback(raced, input, addActions);
         return mapCartToSnapshot(updated, locale);
       }
     },

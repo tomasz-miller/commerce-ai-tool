@@ -1,5 +1,6 @@
 import {
   IMAGE_QUERY_SYSTEM_PROMPT,
+  MISSION_QUERY_SYSTEM_PROMPT,
   SUGGEST_SEARCH_TERMS_SYSTEM_PROMPT,
   TEXT_QUERY_SYSTEM_PROMPT,
   TTS_SUMMARY_PROMPT,
@@ -15,6 +16,7 @@ export const SYSTEM_PROMPT_NAMES = {
   VOICE_AUDIO_INTERPRET: "commerce-ai/voice-audio-interpret",
   SUGGEST_SEARCH_TERMS: "commerce-ai/suggest-search-terms",
   TTS_SUMMARY: "commerce-ai/tts-summary",
+  MISSION_QUERY: "commerce-ai/mission-query",
 } as const;
 
 export type SystemPromptName = (typeof SYSTEM_PROMPT_NAMES)[keyof typeof SYSTEM_PROMPT_NAMES];
@@ -27,6 +29,7 @@ export const SYSTEM_PROMPT_CATALOG: Record<SystemPromptName, string> = {
   [SYSTEM_PROMPT_NAMES.VOICE_AUDIO_INTERPRET]: VOICE_AUDIO_INTERPRET_SYSTEM_PROMPT,
   [SYSTEM_PROMPT_NAMES.SUGGEST_SEARCH_TERMS]: SUGGEST_SEARCH_TERMS_SYSTEM_PROMPT,
   [SYSTEM_PROMPT_NAMES.TTS_SUMMARY]: TTS_SUMMARY_PROMPT,
+  [SYSTEM_PROMPT_NAMES.MISSION_QUERY]: MISSION_QUERY_SYSTEM_PROMPT,
 };
 
 export function getLocalSystemPrompt(name: SystemPromptName): string {

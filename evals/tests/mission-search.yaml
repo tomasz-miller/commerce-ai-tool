@@ -1,0 +1,64 @@
+- description: Compound shopping request splits into three intents
+  vars:
+    query: I need a tennis racket, two golf balls and a travel bag
+    queryLocale: en
+    catalogLocale: en-GB
+  assert:
+    - type: javascript
+      value: JSON.parse(output).isMission === true
+    - type: javascript
+      value: JSON.parse(output).intents.length >= 3
+    - type: javascript
+      value: |
+        const labels = JSON.parse(output).intents.map((intent) => intent.label.toLowerCase()).join(" ");
+        return labels.includes("racket") && labels.includes("ball") && labels.includes("bag");
+
+- description: Quantity words become numeric quantities
+  vars:
+    query: a pair of golf balls and a tennis racket
+    queryLocale: en
+    catalogLocale: en-GB
+  assert:
+    - type: javascript
+      value: JSON.parse(output).isMission === true
+    - type: javascript
+      value: |
+        const balls = JSON.parse(output).intents.find((intent) =>
+          intent.label.toLowerCase().includes("ball"),
+        );
+        return balls && balls.quantity >= 2;
+
+- description: Single product query is not a mission
+  vars:
+    query: red shoes
+    queryLocale: en
+    catalogLocale: en-GB
+  assert:
+    - type: javascript
+      value: JSON.parse(output).isMission === false
+    - type: javascript
+      value: JSON.parse(output).intents.length === 0
+
+- description: Cross-locale compound request uses catalog-language searchTerms
+  vars:
+    query: potrzebuję rakiety tenisowej i dwóch piłek golfowych
+    queryLocale: pl
+    catalogLocale: en-GB
+  assert:
+    - type: javascript
+      value: JSON.parse(output).isMission === true
+    - type: javascript
+      value: |
+        const terms = JSON.parse(output).intents.flatMap((intent) => intent.searchTerms).join(" ").toLowerCase();
+        return terms.includes("tennis") || terms.includes("racket") || terms.includes("golf");
+
+- description: Off-topic query is not a mission
+  vars:
+    query: explain the difference between RAM and SSD
+    queryLocale: en
+    catalogLocale: en-GB
+  assert:
+    - type: javascript
+      value: JSON.parse(output).isMission === false
+    - type: javascript
+      value: JSON.parse(output).intents.length === 0

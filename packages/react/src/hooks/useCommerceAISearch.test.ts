@@ -34,6 +34,52 @@ describe("useCommerceAISearch", () => {
     expect(result.current.isLoading).toBe(false);
   });
 
+  it("sends enableMissions and stores grouped results", async () => {
+    const mission = {
+      interpretation: "racket and balls",
+      intents: [
+        {
+          intent: { id: "intent-0", label: "racket", quantity: 1, searchTerms: ["racket"] },
+          products: [{ id: "p1", name: "Racket" }],
+          total: 1,
+        },
+        {
+          intent: { id: "intent-1", label: "balls", quantity: 2, searchTerms: ["balls"] },
+          products: [{ id: "p2", name: "Balls" }],
+          total: 1,
+        },
+      ],
+    };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        products: [{ id: "p1", name: "Racket" }, { id: "p2", name: "Balls" }],
+        mission,
+        meta: { queryInterpretation: "racket and balls" },
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() =>
+      useCommerceAISearch({ apiBaseUrl: "/api/commerce-ai", enableMissions: true }),
+    );
+
+    await act(async () => {
+      await result.current.search("a racket and two balls");
+    });
+
+    const body = JSON.parse((fetchMock.mock.calls[0]?.[1] as { body: string }).body) as {
+      enableMissions?: boolean;
+    };
+    expect(body.enableMissions).toBe(true);
+    expect(result.current.mission).toEqual(mission);
+
+    act(() => {
+      result.current.setQuery("");
+    });
+    expect(result.current.mission).toBeNull();
+  });
+
   it("resets hasSearched when the query is cleared", async () => {
     vi.stubGlobal(
       "fetch",
@@ -115,5 +161,85 @@ describe("useCommerceAISearch", () => {
     expect(newSearchBody.searchTerms).toBeUndefined();
     expect(newSearchBody.refineQuery).toBeUndefined();
     expect(newSearchBody.includeFacets).toBe(true);
+  });
+
+  it("does not open a facet session for mission results", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        products: [{ id: "p1", name: "Racket" }, { id: "p2", name: "Balls" }],
+        mission: {
+          interpretation: "racket and balls",
+          intents: [
+            {
+              intent: { id: "intent-0", label: "racket", quantity: 1, searchTerms: ["racket"] },
+              products: [{ id: "p1", name: "Racket" }],
+              total: 1,
+            },
+            {
+              intent: { id: "intent-1", label: "balls", quantity: 2, searchTerms: ["balls"] },
+              products: [{ id: "p2", name: "Balls" }],
+              total: 1,
+            },
+          ],
+        },
+        meta: {
+          queryInterpretation: "racket and balls",
+          searchTerms: ["racket", "balls"],
+        },
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() =>
+      useCommerceAISearch({
+        apiBaseUrl: "/api/commerce-ai",
+        enableFacets: true,
+        enableMissions: true,
+        persistSession: false,
+      }),
+    );
+
+    await act(async () => {
+      await result.current.search("a racket and two balls");
+    });
+
+    expect(result.current.hasFacetSession).toBe(false);
+    expect(result.current.mission).not.toBeNull();
+  });
+
+  it("sends enableMissions on image search and stores grouped results", async () => {
+    const mission = {
+      interpretation: "glasses and table",
+      intents: [
+        {
+          intent: { id: "intent-0", label: "glasses", quantity: 1, searchTerms: ["glasses"] },
+          products: [{ id: "p1", name: "Glass" }],
+          total: 1,
+        },
+      ],
+    };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        products: [{ id: "p1", name: "Glass" }],
+        mission,
+        interpretation: "glasses and a coffee table",
+        meta: { queryInterpretation: "glasses and a coffee table" },
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() =>
+      useCommerceAISearch({ apiBaseUrl: "/api/commerce-ai", enableMissions: true }),
+    );
+
+    await act(async () => {
+      await result.current.searchByImage(new File(["img"], "photo.jpg", { type: "image/jpeg" }));
+    });
+
+    const formData = fetchMock.mock.calls[0]?.[1]?.body as FormData;
+    expect(formData.get("enableMissions")).toBe("true");
+    expect(result.current.mission).toEqual(mission);
   });
 });

@@ -140,6 +140,12 @@ describe("wrapAIProvider", () => {
       enhanceVoiceTranscript: vi.fn(async (t) => t),
       suggestSearchTerms: vi.fn(async () => ["wooden table"]),
       summarizeVoiceResults: vi.fn(async () => "Found 1 product"),
+      decomposeShoppingMission: vi.fn(async () => ({
+        isMission: false,
+        confidence: 0,
+        intents: [],
+        interpretation: "single product",
+      })),
     };
   }
 

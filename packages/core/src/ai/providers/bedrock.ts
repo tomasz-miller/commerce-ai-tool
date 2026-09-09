@@ -18,8 +18,10 @@ import {
   buildTextQueryUserMessage,
   buildVoiceEnhanceUserMessage,
   buildSuggestSearchTermsUserMessage,
+  buildMissionQueryUserMessage,
   parseInterpretedQuery,
   parseSuggestSearchTerms,
+  parseDecomposedMission,
 } from "../../prompts/index.js";
 import { SYSTEM_PROMPT_NAMES } from "../../prompts/catalog.js";
 import { resolveAndLinkSystemPrompt } from "../../prompts/resolve.js";
@@ -165,6 +167,26 @@ export class BedrockProvider implements AIProvider {
     ]);
 
     return this.extractText(response).trim();
+  }
+
+  async decomposeShoppingMission(
+    text: string,
+    locales: SearchLocaleContext,
+    attributeCatalog: FacetAttributeDefinition[] = [],
+  ) {
+    const system = await resolveAndLinkSystemPrompt(SYSTEM_PROMPT_NAMES.MISSION_QUERY);
+    const response = await this.converse(this.modelId, [
+      {
+        role: "user",
+        content: [
+          {
+            text: `${system}\n\n${buildMissionQueryUserMessage(text, locales, attributeCatalog)}`,
+          },
+        ],
+      },
+    ]);
+
+    return parseDecomposedMission(this.extractText(response));
   }
 
   private async converse(modelId: string, messages: Message[]) {

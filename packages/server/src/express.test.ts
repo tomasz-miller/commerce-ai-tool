@@ -34,6 +34,7 @@ function createMockServer(): CommerceAIServer {
       getCart: vi.fn().mockResolvedValue(sampleCart),
       getCustomerCart: vi.fn().mockResolvedValue(sampleCart),
       addToCart: vi.fn().mockResolvedValue(sampleCart),
+      addItemsToCart: vi.fn().mockResolvedValue(sampleCart),
       removeLineItem: vi.fn().mockResolvedValue(sampleCart),
       changeLineItemQuantity: vi.fn().mockResolvedValue(sampleCart),
       loginAndMerge: vi.fn(),
@@ -80,5 +81,32 @@ describe("createExpressRouter login rate limit", () => {
     expect(limited.body).toEqual({ error: LOGIN_RATE_LIMIT_MESSAGE });
     expect(limited.headers["retry-after"]).toBeDefined();
     expect(server.commercetools.loginAndMerge).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("createExpressRouter cart add-items", () => {
+  afterEach(() => {
+    vi.mocked(createCommerceAIServer).mockReset();
+  });
+
+  it("posts multiple line items through /cart/add-items", async () => {
+    const server = createMockServer();
+    vi.mocked(createCommerceAIServer).mockReturnValue(server);
+
+    const app = express();
+    app.use(createExpressRouter({ config: {} as never }));
+
+    const response = await request(app)
+      .post("/cart/add-items")
+      .send({ anonymousId: "anon-1", items: [{ sku: "RACKET-1", quantity: 1 }] })
+      .expect(200);
+
+    expect(response.body).toEqual({ cart: sampleCart });
+    expect(server.commercetools.addItemsToCart).toHaveBeenCalledWith(
+      expect.objectContaining({
+        anonymousId: "anon-1",
+        items: [expect.objectContaining({ sku: "RACKET-1", quantity: 1 })],
+      }),
+    );
   });
 });

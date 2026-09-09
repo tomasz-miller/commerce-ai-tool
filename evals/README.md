@@ -1,6 +1,8 @@
 # Promptfoo evaluations
 
-Local [Promptfoo](https://www.promptfoo.dev/) harness for testing Commerce AI search prompts against real LLM calls.
+Local [Promptfoo](https://promptfoo.dev/) harness for testing Commerce AI search prompts against real LLM calls.
+
+Product documentation (search pipeline, locales, Langfuse): [`docs/`](../docs/README.md). This file covers only the eval harness.
 
 ## What is Promptfoo?
 
@@ -58,6 +60,7 @@ BEDROCK_VISION_MODEL_ID=anthropic.claude-3-5-sonnet-20241022-v2:0
 | `pnpm eval:promptfoo:image` | `promptfooconfig.image.ts` | Image search (`interpretImageQuery`) — OpenRouter + Bedrock when `AWS_REGION` is set |
 | `pnpm eval:promptfoo:voice-enhance` | `promptfooconfig.voice-enhance.yaml` | Transcript cleanup (`enhanceVoiceTranscript`) |
 | `pnpm eval:promptfoo:voice-tts` | `promptfooconfig.voice-tts.yaml` | Result summaries (`summarizeVoiceResults`) |
+| `pnpm eval:promptfoo:mission` | `promptfooconfig.mission.yaml` | Multi-item shopping missions (`decomposeShoppingMission`) |
 | `pnpm eval:promptfoo:redteam` | `promptfooconfig.redteam.yaml` | Prompt injection + jailbreak probes on text search |
 | `pnpm eval:promptfoo:view` | — | Web UI matrix |
 
@@ -96,6 +99,14 @@ pnpm eval:promptfoo:voice-tts
 
 - **Enhance** uses `similar` + `javascript` (filler-word removal, semantic match).
 - **TTS** uses `llm-rubric` + `javascript` (result count, locale, top product name).
+
+### Shopping mission evals
+
+```bash
+pnpm eval:promptfoo:mission
+```
+
+Calls `decomposeShoppingMission` (`commerce-ai/mission-query`). Cases cover compound lists, quantity words, single-product `isMission: false`, cross-locale catalog-language terms, and off-topic input.
 
 ### Image search evals
 
@@ -157,6 +168,7 @@ evals/
   config/                           # TS config builders + Bedrock gating
   promptfooconfig.voice-enhance.yaml
   promptfooconfig.voice-tts.yaml
+  promptfooconfig.mission.yaml
   promptfooconfig.redteam.yaml
   providers/
     eval-utils.ts                   # createEvalAIProvider, fixtures, skip helpers
@@ -167,12 +179,14 @@ evals/
     voice-audio-provider.ts
     voice-enhance-provider.ts
     voice-tts-provider.ts
+    mission-search-provider.ts
   tests/
     text-search.yaml
     voice-search.yaml
     image-search.yaml
     voice-enhance.yaml
     voice-tts.yaml
+    mission-search.yaml
   fixtures/
     audio/
     images/

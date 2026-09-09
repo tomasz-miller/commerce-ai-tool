@@ -101,6 +101,7 @@ export function DemoSearch() {
           enableImageSearch
           enableTts
           enableCart
+          enableMissions
           onCheckout={() => router.push("/checkout")}
           onProductSelect={openPreview}
         />
