@@ -65,6 +65,11 @@ sequenceDiagram
   Orch->>CT: POST products.search
   alt Product Search available
     CT-->>Orch: productIds total facets
+    opt zero hits
+      Note over Orch: drop soft filters then primaryTerm mustMatch any
+      Orch->>CT: POST products.search
+      CT-->>Orch: productIds total facets
+    end
     Orch->>CT: GraphQL products
     CT-->>Orch: name image price sku slug
   else Product Search unavailable
@@ -150,29 +155,47 @@ When Product Search returns **zero hits**, the orchestrator retries without an e
 flowchart TD
   phrases["searchTerms phrases"]
   perPhrase["one subtree per phrase"]
-  fields["OR fullText plus fuzzy"]
-  nameBoost["name boost 3"]
-  kwBoost["searchKeywords boost 2"]
-  descBoost["description boost 1"]
+  primary{"phrase is primaryTerm?"}
+  primaryFields["OR fullText plus fuzzy"]
+  nameBoostP["name boost 6"]
+  kwBoostP["searchKeywords boost 4"]
+  descBoostP["description boost 2"]
   fuzzy["fuzzy name level 1"]
+  altFields["OR fullText only"]
+  nameBoostA["name boost 3"]
+  kwBoostA["searchKeywords boost 2"]
+  descBoostA["description boost 1"]
   phraseOr["OR across phrases"]
   filtersAnd["AND filters"]
   queryAnd["AND text plus filters"]
   post["POST /products/search"]
+  empty{"total is 0?"}
+  relax["drop soft filters then primaryTerm any"]
+  done["hydrate cards"]
 
   phrases --> perPhrase
-  perPhrase --> fields
-  fields --> nameBoost
-  fields --> kwBoost
-  fields --> descBoost
-  fields --> fuzzy
-  perPhrase --> phraseOr
+  perPhrase --> primary
+  primary -->|yes| primaryFields
+  primaryFields --> nameBoostP
+  primaryFields --> kwBoostP
+  primaryFields --> descBoostP
+  primaryFields --> fuzzy
+  primary -->|no| altFields
+  altFields --> nameBoostA
+  altFields --> kwBoostA
+  altFields --> descBoostA
+  primaryFields --> phraseOr
+  altFields --> phraseOr
   phraseOr --> queryAnd
   filtersAnd --> queryAnd
   queryAnd --> post
+  post --> empty
+  empty -->|yes| relax
+  relax --> post
+  empty -->|no| done
 ```
 
-Example: query `red shoes`, `catalogLocale=no` → `searchTerms: ["røde sko"]` (no passthrough, languages differ):
+Example: query `red shoes`, `catalogLocale=no` → `primaryTerm` and `searchTerms: ["røde sko"]` (no passthrough, languages differ). That single phrase is the primary term, so field boosts are doubled and fuzzy stays on:
 
 ```json
 {
@@ -186,7 +209,7 @@ Example: query `red shoes`, `catalogLocale=no` → `searchTerms: ["røde sko"]` 
           "language": "no",
           "value": "røde sko",
           "mustMatch": "all",
-          "boost": 3
+          "boost": 6
         }
       },
       {
@@ -195,7 +218,7 @@ Example: query `red shoes`, `catalogLocale=no` → `searchTerms: ["røde sko"]` 
           "language": "no",
           "value": "røde sko",
           "mustMatch": "all",
-          "boost": 2
+          "boost": 4
         }
       },
       {
@@ -204,7 +227,7 @@ Example: query `red shoes`, `catalogLocale=no` → `searchTerms: ["røde sko"]` 
           "language": "no",
           "value": "røde sko",
           "mustMatch": "all",
-          "boost": 1
+          "boost": 2
         }
       },
       {
@@ -307,18 +330,21 @@ Illustrative `DecomposedShoppingMission` for `catalogLocale=en-GB`:
       "id": "intent-0",
       "label": "glasses",
       "quantity": 1,
+      "primaryTerm": "fancy glasses",
       "searchTerms": ["fancy glasses", "wine glasses"]
     },
     {
       "id": "intent-1",
       "label": "coffee table",
       "quantity": 1,
+      "primaryTerm": "coffee table",
       "searchTerms": ["coffee table"]
     },
     {
       "id": "intent-2",
       "label": "chairs",
       "quantity": 2,
+      "primaryTerm": "dining chairs",
       "searchTerms": ["dining chairs", "living room chairs"]
     }
   ],
@@ -365,6 +391,7 @@ One `interpretTextQuery` call. The text prompt treats a broad need as **3–5 ca
 
 ```json
 {
+  "primaryTerm": "fancy glasses",
   "searchTerms": ["fancy glasses", "coffee table", "dining chairs"],
   "filters": {},
   "sort": "relevance",

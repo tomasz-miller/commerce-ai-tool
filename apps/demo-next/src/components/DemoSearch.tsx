@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { CommerceAISearch, type CommerceAISearchProps } from "@commerce-ai-tool/react";
+import {
+  CommerceAISearch,
+  useCart,
+  type CommerceAISearchProps,
+} from "@commerce-ai-tool/react";
 import { useRouter } from "next/navigation";
 import {
   demoCatalogLocale,
@@ -15,23 +19,101 @@ type SelectedProduct = Parameters<NonNullable<CommerceAISearchProps["onProductSe
 const SHEET_FOCUSABLE =
   'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+const DESCRIPTION_EXPAND_THRESHOLD = 200;
+const MIN_SHEET_QUANTITY = 1;
+const MAX_SHEET_QUANTITY = 99;
+
+function formatSheetTotal(
+  price: NonNullable<SelectedProduct["price"]>,
+  quantity: number,
+  locale: string | undefined,
+): string {
+  try {
+    return new Intl.NumberFormat(locale || undefined, {
+      style: "currency",
+      currency: price.currency,
+    }).format(price.amount * quantity);
+  } catch {
+    return price.formatted;
+  }
+}
+
 export function DemoSearch() {
   const router = useRouter();
   const titleId = useId();
+  const descriptionId = useId();
+  const quantityId = useId();
   const [selectedProduct, setSelectedProduct] = useState<SelectedProduct | null>(null);
+  const [descriptionExpanded, setDescriptionExpanded] = useState(false);
+  const [quantity, setQuantity] = useState(1);
+  const [justAdded, setJustAdded] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
+  const sheetCart = useCart({
+    apiBaseUrl: "/api/commerce-ai",
+    currency: demoCurrency,
+    country: demoCountry,
+    catalogLocale: demoCatalogLocale,
+  });
 
   function closePreview() {
+    setDescriptionExpanded(false);
+    setQuantity(1);
+    setJustAdded(false);
+    setAddError(null);
     setSelectedProduct(null);
   }
 
   function openPreview(product: SelectedProduct) {
     const active = document.activeElement;
     openerRef.current = active instanceof HTMLElement ? active : null;
+    setDescriptionExpanded(false);
+    setQuantity(1);
+    setJustAdded(false);
+    setAddError(null);
     setSelectedProduct(product);
+    void sheetCart.refresh();
   }
+
+  function changeQuantity(delta: number) {
+    setJustAdded(false);
+    setAddError(null);
+    setQuantity((current) =>
+      Math.min(MAX_SHEET_QUANTITY, Math.max(MIN_SHEET_QUANTITY, current + delta)),
+    );
+  }
+
+  async function handleSheetAddToCart() {
+    if (!selectedProduct || sheetCart.isMutating) {
+      return;
+    }
+    setAddError(null);
+    const result = selectedProduct.sku
+      ? await sheetCart.addToCart({ sku: selectedProduct.sku, quantity })
+      : await sheetCart.addToCart({
+          productId: selectedProduct.id,
+          variantId: selectedProduct.variantId,
+          quantity,
+        });
+    if (result) {
+      setJustAdded(true);
+    } else {
+      setAddError("Could not add this product to the cart.");
+    }
+  }
+
+  useEffect(() => {
+    if (!selectedProduct) {
+      return;
+    }
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [selectedProduct]);
 
   useEffect(() => {
     if (!selectedProduct) {
@@ -133,22 +215,113 @@ export function DemoSearch() {
                   No image
                 </div>
               )}
-              <h2 id={titleId}>{selectedProduct.name}</h2>
-              {selectedProduct.description ? <p>{selectedProduct.description}</p> : null}
-              <div className="demo-product-sheet__meta">
+              <div className="demo-product-sheet__header">
+                <h2 id={titleId}>{selectedProduct.name}</h2>
                 {selectedProduct.price ? (
-                  <strong>{selectedProduct.price.formatted}</strong>
+                  <strong className="demo-product-sheet__price">
+                    {selectedProduct.price.formatted}
+                  </strong>
                 ) : null}
-                {selectedProduct.sku ? <span>SKU {selectedProduct.sku}</span> : null}
               </div>
-              <button
-                ref={closeButtonRef}
-                type="button"
-                className="demo-product-sheet__close"
-                onClick={closePreview}
-              >
-                Close
-              </button>
+              {selectedProduct.description ? (
+                <div className="demo-product-sheet__scroll">
+                  <p
+                    id={descriptionId}
+                    className={
+                      selectedProduct.description.length > DESCRIPTION_EXPAND_THRESHOLD &&
+                      !descriptionExpanded
+                        ? "demo-product-sheet__description demo-product-sheet__description--clamped"
+                        : "demo-product-sheet__description"
+                    }
+                  >
+                    {selectedProduct.description}
+                  </p>
+                  {selectedProduct.description.length > DESCRIPTION_EXPAND_THRESHOLD ? (
+                    <button
+                      type="button"
+                      className="demo-product-sheet__toggle"
+                      aria-expanded={descriptionExpanded}
+                      aria-controls={descriptionId}
+                      onClick={() => setDescriptionExpanded((value) => !value)}
+                    >
+                      {descriptionExpanded ? "Show less" : "Show more"}
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+              <div className="demo-product-sheet__footer">
+                {selectedProduct.sku ? (
+                  <div className="demo-product-sheet__meta">
+                    <span>SKU {selectedProduct.sku}</span>
+                  </div>
+                ) : null}
+                <div className="demo-product-sheet__purchase">
+                  <div
+                    className="demo-product-sheet__qty"
+                    role="group"
+                    aria-labelledby={quantityId}
+                  >
+                    <span id={quantityId} className="demo-product-sheet__qty-label">
+                      Quantity
+                    </span>
+                    <div className="demo-product-sheet__qty-controls">
+                      <button
+                        type="button"
+                        className="demo-product-sheet__qty-btn"
+                        aria-label="Decrease quantity"
+                        disabled={quantity <= MIN_SHEET_QUANTITY || sheetCart.isMutating}
+                        onClick={() => changeQuantity(-1)}
+                      >
+                        −
+                      </button>
+                      <span className="demo-product-sheet__qty-value" aria-live="polite">
+                        {quantity}
+                      </span>
+                      <button
+                        type="button"
+                        className="demo-product-sheet__qty-btn"
+                        aria-label="Increase quantity"
+                        disabled={quantity >= MAX_SHEET_QUANTITY || sheetCart.isMutating}
+                        onClick={() => changeQuantity(1)}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="demo-product-sheet__add"
+                    disabled={sheetCart.isMutating}
+                    onClick={() => void handleSheetAddToCart()}
+                  >
+                    {sheetCart.isMutating
+                      ? "Adding…"
+                      : justAdded
+                        ? "Added to cart"
+                        : selectedProduct.price
+                          ? `Add to cart · ${formatSheetTotal(selectedProduct.price, quantity, demoCatalogLocale)}`
+                          : "Add to cart"}
+                  </button>
+                  <button
+                    ref={closeButtonRef}
+                    type="button"
+                    className="demo-product-sheet__close"
+                    onClick={closePreview}
+                  >
+                    Close
+                  </button>
+                </div>
+                {justAdded ? (
+                  <p className="demo-product-sheet__feedback" role="status">
+                    Added {quantity} {quantity === 1 ? "item" : "items"} to your cart.
+                  </p>
+                ) : null}
+                {addError && !justAdded ? (
+                  <p className="demo-product-sheet__error" role="alert">
+                    {addError}
+                  </p>
+                ) : null}
+              </div>
             </div>
           </div>
         </div>
