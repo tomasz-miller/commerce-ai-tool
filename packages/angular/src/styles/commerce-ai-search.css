@@ -290,40 +290,17 @@
 }
 
 .cat-results {
-  margin-top: 0.5rem;
-  background: var(--cat-glass-bg-strong);
-  backdrop-filter: blur(var(--cat-blur)) saturate(180%);
-  -webkit-backdrop-filter: blur(var(--cat-blur)) saturate(180%);
-  border: 1px solid var(--cat-glass-border);
-  border-radius: var(--cat-radius);
-  box-shadow: var(--cat-glass-shadow);
-  overflow: hidden;
-  max-height: 24rem;
-  overflow-y: auto;
-}
-
-.cat-result-item {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  width: 100%;
-  padding: 0.75rem 1rem;
-  border: none;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin-top: 0.85rem;
   background: transparent;
-  color: var(--cat-text);
-  text-align: left;
-  cursor: pointer;
-  transition: background 0.15s ease;
+  border: 0;
+  box-shadow: none;
 }
 
-.cat-result-item:hover,
-.cat-result-item:focus-visible {
-  background: var(--cat-input-bg);
-  outline: none;
-}
-
-.cat-result-item + .cat-result-item {
-  border-top: 1px solid var(--cat-glass-border);
+.cat-results:has(.cat-status:only-child) {
+  grid-template-columns: 1fr;
 }
 
 .cat-result-image {
@@ -586,6 +563,63 @@
 
 .cat-result-card__add--added {
   color: var(--cat-accent);
+}
+
+.cat-result-card--featured {
+  grid-column: 1 / -1;
+}
+
+.cat-result-card--featured .cat-result-card__core {
+  flex-direction: row;
+  align-items: stretch;
+}
+
+.cat-result-card--featured .cat-result-card__select {
+  flex-direction: row;
+  align-items: stretch;
+}
+
+.cat-result-card--featured .cat-result-image {
+  width: 7.5rem;
+  flex-shrink: 0;
+  aspect-ratio: 1;
+  min-height: 7.5rem;
+}
+
+.cat-result-card--featured .cat-result-info {
+  flex: 1;
+  min-width: 0;
+  align-content: center;
+  padding: 0.75rem 0.9rem;
+}
+
+.cat-result-card--featured .cat-result-name {
+  font-size: 0.875rem;
+  -webkit-line-clamp: 3;
+}
+
+.cat-result-card--featured .cat-result-card__add {
+  position: static;
+  align-self: center;
+  margin: 0 0.65rem 0 0;
+}
+
+@media (max-width: 767px) {
+  .cat-results {
+    grid-template-columns: 1fr;
+    gap: 0.85rem;
+  }
+
+  .cat-result-card--featured {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 30rem) {
+  .cat-result-card--featured .cat-result-image {
+    width: 6.25rem;
+    min-height: 6.25rem;
+  }
 }
 
 .cat-mission {

@@ -374,11 +374,15 @@ type SearchMode = "text" | "image" | "voice" | null;
       @if (showResults && !showMission && !isLoading && !error) {
         <div
           class="cat-results"
-          role="listbox"
-          [attr.aria-label]="resolvedMessages.searchResultsAriaLabel"
+          [attr.role]="results.length > 0 ? 'list' : null"
+          [attr.aria-label]="results.length > 0 ? resolvedMessages.searchResultsAriaLabel : null"
         >
-          @for (product of results; track product.id) {
-            <article class="cat-result-card">
+          @for (product of results; track product.id; let index = $index) {
+            <article
+              class="cat-result-card"
+              role="listitem"
+              [class.cat-result-card--featured]="index === 0"
+            >
               <div class="cat-result-card__core">
                 <button type="button" class="cat-result-card__select" (click)="productSelect.emit(product)">
                   @if (product.imageUrl) {
@@ -523,6 +527,7 @@ export class CommerceAiSearchComponent implements OnInit, OnChanges, OnDestroy {
   private searchRequestId = 0;
   private suggestionsRequestId = 0;
   private addedTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
+  private destroyed = false;
 
   readonly addMissionItems = (items: AddToCartLineItem[]) => this.cart.addItems(items);
 
@@ -535,6 +540,7 @@ export class CommerceAiSearchComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.destroyed = true;
     for (const timeout of this.addedTimeouts.values()) {
       clearTimeout(timeout);
     }
@@ -1209,7 +1215,7 @@ export class CommerceAiSearchComponent implements OnInit, OnChanges, OnDestroy {
       return;
     }
     const next = await this.cart.addToCart(toCartItem(product, 1));
-    if (!next) {
+    if (!next || this.destroyed) {
       return;
     }
     this.addedProductIds = { ...this.addedProductIds, [product.id]: true };
@@ -1220,6 +1226,9 @@ export class CommerceAiSearchComponent implements OnInit, OnChanges, OnDestroy {
     this.addedTimeouts.set(
       product.id,
       setTimeout(() => {
+        if (this.destroyed) {
+          return;
+        }
         const { [product.id]: _removed, ...rest } = this.addedProductIds;
         this.addedProductIds = rest;
         this.addedTimeouts.delete(product.id);

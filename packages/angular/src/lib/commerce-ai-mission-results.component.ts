@@ -1,5 +1,5 @@
 import { NgTemplateOutlet } from "@angular/common";
-import { Component, EventEmitter, Input, OnChanges, Output } from "@angular/core";
+import { Component, EventEmitter, Input, OnChanges, OnDestroy, Output } from "@angular/core";
 import type {
   AddToCartLineItem,
   CommerceAISearchMessages,
@@ -7,6 +7,8 @@ import type {
   ProductCard,
 } from "@commerce-ai-tool/core";
 import { formatMissionAddAll, starterBundleItems } from "./mission.util.js";
+
+let missionTitleCounter = 0;
 
 @Component({
   selector: "commerce-ai-mission-results",
@@ -143,7 +145,7 @@ import { formatMissionAddAll, starterBundleItems } from "./mission.util.js";
     </ng-template>
   `,
 })
-export class CommerceAiMissionResultsComponent implements OnChanges {
+export class CommerceAiMissionResultsComponent implements OnChanges, OnDestroy {
   @Input({ required: true }) mission!: MissionSearchResult;
   @Input({ required: true }) messages!: CommerceAISearchMessages;
   @Input() enableCart = false;
@@ -155,13 +157,19 @@ export class CommerceAiMissionResultsComponent implements OnChanges {
   @Output() addItem = new EventEmitter<ProductCard>();
   @Output() addAll = new EventEmitter<AddToCartLineItem[]>();
 
-  readonly titleId = `cat-mission-title-${Math.random().toString(36).slice(2, 10)}`;
+  readonly titleId = `cat-mission-title-${(missionTitleCounter += 1)}`;
   justAddedAll = false;
   private addedAllTimeout: ReturnType<typeof setTimeout> | null = null;
   private lastMission: MissionSearchResult | null = null;
+  private cachedBundleMission: MissionSearchResult | null = null;
+  private cachedBundleItems: AddToCartLineItem[] = [];
 
   get bundleItems(): AddToCartLineItem[] {
-    return starterBundleItems(this.mission);
+    if (this.cachedBundleMission !== this.mission) {
+      this.cachedBundleMission = this.mission;
+      this.cachedBundleItems = starterBundleItems(this.mission);
+    }
+    return this.cachedBundleItems;
   }
 
   get addAllLabel(): string {
@@ -176,6 +184,13 @@ export class CommerceAiMissionResultsComponent implements OnChanges {
     }
   }
 
+  ngOnDestroy(): void {
+    if (this.addedAllTimeout) {
+      clearTimeout(this.addedAllTimeout);
+      this.addedAllTimeout = null;
+    }
+  }
+
   addLabel(product: ProductCard): string {
     if (this.addedProductIds[product.id]) {
       return this.messages.itemAdded;
@@ -184,8 +199,9 @@ export class CommerceAiMissionResultsComponent implements OnChanges {
   }
 
   onAddAllClick(): void {
-    this.addAll.emit(this.bundleItems);
-    void this.addAllHandler?.(this.bundleItems).then((result) => {
+    const items = this.bundleItems;
+    this.addAll.emit(items);
+    void this.addAllHandler?.(items).then((result) => {
       if (!result) {
         return;
       }

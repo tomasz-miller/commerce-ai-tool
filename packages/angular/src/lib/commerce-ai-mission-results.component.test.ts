@@ -4,7 +4,7 @@ import { TestBed } from "@angular/core/testing";
 import { BrowserTestingModule, platformBrowserTesting } from "@angular/platform-browser/testing";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { resolveCommerceAISearchMessages } from "@commerce-ai-tool/core";
-import type { MissionSearchResult } from "@commerce-ai-tool/core";
+import type { AddToCartLineItem, MissionSearchResult } from "@commerce-ai-tool/core";
 import { CommerceAiMissionResultsComponent } from "./commerce-ai-mission-results.component.js";
 
 const messages = resolveCommerceAISearchMessages();
@@ -147,5 +147,82 @@ describe("CommerceAiMissionResultsComponent", () => {
     const fixture = await render({ enableCart: false });
     expect(fixture.nativeElement.querySelector("button.cat-result-card__select")).toBeNull();
     expect(fixture.nativeElement.textContent).toContain("Pro Racket");
+  });
+
+  it("keeps the confirmation off when the add-all handler returns null", async () => {
+    const fixture = await render();
+    const emitted: unknown[] = [];
+    fixture.componentInstance.addAll.subscribe((items) => emitted.push(items));
+    fixture.componentInstance.addAllHandler = vi.fn().mockResolvedValue(null);
+    fixture.detectChanges();
+
+    (fixture.nativeElement.querySelector(".cat-mission__add-all") as HTMLButtonElement).click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(emitted).toHaveLength(1);
+    expect(fixture.componentInstance.justAddedAll).toBe(false);
+  });
+
+  it("emits the same bundle instance to the output and the handler", async () => {
+    const fixture = await render();
+    const emitted: AddToCartLineItem[][] = [];
+    const handled: AddToCartLineItem[][] = [];
+    fixture.componentInstance.addAll.subscribe((items) => emitted.push(items));
+    fixture.componentInstance.addAllHandler = vi.fn(async (items: AddToCartLineItem[]) => {
+      handled.push(items);
+      return { id: "cart-1" };
+    });
+    fixture.detectChanges();
+
+    (fixture.nativeElement.querySelector(".cat-mission__add-all") as HTMLButtonElement).click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(emitted).toHaveLength(1);
+    expect(handled).toHaveLength(1);
+    expect(emitted[0]).toBe(handled[0]);
+    expect(fixture.componentInstance.justAddedAll).toBe(true);
+  });
+
+  it("resets the add-all confirmation when a new mission arrives", async () => {
+    const fixture = await render();
+    fixture.componentInstance.addAllHandler = vi.fn().mockResolvedValue({ id: "cart-1" });
+    fixture.detectChanges();
+
+    (fixture.nativeElement.querySelector(".cat-mission__add-all") as HTMLButtonElement).click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(fixture.componentInstance.justAddedAll).toBe(true);
+
+    fixture.componentInstance.mission = {
+      interpretation: "new search",
+      intents: [
+        {
+          intent: { id: "intent-2", label: "new", quantity: 1, searchTerms: ["new"] },
+          products: [{ id: "p9", name: "New Product", sku: "NEW-1" }],
+          total: 1,
+        },
+      ],
+    };
+    fixture.componentInstance.ngOnChanges();
+    expect(fixture.componentInstance.justAddedAll).toBe(false);
+  });
+
+  it("returns the cached bundle while the mission reference is unchanged", async () => {
+    const fixture = await render();
+    expect(fixture.componentInstance.bundleItems).toBe(fixture.componentInstance.bundleItems);
+  });
+
+  it("clears the pending add-all timer on destroy", async () => {
+    const fixture = await render();
+    fixture.componentInstance.addAllHandler = vi.fn().mockResolvedValue({ id: "cart-1" });
+    fixture.detectChanges();
+
+    (fixture.nativeElement.querySelector(".cat-mission__add-all") as HTMLButtonElement).click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(fixture.componentInstance.justAddedAll).toBe(true);
+
+    const clearSpy = vi.spyOn(globalThis, "clearTimeout");
+    fixture.componentInstance.ngOnDestroy();
+    expect(clearSpy).toHaveBeenCalled();
+    clearSpy.mockRestore();
   });
 });

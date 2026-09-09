@@ -198,6 +198,85 @@ describe("CommerceAiSearchComponent", () => {
     expect(fixture.nativeElement.querySelector(".cat-root--mission-lanes-2")).not.toBeNull();
   });
 
+  it("renders flat results as a list with a featured first card", async () => {
+    await TestBed.configureTestingModule({
+      imports: [CommerceAiSearchComponent],
+      providers: [{ provide: CommerceAiApiService, useValue: { suggest: vi.fn(), search: vi.fn() } }],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(CommerceAiSearchComponent);
+    fixture.componentInstance.query = "racket";
+    fixture.componentInstance.hasSearched = true;
+    fixture.componentInstance.addedProductIds = { p1: true };
+    fixture.componentInstance.results = [
+      { id: "p1", name: "Pro Racket", sku: "RACKET-1" },
+      { id: "p2", name: "Club Racket", sku: "RACKET-2" },
+    ];
+    fixture.detectChanges();
+
+    const list = fixture.nativeElement.querySelector(".cat-results");
+    expect(list?.getAttribute("role")).toBe("list");
+    expect(list?.getAttribute("aria-label")).toBe(
+      fixture.componentInstance.resolvedMessages.searchResultsAriaLabel,
+    );
+    const cards = Array.from(
+      fixture.nativeElement.querySelectorAll(".cat-results .cat-result-card"),
+    ) as HTMLElement[];
+    expect(cards).toHaveLength(2);
+    expect(cards.every((card) => card.getAttribute("role") === "listitem")).toBe(true);
+    expect(cards[0]?.className).toContain("cat-result-card--featured");
+    expect(cards[1]?.className).not.toContain("cat-result-card--featured");
+  });
+
+  it("marks the flat add button as added without the cart panel", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ cart: null }) }),
+    );
+    await TestBed.configureTestingModule({
+      imports: [CommerceAiSearchComponent],
+      providers: [{ provide: CommerceAiApiService, useValue: { suggest: vi.fn(), search: vi.fn() } }],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(CommerceAiSearchComponent);
+    fixture.componentInstance.enableCart = true;
+    fixture.componentInstance.query = "racket";
+    fixture.componentInstance.hasSearched = true;
+    fixture.componentInstance.addedProductIds = { p1: true };
+    fixture.componentInstance.results = [{ id: "p1", name: "Pro Racket", sku: "RACKET-1" }];
+    fixture.detectChanges();
+
+    expect(
+      fixture.nativeElement.querySelector(".cat-result-card__add--added"),
+    ).not.toBeNull();
+  });
+
+  it("skips the added-state update when destroyed during add-to-cart", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ cart: null }) }),
+    );
+    await TestBed.configureTestingModule({
+      imports: [CommerceAiSearchComponent],
+      providers: [{ provide: CommerceAiApiService, useValue: { suggest: vi.fn(), search: vi.fn() } }],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(CommerceAiSearchComponent);
+    fixture.detectChanges();
+
+    let release: ((cart: unknown) => void) | undefined;
+    const pending = new Promise((resolve) => {
+      release = resolve;
+    });
+    vi.spyOn(fixture.componentInstance.cart, "addToCart").mockReturnValue(pending as never);
+    fixture.componentInstance.onAddItem({ id: "p1", name: "Pro Racket", sku: "RACKET-1" });
+    fixture.destroy();
+    release?.({ id: "cart-1" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(fixture.componentInstance.addedProductIds).toEqual({});
+  });
+
   it("hides add-to-cart controls when enableCart is false", async () => {
     await TestBed.configureTestingModule({
       imports: [CommerceAiSearchComponent],
