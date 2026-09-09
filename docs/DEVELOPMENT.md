@@ -15,7 +15,7 @@ pnpm typecheck
 pnpm test     # Vitest
 ```
 
-Copy `apps/demo-next/.env.example` to `apps/demo-next/.env.local` before `pnpm dev`.
+Copy `apps/demo-next/.env.example` to `apps/demo-next/.env.local` before `pnpm dev`. Local development uses the React host only; an Angular demo app is planned in [ROADMAP](ROADMAP.md).
 
 Before finishing a feature (same order as CI):
 

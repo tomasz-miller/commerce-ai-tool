@@ -2,7 +2,7 @@
 
 Opt-in cart, host-owned checkout, payments, and order lookup. Search remains usable without any of this.
 
-[Documentation index](README.md) · [Getting started](getting-started.md)
+[Documentation index](README.md) · [Getting started](GETTING-STARTED.md)
 
 ## Cart levels
 

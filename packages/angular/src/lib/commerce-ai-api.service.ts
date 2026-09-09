@@ -1,6 +1,7 @@
 import { Injectable } from "@angular/core";
 import type {
   InterpretedSearchFilters,
+  MissionSearchResult,
   ProductCard,
   SearchResult,
   SuggestedFacet,
@@ -20,6 +21,18 @@ export interface SearchRequestOptions {
   refineQuery?: string;
   includeFacets?: boolean;
   suggestedFacets?: SuggestedFacet[];
+  enableMissions?: boolean;
+}
+
+export interface VoiceSearchResult {
+  transcript: string;
+  enhancedQuery?: string;
+  products: ProductCard[];
+  meta: SearchResult["meta"];
+  mission?: MissionSearchResult;
+  ttsText?: string;
+  audioSummary?: string;
+  ttsPending?: boolean;
 }
 
 function buildLocalePayload(options: SearchLocaleFields): Record<string, string> {
@@ -86,12 +99,16 @@ export class CommerceAiApiService {
     apiBaseUrl: string,
     file: File,
     locales: SearchLocaleFields = {},
+    enableMissions = false,
   ): Promise<SearchResult & { interpretation?: string }> {
     const baseUrl = apiBaseUrl.replace(/\/$/, "");
     const formData = new FormData();
     formData.append("image", file);
     for (const [key, value] of Object.entries(buildLocalePayload(locales))) {
       formData.append(key, value);
+    }
+    if (enableMissions) {
+      formData.append("enableMissions", "true");
     }
 
     return fetch(`${baseUrl}/search/image`, {
@@ -111,14 +128,8 @@ export class CommerceAiApiService {
     audio: Blob,
     locales: SearchLocaleFields = {},
     enableTts = true,
-  ): Promise<{
-    transcript: string;
-    products: ProductCard[];
-    meta: SearchResult["meta"];
-    ttsText?: string;
-    audioSummary?: string;
-    ttsPending?: boolean;
-  }> {
+    enableMissions = false,
+  ): Promise<VoiceSearchResult> {
     const baseUrl = apiBaseUrl.replace(/\/$/, "");
     const formData = new FormData();
     formData.append("audio", audio, "recording.webm");
@@ -126,6 +137,9 @@ export class CommerceAiApiService {
       formData.append(key, value);
     }
     formData.append("enableTts", String(enableTts));
+    if (enableMissions) {
+      formData.append("enableMissions", "true");
+    }
 
     return fetch(`${baseUrl}/search/voice`, {
       method: "POST",
@@ -135,14 +149,7 @@ export class CommerceAiApiService {
         const data = (await response.json()) as { error?: string };
         throw new Error(data.error ?? "Voice search failed");
       }
-      return response.json() as Promise<{
-        transcript: string;
-        products: ProductCard[];
-        meta: SearchResult["meta"];
-        ttsText?: string;
-        audioSummary?: string;
-        ttsPending?: boolean;
-      }>;
+      return response.json() as Promise<VoiceSearchResult>;
     });
   }
 

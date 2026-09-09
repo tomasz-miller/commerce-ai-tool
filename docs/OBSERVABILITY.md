@@ -2,7 +2,7 @@
 
 Local console tracing (`CAT_DEBUG`) and optional [Langfuse](https://langfuse.com) production traces. They complement each other; Promptfoo evals cover prompt quality offline ([`evals/README.md`](../evals/README.md)).
 
-[Documentation index](README.md) · [Search pipeline](search-pipeline.md)
+[Documentation index](README.md) · [Search pipeline](SEARCH-PIPELINE.md)
 
 ## CAT_DEBUG
 

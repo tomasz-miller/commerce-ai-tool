@@ -2,7 +2,7 @@
 
 Add Commerce AI search to a host app. Secrets stay on the server; the widget calls only your `/api/commerce-ai/*` routes.
 
-[Documentation index](README.md) · [Configuration](configuration.md)
+[Documentation index](README.md) · [Configuration](CONFIGURATION.md)
 
 ## 1. Install packages
 
@@ -100,7 +100,13 @@ import "@commerce-ai-tool/angular/styles.css";
     <commerce-ai-search
       apiBaseUrl="/api/commerce-ai"
       theme="auto"
+      currency="EUR"
+      country="DE"
+      [enableMissions]="true"
+      [enableCart]="true"
       (productSelect)="onSelect($event)"
+      (cartChange)="onCartChange($event)"
+      (checkout)="onCheckout($event)"
     />
   `,
 })
@@ -138,4 +144,4 @@ Voice, camera, and uploaded-image search are independently configurable in React
 
 Use `cameraFacingMode` (`"environment"` rear or `"user"` front) when needed. These flags control widget UI only; they do not remove or secure host API routes.
 
-How a query is interpreted and sent to commercetools: [search pipeline](search-pipeline.md). Facets, missions, and cart flags are documented there and in [cart and checkout](cart-and-checkout.md).
+How a query is interpreted and sent to commercetools: [search pipeline](SEARCH-PIPELINE.md). Facets, missions, and cart flags are documented there and in [cart and checkout](CART-AND-CHECKOUT.md).

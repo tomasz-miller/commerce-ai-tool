@@ -2,7 +2,7 @@
 
 How a shopper query travels from the frontend widget to commercetools Product Search. The LLM never emits a commercetools request body: it returns a typed intermediate contract, and a deterministic builder turns that into the API call.
 
-[Documentation index](README.md) · [Configuration](configuration.md) · [Observability](observability.md)
+[Documentation index](README.md) · [Configuration](CONFIGURATION.md) · [Observability](OBSERVABILITY.md)
 
 ## Trust boundary
 
@@ -38,7 +38,7 @@ Search uses two locales. Mixing them up is the usual source of empty results.
 
 The model **translates** product keywords into the catalog language. Raw user text is not sent to Product Search except for the same-language passthrough described below.
 
-Resolver: `packages/core/src/locale/resolve.ts`. Env vars and seeding: [configuration](configuration.md).
+Resolver: `packages/core/src/locale/resolve.ts`. Env vars and seeding: [configuration](CONFIGURATION.md).
 
 ## Text search (happy path)
 
@@ -260,7 +260,7 @@ flowchart LR
 
 **Facet refine.** After the first search, the widget keeps `searchTerms` in session. A chip click resubmits those terms plus `filters` and skips interpretation. Natural-language refine (`“height above 10 cm”`) calls `interpretRefineQuery` with the current terms, filters, and attribute catalog. When `enableMissions` is on, Enter runs a **fresh search** if the query looks like a compound shopping list (`and`, comma, `plus`); otherwise a facet session still refines (for example “taller glasses”). Facet chips still refine.
 
-**Shopping missions** (opt-in `enableMissions`). A fresh text search runs `interpretTextQuery` and `decomposeShoppingMission` in parallel. Voice and image search run `decomposeShoppingMission` after the transcript or vision interpretation. If the mission is usable (confidence, at least two intents), each intent runs its own bounded Product Search; otherwise the standard result is used. Angular mission UI is not on this path yet. See the [worked example](#worked-example-compound-shopping-list).
+**Shopping missions** (opt-in `enableMissions`). A fresh text search runs `interpretTextQuery` and `decomposeShoppingMission` in parallel. Voice and image search run `decomposeShoppingMission` after the transcript or vision interpretation. If the mission is usable (confidence, at least two intents), each intent runs its own bounded Product Search; otherwise the standard result is used. See the [worked example](#worked-example-compound-shopping-list).
 
 **Voice.** Default OpenRouter path: one `interpretVoiceAudio` call (transcript + `searchTerms`). ElevenLabs path: STT → `enhanceVoiceTranscript` → `interpretTextQuery`. With missions on, the transcript/enhanced query then follows the same mission fan-out as text search. Spoken summaries (`enableTts`) are voice-search only.
 
@@ -367,4 +367,4 @@ commercetools then ranks glasses *or* coffee tables *or* chairs in a **single fl
 
 ## Debugging
 
-See [observability](observability.md) for `CAT_DEBUG` and Langfuse. Search responses may include `meta.traceId`, `meta.queryInterpretation`, `meta.searchTerms`, and `meta.appliedFilters` for local linking (not a stable public contract).
+See [observability](OBSERVABILITY.md) for `CAT_DEBUG` and Langfuse. Search responses may include `meta.traceId`, `meta.queryInterpretation`, `meta.searchTerms`, and `meta.appliedFilters` for local linking (not a stable public contract).

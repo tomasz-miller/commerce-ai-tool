@@ -177,13 +177,13 @@ Canonical docs: [`docs/README.md`](docs/README.md). Read the relevant page befor
 
 | Topic | Doc |
 |-------|-----|
-| Widget install | [docs/getting-started.md](docs/getting-started.md) |
-| Locales, env, facets, missions flags | [docs/configuration.md](docs/configuration.md) |
-| LLM interpretation and Product Search | [docs/search-pipeline.md](docs/search-pipeline.md) |
-| Cart, payments, orders | [docs/cart-and-checkout.md](docs/cart-and-checkout.md) |
-| `CAT_DEBUG` / Langfuse | [docs/observability.md](docs/observability.md) |
+| Widget install | [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) |
+| Locales, env, facets, missions flags | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) |
+| LLM interpretation and Product Search | [docs/SEARCH-PIPELINE.md](docs/SEARCH-PIPELINE.md) |
+| Cart, payments, orders | [docs/CART-AND-CHECKOUT.md](docs/CART-AND-CHECKOUT.md) |
+| `CAT_DEBUG` / Langfuse | [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md) |
 
-Hard rules that still belong here: secrets never in the browser; widget modalities (`enableVoice`, `enableCameraSearch`, `enableImageSearch`) must not gate one another; `searchTerms` are catalog-language phrases, never split words; shopping missions cover text, voice, and image (Angular mission UI is deferred).
+Hard rules that still belong here: secrets never in the browser; widget modalities (`enableVoice`, `enableCameraSearch`, `enableImageSearch`) must not gate one another; `searchTerms` are catalog-language phrases, never split words; shopping missions cover text, voice, and image in React and Angular.
 
 ## Key config files
 
