@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { MissionSearchResult } from "@commerce-ai-tool/core";
+import type { MissionSearchResult } from "@commerce-ai-tool/core/client";
 import {
   formatMissionAddAll,
   lineItemKey,

@@ -12,6 +12,8 @@ export interface ResolvedMissionOptions {
   minConfidence: number;
 }
 
+export { looksLikeCompoundShoppingList } from "./compound-shopping-list.js";
+
 export function resolveMissionOptions(
   config: MissionsConfig | undefined,
   enableMissions?: boolean,
@@ -22,16 +24,6 @@ export function resolveMissionOptions(
     perIntentLimit: clampPositiveInt(config?.perIntentLimit, DEFAULT_MISSION_PER_INTENT_LIMIT, 20),
     minConfidence: clampConfidence(config?.minConfidence),
   };
-}
-
-const COMPOUND_SHOPPING_LIST_PATTERN = /\band\b|,|\bplus\b|\boraz\b/i;
-
-/**
- * Heuristic for the search box: a new multi-item query should not be treated as
- * a facet NL refine of the previous session.
- */
-export function looksLikeCompoundShoppingList(query: string): boolean {
-  return COMPOUND_SHOPPING_LIST_PATTERN.test(query.trim());
 }
 
 export function isUsableMission(

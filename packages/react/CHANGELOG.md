@@ -1,12 +1,17 @@
 # @commerce-ai-tool/react
 
-## 0.1.0
+## 2.4.0
 
-### Minor Changes
+### Initial public release
 
-- 3819a78: Initial alpha release: AI-powered commercetools product search with voice, text, and image input.
+First published version of the Commerce AI Tool React / Next.js widget (product roadmap through v2.4).
 
-### Patch Changes
+- Glass search UI with independent voice, camera, and image-upload controls
+- Autocomplete, facets (including hex color swatches), cart panel, checkout, and order status
+- Shopping-mission lanes with batched add-to-cart
+- Runtime `messages` overrides
+- Client bundle does not depend on `@commerce-ai-tool/core` at runtime (client-safe helpers are bundled). Install `@commerce-ai-tool/server` on the host for the BFF.
 
-- Updated dependencies [3819a78]
-  - @commerce-ai-tool/core@0.1.0
+```bash
+pnpm add @commerce-ai-tool/react @commerce-ai-tool/server
+```

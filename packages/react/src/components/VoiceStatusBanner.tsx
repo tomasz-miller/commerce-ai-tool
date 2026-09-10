@@ -1,6 +1,6 @@
 import { X } from "lucide-react";
 import { formatRecordingDuration } from "../hooks/useRecordingDuration.js";
-import type { CommerceAISearchMessages } from "@commerce-ai-tool/core";
+import type { CommerceAISearchMessages } from "@commerce-ai-tool/core/client";
 import { ICON_STROKE } from "../icons.js";
 
 export interface VoiceStatusBannerProps {

@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import type { MissionSearchResult, ProductCard, SearchResult } from "@commerce-ai-tool/core";
+import type { MissionSearchResult, ProductCard, SearchResult } from "@commerce-ai-tool/core/client";
 import { appendLocaleFields, type SearchLocaleProps } from "./useCommerceAISearch.js";
 
 export interface UseVoiceSearchOptions extends SearchLocaleProps {

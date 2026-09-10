@@ -8,7 +8,7 @@ import {
   type PaymentMethodOption,
   type PaymentSnapshot,
   type ShippingMethodSnapshot,
-} from "@commerce-ai-tool/core";
+} from "@commerce-ai-tool/core/client";
 
 export const ANONYMOUS_ID_STORAGE_KEY = "commerce-ai-tool:anonymousId";
 export const CUSTOMER_SESSION_STORAGE_KEY = "commerce-ai-tool:customerSession";

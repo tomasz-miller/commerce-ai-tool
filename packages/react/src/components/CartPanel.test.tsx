@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { resolveCommerceAISearchMessages } from "@commerce-ai-tool/core";
-import type { CartSnapshot, CustomerSnapshot } from "@commerce-ai-tool/core";
+import { resolveCommerceAISearchMessages } from "@commerce-ai-tool/core/client";
+import type { CartSnapshot, CustomerSnapshot } from "@commerce-ai-tool/core/client";
 import { CartPanel } from "./CartPanel.js";
 
 const messages = resolveCommerceAISearchMessages();

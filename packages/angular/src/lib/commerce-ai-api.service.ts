@@ -6,7 +6,7 @@ import type {
   SearchResult,
   SuggestedFacet,
   SuggestionsResult,
-} from "@commerce-ai-tool/core";
+} from "@commerce-ai-tool/core/client";
 
 export interface SearchLocaleFields {
   queryLocale?: string;

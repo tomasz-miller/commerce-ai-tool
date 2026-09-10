@@ -50,6 +50,7 @@ Browser Widget  →  Host /api/commerce-ai/*  →  AI + ElevenLabs + commercetoo
 
 ```bash
 pnpm add @commerce-ai-tool/react @commerce-ai-tool/server
+# or: pnpm add @commerce-ai-tool/angular @commerce-ai-tool/server
 ```
 
 Copy [`apps/demo-next/.env.example`](./apps/demo-next/.env.example), enable [Product Search](https://docs.commercetools.com/api/projects/product-search) on the commercetools project, then follow [Getting started](./docs/GETTING-STARTED.md).
