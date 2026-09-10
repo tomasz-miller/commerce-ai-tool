@@ -1,7 +1,7 @@
 {
   "name": "@commerce-ai-tool/react",
-  "version": "0.1.0",
-  "description": "React component for Commerce AI Tool — glass morphism product search widget",
+  "version": "2.4.0",
+  "description": "React component for Commerce AI Tool \u2014 glass morphism product search widget",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -21,13 +21,14 @@
     "./styles.css": "./dist/index.css"
   },
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "sideEffects": [
     "**/*.css"
   ],
   "scripts": {
-    "build": "tsup && node ../../scripts/emit-package-dts.mjs dist/index.d.ts",
+    "build": "tsup && node ../../scripts/emit-package-dts.mjs dist/index.d.ts && node ../../scripts/inline-core-client-dts.mjs",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
@@ -35,7 +36,6 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@commerce-ai-tool/core": "workspace:*",
     "lucide-react": "^0.484.0"
   },
   "peerDependencies": {
@@ -43,6 +43,7 @@
     "react-dom": ">=18"
   },
   "devDependencies": {
+    "@commerce-ai-tool/core": "workspace:*",
     "@testing-library/react": "^16.2.0",
     "@types/react": "^19.0.12",
     "@types/react-dom": "^19.0.4",
@@ -55,5 +56,29 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "author": {
+    "name": "Tomasz Miller",
+    "url": "https://github.com/tomasz-miller"
+  },
+  "homepage": "https://github.com/tomasz-miller/commerce-ai-tool#readme",
+  "bugs": {
+    "url": "https://github.com/tomasz-miller/commerce-ai-tool/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tomasz-miller/commerce-ai-tool.git",
+    "directory": "packages/react"
+  },
+  "keywords": [
+    "commercetools",
+    "ai",
+    "search",
+    "react",
+    "nextjs",
+    "widget"
+  ],
+  "engines": {
+    "node": ">=24"
   }
 }

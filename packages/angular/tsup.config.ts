@@ -9,4 +9,5 @@ export default defineConfig({
   sourcemap: true,
   clean: !isWatch,
   external: ["@angular/core", "@angular/common", "@angular/forms", "rxjs"],
+  noExternal: [/^@commerce-ai-tool\/core/],
 });

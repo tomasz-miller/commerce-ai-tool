@@ -98,10 +98,6 @@ importers:
         version: '@typescript/typescript6@6.0.2'
 
   packages/angular:
-    dependencies:
-      '@commerce-ai-tool/core':
-        specifier: workspace:*
-        version: link:../core
     devDependencies:
       '@angular/common':
         specifier: ^20.3.27
@@ -118,6 +114,9 @@ importers:
       '@angular/platform-browser':
         specifier: ^19.2.3
         version: 19.2.25(@angular/common@20.3.27(@angular/core@20.3.27(@angular/compiler@20.3.27)(rxjs@7.8.2)(zone.js@0.15.1))(rxjs@7.8.2))(@angular/core@20.3.27(@angular/compiler@20.3.27)(rxjs@7.8.2)(zone.js@0.15.1))
+      '@commerce-ai-tool/core':
+        specifier: workspace:*
+        version: link:../core
       '@typescript/native':
         specifier: 'catalog:'
         version: typescript@7.0.2
@@ -173,13 +172,13 @@ importers:
 
   packages/react:
     dependencies:
-      '@commerce-ai-tool/core':
-        specifier: workspace:*
-        version: link:../core
       lucide-react:
         specifier: ^0.484.0
         version: 0.484.0(react@19.2.7)
     devDependencies:
+      '@commerce-ai-tool/core':
+        specifier: workspace:*
+        version: link:../core
       '@testing-library/react':
         specifier: ^16.2.0
         version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)

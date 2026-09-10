@@ -16,8 +16,8 @@ import type {
   CommerceAISearchMessages,
   ProductCard,
   ThemeMode,
-} from "@commerce-ai-tool/core";
-import { resolveCommerceAISearchMessages, looksLikeCompoundShoppingList } from "@commerce-ai-tool/core";
+} from "@commerce-ai-tool/core/client";
+import { resolveCommerceAISearchMessages, looksLikeCompoundShoppingList } from "@commerce-ai-tool/core/client";
 import { useCommerceAISearch } from "../hooks/useCommerceAISearch.js";
 import { useCameraCapture } from "../hooks/useCameraCapture.js";
 import { useCart } from "../hooks/useCart.js";

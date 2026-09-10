@@ -3,13 +3,13 @@ import type {
   InterpretedSearchFilters,
   SearchFacetGroup,
   SuggestedFacet,
-} from "@commerce-ai-tool/core";
+} from "@commerce-ai-tool/core/client";
 import {
   hexColorSwatchValue,
   isColorLikeFacetName,
   isFacetFilterSelected,
   toggleFacetFilter,
-} from "@commerce-ai-tool/core";
+} from "@commerce-ai-tool/core/client";
 
 interface SearchFacetsProps {
   facets: SearchFacetGroup[];

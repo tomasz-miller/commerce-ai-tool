@@ -1,6 +1,6 @@
 {
   "name": "@commerce-ai-tool/core",
-  "version": "0.1.0",
+  "version": "2.4.0",
   "description": "Core business logic for Commerce AI Tool — commercetools search with AI interpretation",
   "license": "MIT",
   "type": "module",
@@ -17,14 +17,25 @@
         "types": "./dist/index.d.cts",
         "default": "./dist/index.cjs"
       }
+    },
+    "./client": {
+      "import": {
+        "types": "./dist/client.d.ts",
+        "default": "./dist/client.js"
+      },
+      "require": {
+        "types": "./dist/client.d.cts",
+        "default": "./dist/client.cjs"
+      }
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "sideEffects": false,
   "scripts": {
-    "build": "tsup && node ../../scripts/emit-package-dts.mjs dist/index.d.ts",
+    "build": "tsup && node ../../scripts/emit-package-dts.mjs dist/index.d.ts dist/client.d.ts",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
@@ -48,5 +59,28 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "author": {
+    "name": "Tomasz Miller",
+    "url": "https://github.com/tomasz-miller"
+  },
+  "homepage": "https://github.com/tomasz-miller/commerce-ai-tool#readme",
+  "bugs": {
+    "url": "https://github.com/tomasz-miller/commerce-ai-tool/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tomasz-miller/commerce-ai-tool.git",
+    "directory": "packages/core"
+  },
+  "keywords": [
+    "commercetools",
+    "ai",
+    "search",
+    "openrouter",
+    "bedrock"
+  ],
+  "engines": {
+    "node": ">=24"
   }
 }

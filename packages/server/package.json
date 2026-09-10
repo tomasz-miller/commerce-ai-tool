@@ -1,6 +1,6 @@
 {
   "name": "@commerce-ai-tool/server",
-  "version": "0.1.0",
+  "version": "2.4.0",
   "description": "Server-side API handlers for Commerce AI Tool",
   "license": "MIT",
   "type": "module",
@@ -50,7 +50,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "tsup && node ../../scripts/emit-package-dts.mjs dist/index.d.ts dist/next.d.ts dist/express.d.ts dist/flush.d.ts",
@@ -94,5 +95,29 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "author": {
+    "name": "Tomasz Miller",
+    "url": "https://github.com/tomasz-miller"
+  },
+  "homepage": "https://github.com/tomasz-miller/commerce-ai-tool#readme",
+  "bugs": {
+    "url": "https://github.com/tomasz-miller/commerce-ai-tool/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tomasz-miller/commerce-ai-tool.git",
+    "directory": "packages/server"
+  },
+  "keywords": [
+    "commercetools",
+    "ai",
+    "search",
+    "nextjs",
+    "express",
+    "bff"
+  ],
+  "engines": {
+    "node": ">=24"
   }
 }

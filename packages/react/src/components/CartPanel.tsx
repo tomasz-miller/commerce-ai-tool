@@ -14,7 +14,7 @@ import type {
   CartSnapshot,
   CommerceAISearchMessages,
   CustomerSnapshot,
-} from "@commerce-ai-tool/core";
+} from "@commerce-ai-tool/core/client";
 import { ICON_STROKE } from "../icons.js";
 
 export interface CartPanelProps {

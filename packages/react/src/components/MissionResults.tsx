@@ -5,7 +5,7 @@ import type {
   CommerceAISearchMessages,
   MissionSearchResult,
   ProductCard,
-} from "@commerce-ai-tool/core";
+} from "@commerce-ai-tool/core/client";
 import { ICON_STROKE } from "../icons.js";
 
 export interface MissionResultsProps {

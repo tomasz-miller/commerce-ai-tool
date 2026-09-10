@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Camera, X } from "lucide-react";
-import type { CommerceAISearchMessages } from "@commerce-ai-tool/core";
+import type { CommerceAISearchMessages } from "@commerce-ai-tool/core/client";
 import { ICON_STROKE } from "../icons.js";
 
 export interface CameraCaptureOverlayProps {

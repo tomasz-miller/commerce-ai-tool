@@ -25,7 +25,7 @@ You should receive an acknowledgement within **7 business days**. After that we 
 | Version | Supported |
 | --- | --- |
 | Latest `main` | Yes |
-| Latest published `@commerce-ai-tool/*` (currently `0.1.x`) | Yes |
+| Latest published `@commerce-ai-tool/*` (currently `2.4.x`) | Yes |
 | Older package lines | No |
 
 ## Scope

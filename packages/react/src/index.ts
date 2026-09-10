@@ -14,7 +14,7 @@ export type {
 } from "./hooks/useCommerceAISearch.js";
 export { useCart } from "./hooks/useCart.js";
 export type { AddToCartItem, UseCartOptions, UseCartReturn } from "./hooks/useCart.js";
-export { CART_SESSION_HEADER } from "@commerce-ai-tool/core";
+export { CART_SESSION_HEADER } from "@commerce-ai-tool/core/client";
 export { useVoiceSearch } from "./hooks/useVoiceSearch.js";
 export type { UseVoiceSearchOptions } from "./hooks/useVoiceSearch.js";
 export { useTheme, useResolvedTheme } from "./hooks/useTheme.js";
@@ -29,5 +29,5 @@ export type {
   MissionSearchResult,
   ProductCard,
   ShippingMethodSnapshot,
-} from "@commerce-ai-tool/core";
-export { DEFAULT_COMMERCE_AI_SEARCH_MESSAGES, resolveCommerceAISearchMessages } from "@commerce-ai-tool/core";
+} from "@commerce-ai-tool/core/client";
+export { DEFAULT_COMMERCE_AI_SEARCH_MESSAGES, resolveCommerceAISearchMessages } from "@commerce-ai-tool/core/client";

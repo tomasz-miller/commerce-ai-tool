@@ -6,11 +6,17 @@ Add Commerce AI search to a host app. Secrets stay on the server; the widget cal
 
 ## 1. Install packages
 
+Install only the plugin pieces your host uses. The GitHub demo app (`apps/demo-next`) is not an npm package.
+
 ```bash
+# React / Next.js host
 pnpm add @commerce-ai-tool/react @commerce-ai-tool/server
+
+# Angular host
+pnpm add @commerce-ai-tool/angular @commerce-ai-tool/server
 ```
 
-Use `@commerce-ai-tool/angular` instead of (or in addition to) the React widget when the host is Angular.
+`@commerce-ai-tool/server` pulls `@commerce-ai-tool/core` (AI + commercetools SDKs) on the backend. Do not add `core` to a frontend-only app; the widgets bundle a small client-safe surface and do not depend on it at runtime.
 
 ## 2. Configure credentials
 

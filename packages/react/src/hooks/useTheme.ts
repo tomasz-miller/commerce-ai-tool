@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { ThemeMode } from "@commerce-ai-tool/core";
+import type { ThemeMode } from "@commerce-ai-tool/core/client";
 
 export function useTheme(theme: ThemeMode = "auto"): ThemeMode {
   const [resolved, setResolved] = useState<"light" | "dark">("light");

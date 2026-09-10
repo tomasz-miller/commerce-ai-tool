@@ -24,7 +24,7 @@ import type {
   SearchResult,
   SuggestedFacet,
   ThemeMode,
-} from "@commerce-ai-tool/core";
+} from "@commerce-ai-tool/core/client";
 import {
   hexColorSwatchValue,
   isColorLikeFacetName,
@@ -32,7 +32,7 @@ import {
   looksLikeCompoundShoppingList,
   resolveCommerceAISearchMessages,
   toggleFacetFilter,
-} from "@commerce-ai-tool/core";
+} from "@commerce-ai-tool/core/client";
 import { CommerceAiApiService } from "./commerce-ai-api.service.js";
 import { CommerceAiCartPanelComponent } from "./commerce-ai-cart-panel.component.js";
 import { CommerceAiCartService } from "./commerce-ai-cart.service.js";

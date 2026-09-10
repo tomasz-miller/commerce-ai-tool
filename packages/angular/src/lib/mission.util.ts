@@ -1,4 +1,4 @@
-import type { AddToCartLineItem, MissionSearchResult, ProductCard } from "@commerce-ai-tool/core";
+import type { AddToCartLineItem, MissionSearchResult, ProductCard } from "@commerce-ai-tool/core/client";
 
 export function formatMissionAddAll(template: string, count: number): string {
   const withPlural = count === 1 ? template.replaceAll("top picks", "top pick") : template;

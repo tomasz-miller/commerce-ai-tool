@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { CartSnapshot } from "@commerce-ai-tool/core";
+import type { CartSnapshot } from "@commerce-ai-tool/core/client";
 import { useCart } from "../hooks/useCart.js";
 import { CommerceAICheckout } from "./CommerceAICheckout.js";
 
