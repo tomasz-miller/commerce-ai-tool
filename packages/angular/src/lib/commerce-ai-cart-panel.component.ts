@@ -4,7 +4,7 @@ import type {
   CartSnapshot,
   CommerceAISearchMessages,
   CustomerSnapshot,
-} from "@commerce-ai-tool/core";
+} from "@commerce-ai-tool/core/client";
 
 export function displayCartError(
   error: string | null,

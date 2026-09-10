@@ -8,7 +8,7 @@ import type {
   SearchSessionState,
   SuggestedFacet,
   SuggestionsResult,
-} from "@commerce-ai-tool/core";
+} from "@commerce-ai-tool/core/client";
 
 export interface SearchLocaleProps {
   queryLocale?: string;

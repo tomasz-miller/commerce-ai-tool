@@ -161,7 +161,7 @@ Workflow `.github/workflows/ci.yml` on every PR/push to `main`:
 
 `pnpm test` is Vitest unit tests only. Promptfoo LLM evals and other live calls to OpenRouter, Langfuse, Bedrock, or commercetools are not run in GitHub Actions (no API secrets required).
 
-Release (`.github/workflows/release.yml`) is disabled (`workflow_dispatch` only) until npm is configured.
+Release (`.github/workflows/release.yml`) stays on `workflow_dispatch` until the first local `2.4.0` publish and npm trusted publishers are configured. After that, enable `on.push` to `main`. Do not publish from feature branches. `demo-next` is never published.
 
 ## Typical feature structure
 

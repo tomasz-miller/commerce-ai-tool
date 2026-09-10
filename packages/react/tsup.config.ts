@@ -9,6 +9,7 @@ export default defineConfig({
   sourcemap: true,
   clean: !isWatch,
   external: ["react", "react-dom", "react/jsx-runtime"],
+  noExternal: [/^@commerce-ai-tool\/core/],
   esbuildOptions(options) {
     options.banner = {
       js: '"use client";',

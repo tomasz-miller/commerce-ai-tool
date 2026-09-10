@@ -3,8 +3,8 @@ import "zone.js/testing";
 import { TestBed } from "@angular/core/testing";
 import { BrowserTestingModule, platformBrowserTesting } from "@angular/platform-browser/testing";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { resolveCommerceAISearchMessages } from "@commerce-ai-tool/core";
-import type { AddToCartLineItem, MissionSearchResult } from "@commerce-ai-tool/core";
+import { resolveCommerceAISearchMessages } from "@commerce-ai-tool/core/client";
+import type { AddToCartLineItem, MissionSearchResult } from "@commerce-ai-tool/core/client";
 import { CommerceAiMissionResultsComponent } from "./commerce-ai-mission-results.component.js";
 
 const messages = resolveCommerceAISearchMessages();

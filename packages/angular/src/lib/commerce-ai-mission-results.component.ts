@@ -5,7 +5,7 @@ import type {
   CommerceAISearchMessages,
   MissionSearchResult,
   ProductCard,
-} from "@commerce-ai-tool/core";
+} from "@commerce-ai-tool/core/client";
 import { formatMissionAddAll, starterBundleItems } from "./mission.util.js";
 
 let missionTitleCounter = 0;

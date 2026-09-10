@@ -5,7 +5,7 @@ import {
   type CommerceAISearchMessages,
   type OrderSnapshot,
   type ThemeMode,
-} from "@commerce-ai-tool/core";
+} from "@commerce-ai-tool/core/client";
 import { useCart } from "../hooks/useCart.js";
 import { ICON_STROKE } from "../icons.js";
 import "../styles/commerce-ai-search.css";

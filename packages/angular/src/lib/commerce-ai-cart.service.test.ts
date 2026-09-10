@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CART_SESSION_HEADER } from "@commerce-ai-tool/core";
+import { CART_SESSION_HEADER } from "@commerce-ai-tool/core/client";
 import {
   ANONYMOUS_ID_STORAGE_KEY,
   CUSTOMER_SESSION_STORAGE_KEY,

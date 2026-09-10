@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { resolveCommerceAISearchMessages } from "@commerce-ai-tool/core";
+import { resolveCommerceAISearchMessages } from "@commerce-ai-tool/core/client";
 import { SearchFacets } from "./SearchFacets.js";
 
 describe("SearchFacets", () => {

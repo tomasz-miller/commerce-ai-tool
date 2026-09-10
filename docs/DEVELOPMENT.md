@@ -60,20 +60,45 @@ Do **not** file security vulnerabilities as public issues. Follow [SECURITY.md](
 
 ## Publishing to npm
 
-Packages are versioned with [Changesets](https://github.com/changesets/changesets). To publish:
+Four scoped packages are published: `@commerce-ai-tool/core`, `@commerce-ai-tool/server`, `@commerce-ai-tool/react`, and `@commerce-ai-tool/angular`. **`demo-next` is private and is never published.** Versions are linked as a **fixed** Changesets group so they stay in lockstep.
 
-1. Create an npm organization `commerce-ai-tool` (or update scope in `package.json`)
-2. Log in: `npm login`
-3. Add `NPM_TOKEN` to GitHub repository secrets for CI releases
-4. Run locally:
+### One-time npm org (manual)
+
+1. Sign in as [peniakoff](https://www.npmjs.com/~peniakoff)
+2. Create the **`commerce-ai-tool`** organization at [npmjs.com/org/create](https://www.npmjs.com/org/create) (public packages)
+3. Enable 2FA on the account
+
+Do not store a long-lived `NPM_TOKEN` in GitHub. Classic npm tokens are deprecated.
+
+### First publish (`2.4.0`) — after merge to `main`
+
+OIDC trusted publishing cannot create a package’s first version. From an up-to-date `main` (not a feature branch):
 
 ```bash
-pnpm changeset          # describe changes (optional after initial release)
-pnpm version-packages   # bump versions from changesets
-pnpm release            # build + publish all packages
+npm login               # peniakoff
+pnpm build
+pnpm exec changeset publish
 ```
 
-Current release workflow (`.github/workflows/release.yml`) publishes automatically on merge to `main` when changesets are present. Until npm is configured, treat that workflow as `workflow_dispatch` only.
+Then on each package page (`core`, `server`, `react`, `angular`) add a **Trusted Publisher**:
+
+- GitHub user: `tomasz-miller`
+- Repository: `commerce-ai-tool`
+- Workflow filename: `release.yml`
+- Allowed action: `npm publish`
+
+After that, restore `on.push.branches: [main]` in [`.github/workflows/release.yml`](../.github/workflows/release.yml). Later releases use GitHub OIDC (no `NPM_TOKEN`) and npm provenance.
+
+### Ongoing releases
+
+1. On a feature PR, add a changeset: `pnpm changeset`
+2. Merge to `main` — the Release workflow opens a **Version packages** PR
+3. Merge that PR — the workflow publishes and tags
+
+```bash
+pnpm changeset          # describe changes
+pnpm version-packages   # used by the Version packages PR, not for the first 2.4.0 bootstrap
+```
 
 ## Hosting
 

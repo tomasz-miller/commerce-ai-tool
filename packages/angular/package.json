@@ -1,7 +1,7 @@
 {
   "name": "@commerce-ai-tool/angular",
-  "version": "0.1.0",
-  "description": "Angular component for Commerce AI Tool — glass morphism product search widget",
+  "version": "2.4.0",
+  "description": "Angular component for Commerce AI Tool \u2014 glass morphism product search widget",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -21,21 +21,19 @@
     "./styles.css": "./dist/index.css"
   },
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "sideEffects": [
     "**/*.css"
   ],
   "scripts": {
-    "build": "tsup && node ../../scripts/emit-package-dts.mjs dist/index.d.ts",
+    "build": "tsup && node ../../scripts/emit-package-dts.mjs dist/index.d.ts && node ../../scripts/inline-core-client-dts.mjs",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
     "test": "vitest run",
     "clean": "rm -rf dist"
-  },
-  "dependencies": {
-    "@commerce-ai-tool/core": "workspace:*"
   },
   "peerDependencies": {
     "@angular/common": ">=17",
@@ -44,6 +42,7 @@
     "rxjs": ">=7"
   },
   "devDependencies": {
+    "@commerce-ai-tool/core": "workspace:*",
     "@angular/common": "^20.3.27",
     "@angular/compiler": "^20.3.27",
     "@angular/core": "^20.3.27",
@@ -57,5 +56,28 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "author": {
+    "name": "Tomasz Miller",
+    "url": "https://github.com/tomasz-miller"
+  },
+  "homepage": "https://github.com/tomasz-miller/commerce-ai-tool#readme",
+  "bugs": {
+    "url": "https://github.com/tomasz-miller/commerce-ai-tool/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tomasz-miller/commerce-ai-tool.git",
+    "directory": "packages/angular"
+  },
+  "keywords": [
+    "commercetools",
+    "ai",
+    "search",
+    "angular",
+    "widget"
+  ],
+  "engines": {
+    "node": ">=24"
   }
 }

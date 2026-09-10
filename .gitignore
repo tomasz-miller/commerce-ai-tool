@@ -12,5 +12,6 @@ coverage
 evals/.env
 evals/output
 .promptfoo
+*.tgz
 
 .pnpm-store/

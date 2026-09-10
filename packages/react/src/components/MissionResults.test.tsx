@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { resolveCommerceAISearchMessages } from "@commerce-ai-tool/core";
-import type { MissionSearchResult } from "@commerce-ai-tool/core";
+import { resolveCommerceAISearchMessages } from "@commerce-ai-tool/core/client";
+import type { MissionSearchResult } from "@commerce-ai-tool/core/client";
 import { MissionResults } from "./MissionResults.js";
 
 const messages = resolveCommerceAISearchMessages();
