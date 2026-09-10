@@ -14,6 +14,8 @@ Cart is off by default so existing `onProductSelect` integrations stay unchanged
 | Built-in | `enableCart` | Header cart badge, slide-over preview, add-to-cart on results |
 | Custom | `useCart({ apiBaseUrl })` | Host app owns the cart UI; same `/cart` endpoints |
 
+Multiple `useCart()` hooks in the same tab share cart snapshots. A host product sheet that calls `addToCart` updates the widget badge and panel without an extra click.
+
 ```tsx
 import { CommerceAISearch, useCart } from "@commerce-ai-tool/react";
 

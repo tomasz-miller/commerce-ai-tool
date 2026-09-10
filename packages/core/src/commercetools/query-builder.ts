@@ -15,6 +15,11 @@ export interface ProductSearchQueryOptions {
   /** When true, adds a fuzzy match on product name (tolerates typos). Default: true. */
   enableFuzzyName?: boolean;
   /**
+   * Token matching for fullText / fuzzy clauses. Default: `"all"`.
+   * `"any"` is used as a last-ditch relaxation when the first search returns zero hits.
+   */
+  mustMatch?: "all" | "any";
+  /**
    * Store key for future store-scoped search.
    * Not applied unless `storeScopeEnabled` is true (planned feature).
    */
@@ -39,6 +44,9 @@ const TEXT_FIELD_BOOSTS = [
   { field: "searchKeywords", boost: 2 },
   { field: "description", boost: 1 },
 ] as const;
+
+/** Applied to `TEXT_FIELD_BOOSTS` when the phrase is `primaryTerm`. */
+export const PRIMARY_TERM_BOOST_MULTIPLIER = 2;
 
 const SYSTEM_FILTER_KEYS = new Set(["category", "priceMin", "priceMax"]);
 
@@ -96,8 +104,10 @@ export function buildProductSearchRequest(input: ProductSearchBuildInput): Produ
   const phrases = normalizeSearchPhrases(interpreted.searchTerms);
   const filters = normalizeFilters(interpreted.filters);
   const enableFuzzy = options?.enableFuzzyName !== false;
+  const mustMatch = options?.mustMatch ?? "all";
+  const primaryKey = interpreted.primaryTerm?.trim().replace(/\s+/g, " ").toLowerCase();
 
-  const textQuery = buildPhraseQueries(phrases, catalogLocale, enableFuzzy);
+  const textQuery = buildPhraseQueries(phrases, catalogLocale, enableFuzzy, mustMatch, primaryKey);
   const filterQuery = buildFilterExpressions(filters, options?.currency, input.facetSchema);
   const storeQuery = buildStoreScopeExpression(options);
 
@@ -181,9 +191,17 @@ function buildPhraseQueries(
   phrases: string[],
   catalogLocale: string,
   enableFuzzy: boolean,
+  mustMatch: "all" | "any",
+  primaryKey: string | undefined,
 ): SearchExpression | undefined {
+  const hasPrimary = Boolean(primaryKey);
   const queries = phrases
-    .map((phrase) => buildTextQuery(phrase, catalogLocale, enableFuzzy))
+    .map((phrase) => {
+      const isPrimary = Boolean(primaryKey && phrase.toLowerCase() === primaryKey);
+      const useFuzzy = enableFuzzy && (!hasPrimary || isPrimary);
+      const boostMultiplier = isPrimary ? PRIMARY_TERM_BOOST_MULTIPLIER : 1;
+      return buildTextQuery(phrase, catalogLocale, useFuzzy, mustMatch, boostMultiplier);
+    })
     .filter((query): query is SearchExpression => Boolean(query));
 
   if (queries.length === 0) {
@@ -197,6 +215,8 @@ function buildTextQuery(
   phrase: string,
   catalogLocale: string,
   enableFuzzy: boolean,
+  mustMatch: "all" | "any",
+  boostMultiplier: number,
 ): SearchExpression | undefined {
   if (!phrase) {
     return undefined;
@@ -207,8 +227,8 @@ function buildTextQuery(
       field,
       language: catalogLocale,
       value: phrase,
-      mustMatch: "all",
-      boost,
+      mustMatch,
+      boost: boost * boostMultiplier,
     },
   }));
 
@@ -219,7 +239,7 @@ function buildTextQuery(
         language: catalogLocale,
         value: phrase,
         level: 1,
-        mustMatch: "all",
+        mustMatch,
       },
     });
   }

@@ -48,6 +48,12 @@ export interface OpenRouterConfig {
   visionModel?: string;
   /** Audio-capable model for direct voice search (OpenRouter input_audio). */
   voiceModel?: string;
+  /**
+   * Use OpenRouter `json_schema` (strict) for structured interpretation.
+   * Falls back to `json_object` when the model rejects json_schema.
+   * Default: true.
+   */
+  jsonSchema?: boolean;
 }
 
 export interface BedrockConfig {
@@ -354,6 +360,8 @@ export interface ListOrdersRequest {
   limit?: number;
 }
 
+export type SearchRelaxationLevel = "none" | "drop_soft_filters" | "primary_any_match";
+
 export interface SearchMeta {
   total: number;
   limit: number;
@@ -364,7 +372,14 @@ export interface SearchMeta {
   queryLocale: string;
   queryInterpretation?: string;
   searchTerms?: string[];
+  /** Catalog-language phrase closest to the user's intent, when the model supplied one. */
+  primaryTerm?: string;
   appliedFilters?: InterpretedSearchFilters;
+  /**
+   * How far Product Search was relaxed after an empty first result.
+   * Omitted when no relaxation ran (`none`).
+   */
+  relaxation?: SearchRelaxationLevel;
   sort?: "relevance" | "price_asc" | "price_desc";
   schemaEtag?: string;
   /** Per-step durations in milliseconds (dev / CAT_DEBUG only) */
@@ -456,6 +471,13 @@ export interface InterpretedSearchFilters {
 
 export interface InterpretedSearchQuery {
   /**
+   * Catalog-language phrase closest to the user's intent.
+   * Product Search boosts this phrase above the other `searchTerms`.
+   * Kept separate from `searchTerms[0]` because same-language query passthrough
+   * prepends the typed query without changing intent priority.
+   */
+  primaryTerm?: string;
+  /**
    * Catalog-language search phrases. Product Search matches any phrase (OR).
    * Each element is a complete phrase (e.g. `"red shoes"`), not a split word.
    * Broad intents may include 3–5 synonym or hyponym phrases.
@@ -474,6 +496,8 @@ export interface ShoppingIntent {
   label: string;
   /** Requested quantity, always >= 1. */
   quantity: number;
+  /** Catalog-language phrase closest to this intent, boosted above alternates. */
+  primaryTerm?: string;
   searchTerms: string[];
   filters?: InterpretedSearchFilters;
   sort?: "relevance" | "price_asc" | "price_desc";

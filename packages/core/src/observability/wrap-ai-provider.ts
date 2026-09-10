@@ -74,20 +74,25 @@ export function wrapAIProvider(provider: AIProvider, meta: AIProviderTraceMeta):
       );
     },
 
-    interpretImageQuery(imageBase64, mimeType, locales) {
+    interpretImageQuery(imageBase64, mimeType, locales, attributeCatalog = []) {
       return startActiveObservation(
         "ai.interpretImageQuery",
         async (generation) => {
           generation.update({
             model: meta.visionModel ?? meta.textModel,
-            metadata: { provider: meta.provider },
+            metadata: { provider: meta.provider, attributeCatalogSize: attributeCatalog.length },
             input: {
               locales,
               image: redactBase64ImageInput(mimeType, imageBase64),
             },
           });
           try {
-            const result = await provider.interpretImageQuery(imageBase64, mimeType, locales);
+            const result = await provider.interpretImageQuery(
+              imageBase64,
+              mimeType,
+              locales,
+              attributeCatalog,
+            );
             generation.update({ output: result });
             return result;
           } catch (error) {
@@ -99,20 +104,25 @@ export function wrapAIProvider(provider: AIProvider, meta: AIProviderTraceMeta):
       );
     },
 
-    interpretVoiceAudio(audio, mimeType, locales) {
+    interpretVoiceAudio(audio, mimeType, locales, attributeCatalog = []) {
       return startActiveObservation(
         "ai.interpretVoiceAudio",
         async (generation) => {
           generation.update({
             model: meta.voiceModel ?? meta.textModel,
-            metadata: { provider: meta.provider },
+            metadata: { provider: meta.provider, attributeCatalogSize: attributeCatalog.length },
             input: {
               locales,
               audio: redactBinaryInput(mimeType, audio),
             },
           });
           try {
-            const result = await provider.interpretVoiceAudio(audio, mimeType, locales);
+            const result = await provider.interpretVoiceAudio(
+              audio,
+              mimeType,
+              locales,
+              attributeCatalog,
+            );
             generation.update({
               output: {
                 transcript: result.transcript,
@@ -222,6 +232,8 @@ export function wrapAIProvider(provider: AIProvider, meta: AIProviderTraceMeta):
         { asType: "generation" },
       );
     },
+
+    getLastGenerationMetrics: provider.getLastGenerationMetrics?.bind(provider),
   };
 }
 

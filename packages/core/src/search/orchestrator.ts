@@ -16,6 +16,7 @@ import { resolveSearchLocales } from "../locale/resolve.js";
 import { hasSearchableContent } from "../commercetools/query-builder.js";
 import type { ProductSearchBuildInput } from "../commercetools/query-builder.js";
 import { mergeInterpretedSearchTerms } from "./query-passthrough.js";
+import { relaxInterpretedSearch } from "./relax-search.js";
 import {
   withPipelineSpan,
   withPropagatedAttributes,
@@ -39,6 +40,7 @@ import type {
   ProductCard,
   SearchLocaleContext,
   SearchLocaleOptions,
+  SearchRelaxationLevel,
   SearchResult,
   ResolvedFacetSchema,
   FacetAttributeDefinition,
@@ -134,6 +136,21 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
     );
   }
 
+  async function tryResolveFacetSchema(
+    locales: SearchLocaleContext,
+  ): Promise<ResolvedFacetSchema | undefined> {
+    try {
+      return await resolveFacetSchema(locales);
+    } catch (error) {
+      console.warn(
+        `[commerce-ai-tool/core] Unable to resolve facet schema: ${
+          error instanceof Error ? error.message : "unknown error"
+        }`,
+      );
+      return undefined;
+    }
+  }
+
   function finishTimings(timer: ReturnType<typeof createSearchTimer>) {
     if (!shouldIncludeSearchTimings()) {
       return {};
@@ -186,6 +203,7 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
     const interpretedCacheKey = buildInterpretedSearchCacheKey(
       JSON.stringify({
         searchTerms: resolved.searchTerms,
+        primaryTerm: resolved.primaryTerm ?? null,
         sort: resolved.sort,
         filters: resolved.filters,
         suggestedFacets: resolved.suggestedFacets,
@@ -245,6 +263,7 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
       {
         input: {
           searchTerms: resolved.searchTerms,
+          primaryTerm: resolved.primaryTerm,
           catalogLocale: locales.catalogLocale,
           limit: searchLimit,
           offset,
@@ -252,26 +271,62 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
         metadata: { cacheHit: false },
       },
       async (span) => {
-        const searchResult = await withTimeout(
-          ct.searchProducts(searchInput, { currency, locale: locales.catalogLocale }),
-          timeouts.commercetoolsMs,
-          "ct_search",
-        );
-        timer?.mark("ct_search");
-
-        let products = searchResult.projections;
-        if (!products) {
-          products = await withTimeout(
-            ct.getProductProjections(
-              productIdsFrom(searchResult),
-              locales.catalogLocale,
-              currency,
-              country,
-            ),
+        const runSearch = async (
+          interpreted: InterpretedSearchQuery,
+          mustMatch: "all" | "any",
+        ) => {
+          const input: ProductSearchBuildInput = {
+            ...searchInput,
+            interpreted,
+            options: {
+              ...searchInput.options,
+              mustMatch,
+            },
+          };
+          const searchResult = await withTimeout(
+            ct.searchProducts(input, { currency, locale: locales.catalogLocale }),
             timeouts.commercetoolsMs,
-            "ct_projections",
+            "ct_search",
           );
-          timer?.mark("ct_projections");
+          timer?.mark("ct_search");
+
+          let products = searchResult.projections;
+          if (!products) {
+            products = await withTimeout(
+              ct.getProductProjections(
+                productIdsFrom(searchResult),
+                locales.catalogLocale,
+                currency,
+                country,
+              ),
+              timeouts.commercetoolsMs,
+              "ct_projections",
+            );
+            timer?.mark("ct_projections");
+          }
+
+          return { searchResult, products, applied: interpreted };
+        };
+
+        let relaxation: SearchRelaxationLevel = "none";
+        let mustMatch: "all" | "any" = "all";
+        let { searchResult, products, applied } = await runSearch(resolved, mustMatch);
+
+        if (searchResult.total === 0) {
+          const dropped = relaxInterpretedSearch(resolved, "drop_soft_filters");
+          if (dropped) {
+            relaxation = "drop_soft_filters";
+            ({ searchResult, products, applied } = await runSearch(dropped, "all"));
+          }
+        }
+
+        if (searchResult.total === 0) {
+          const anyMatch = relaxInterpretedSearch(resolved, "primary_any_match");
+          if (anyMatch) {
+            relaxation = "primary_any_match";
+            mustMatch = "any";
+            ({ searchResult, products, applied } = await runSearch(anyMatch, mustMatch));
+          }
         }
 
         const result: SearchResult = {
@@ -285,7 +340,9 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
             queryLocale: locales.queryLocale,
             queryInterpretation: resolved.interpretation,
             searchTerms: resolved.searchTerms,
-            appliedFilters: resolved.filters,
+            ...(resolved.primaryTerm ? { primaryTerm: resolved.primaryTerm } : {}),
+            appliedFilters: applied.filters,
+            ...(relaxation !== "none" ? { relaxation } : {}),
             sort: resolved.sort,
             ...(facetSchema ? { schemaEtag: facetSchema.etag } : {}),
           },
@@ -297,7 +354,7 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
                   searchResult.facets,
                   facetSchema,
                   resolved.suggestedFacets,
-                  resolved.filters,
+                  applied.filters,
                 ),
               }
             : {}),
@@ -343,6 +400,7 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
               const result = await executeSearch(
                 {
                   searchTerms: intent.searchTerms,
+                  ...(intent.primaryTerm ? { primaryTerm: intent.primaryTerm } : {}),
                   filters: intent.filters,
                   sort: intent.sort ?? "relevance",
                   interpretation: intent.label,
@@ -451,6 +509,7 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
     mimeType: string,
     locales: SearchLocaleContext,
     timer: ReturnType<typeof createSearchTimer>,
+    attributeCatalog: FacetAttributeDefinition[] = [],
   ): Promise<VoiceAudioInterpretation> {
     if (voiceMode === "openrouter-audio") {
       if (config.ai.provider !== "openrouter") {
@@ -458,7 +517,7 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
       }
 
       const result = await withTimeout(
-        ai.interpretVoiceAudio(audio, mimeType, locales),
+        ai.interpretVoiceAudio(audio, mimeType, locales, attributeCatalog),
         timeouts.aiVoiceAudioMs,
         "ai_voice_audio",
       );
@@ -487,7 +546,7 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
     timer.mark("ai_enhance");
 
     const interpreted = await withTimeout(
-      ai.interpretTextQuery(enhancedQuery, locales),
+      ai.interpretTextQuery(enhancedQuery, locales, attributeCatalog),
       timeouts.aiTextMs,
       "ai_interpret",
     );
@@ -553,15 +612,7 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
 
             let facetSchema: ResolvedFacetSchema | undefined;
             if (includeFacets) {
-              try {
-                facetSchema = await resolveFacetSchema(locales);
-              } catch (error) {
-                console.warn(
-                  `[commerce-ai-tool/core] Unable to resolve facet schema: ${
-                    error instanceof Error ? error.message : "unknown error"
-                  }`,
-                );
-              }
+              facetSchema = await tryResolveFacetSchema(locales);
             }
 
             let interpreted: InterpretedSearchQuery;
@@ -702,13 +753,23 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
               return withTraceIdMeta(withTimings(cachedVoice, timer));
             }
 
-            const voiceInterpretation = await interpretVoice(audio, mimeType, locales, timer);
+            const resolvedSchema = await tryResolveFacetSchema(locales);
+            const attributeCatalog = resolvedSchema?.attributes ?? [];
+            const facetSchema = config.facets?.enabled ? resolvedSchema : undefined;
+            const voiceInterpretation = await interpretVoice(
+              audio,
+              mimeType,
+              locales,
+              timer,
+              attributeCatalog,
+            );
             const { transcript, enhancedQuery, ...interpreted } = voiceInterpretation;
             const missionSearch = await tryMissionSearchFromQuery(
               enhancedQuery || transcript,
               locales,
               timer,
               missionOptions,
+              attributeCatalog,
             );
             const result =
               missionSearch ??
@@ -718,7 +779,7 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
                 searchLimit,
                 0,
                 timer,
-                undefined,
+                facetSchema,
                 enhancedQuery || transcript,
               ));
 
@@ -778,9 +839,12 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
               return withTraceIdMeta(withTimings(cachedImage, timer));
             }
 
+            const resolvedSchema = await tryResolveFacetSchema(locales);
+            const attributeCatalog = resolvedSchema?.attributes ?? [];
+            const facetSchema = config.facets?.enabled ? resolvedSchema : undefined;
             const base64 = uint8ArrayToBase64(image);
             const interpreted = await withTimeout(
-              ai.interpretImageQuery(base64, mimeType, locales),
+              ai.interpretImageQuery(base64, mimeType, locales, attributeCatalog),
               timeouts.aiImageMs,
               "ai_interpret_image",
             );
@@ -791,9 +855,11 @@ export function createSearchOrchestrator(deps: SearchOrchestratorDeps): SearchOr
               locales,
               timer,
               missionOptions,
+              attributeCatalog,
             );
             const result =
-              missionSearch ?? (await executeSearch(interpreted, locales, searchLimit, 0, timer));
+              missionSearch ??
+              (await executeSearch(interpreted, locales, searchLimit, 0, timer, facetSchema));
             const imageResult: ImageSearchResult = {
               ...withTimings(result, timer),
               interpretation: interpreted.interpretation,

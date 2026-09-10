@@ -139,3 +139,26 @@ describe("MISSION_QUERY_SYSTEM_PROMPT", () => {
     );
   });
 });
+
+describe("parseDecomposedMission primaryTerm", () => {
+  it("keeps per-intent primaryTerm", () => {
+    const result = parseDecomposedMission(
+      JSON.stringify({
+        isMission: true,
+        confidence: 0.9,
+        intents: [
+          {
+            label: "glasses",
+            primaryTerm: "wine glass",
+            searchTerms: ["wine glass", "glasses"],
+          },
+          { label: "coffee table", searchTerms: ["coffee table"] },
+        ],
+      }),
+    );
+
+    expect(result.intents[0]?.primaryTerm).toBe("wine glass");
+    expect(result.intents[0]?.searchTerms[0]).toBe("wine glass");
+    expect(result.intents[1]?.primaryTerm).toBeUndefined();
+  });
+});

@@ -32,11 +32,16 @@ pnpm eval:promptfoo:image
 pnpm eval:promptfoo:voice-enhance
 pnpm eval:promptfoo:voice-tts
 pnpm eval:promptfoo:mission
+pnpm eval:promptfoo:suggest
+pnpm eval:promptfoo:refine
+pnpm eval:promptfoo:retrieval
+pnpm eval:models
 pnpm eval:promptfoo:redteam
 pnpm eval:promptfoo:redteam:generate
 pnpm eval:promptfoo:view
 pnpm eval:fixtures:audio
 pnpm eval:fixtures:images
+pnpm eval:fixtures:catalog
 ```
 
 CI (`.github/workflows/ci.yml`) runs `lint` → `typecheck` → `test` → `build`. It does not call OpenRouter, Langfuse, Bedrock, or commercetools.

@@ -184,6 +184,7 @@ describe("wrapAIProvider", () => {
       "abc",
       "image/png",
       expect.anything(),
+      [],
     );
   });
 });

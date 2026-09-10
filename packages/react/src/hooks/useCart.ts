@@ -150,6 +150,17 @@ function rotateAnonymousId(): string {
   return created;
 }
 
+type CartSyncListener = (sourceId: number, cart: CartSnapshot | null) => void;
+
+const cartSyncListeners = new Set<CartSyncListener>();
+let cartSyncSeq = 0;
+
+function emitCartSync(sourceId: number, cart: CartSnapshot | null): void {
+  for (const listener of cartSyncListeners) {
+    listener(sourceId, cart);
+  }
+}
+
 class CartRequestError extends Error {
   status: number;
 
@@ -193,12 +204,19 @@ export function useCart(options: UseCartOptions): UseCartReturn {
   const sessionTokenRef = useRef<string | null>(null);
   const mutationChainRef = useRef(Promise.resolve<unknown>(undefined));
   const orderNumberRef = useRef<string | null>(null);
+  const [syncId] = useState(() => {
+    cartSyncSeq += 1;
+    return cartSyncSeq;
+  });
 
-  const applyCart = useCallback((next: CartSnapshot | null) => {
+  const applyCart = useCallback((next: CartSnapshot | null, sync = true) => {
     cartRef.current = next;
     setCart(next);
     onCartChangeRef.current?.(next);
-  }, []);
+    if (sync) {
+      emitCartSync(syncId, next);
+    }
+  }, [syncId]);
 
   const persistSession = useCallback((token: string, nextCustomer: CustomerSnapshot) => {
     sessionTokenRef.current = token;
@@ -269,6 +287,22 @@ export function useCart(options: UseCartOptions): UseCartReturn {
       setCustomer(storedCustomer);
     }
   }, [enabled]);
+
+  useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+    const listener: CartSyncListener = (sourceId, next) => {
+      if (sourceId === syncId) {
+        return;
+      }
+      applyCart(next, false);
+    };
+    cartSyncListeners.add(listener);
+    return () => {
+      cartSyncListeners.delete(listener);
+    };
+  }, [applyCart, enabled, syncId]);
 
   useEffect(() => {
     if (!enabled || !anonymousId) {
@@ -656,9 +690,21 @@ export function useCart(options: UseCartOptions): UseCartReturn {
     setAnonymousId(rotateAnonymousId());
   }, [apiBaseUrl, applyCart, clearSession]);
 
-  const openCart = useCallback(() => setIsCartOpen(true), []);
+  const openCart = useCallback(() => {
+    setIsCartOpen(true);
+    // Re-fetch so the panel never shows a stale cart after a mutation
+    // from another hook instance (for example host-owned add-to-cart UI).
+    void refresh();
+  }, [refresh]);
   const closeCart = useCallback(() => setIsCartOpen(false), []);
-  const toggleCart = useCallback(() => setIsCartOpen((open) => !open), []);
+  const toggleCart = useCallback(() => {
+    setIsCartOpen((open) => {
+      if (!open) {
+        void refresh();
+      }
+      return !open;
+    });
+  }, [refresh]);
 
   return {
     cart,
