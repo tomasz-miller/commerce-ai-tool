@@ -56,7 +56,11 @@ export function mergeInterpretedSearchTerms(
   }
 
   if (interpreted.searchTerms.length === 0) {
-    return { ...interpreted, searchTerms: [passthrough] };
+    return {
+      ...interpreted,
+      searchTerms: [passthrough],
+      primaryTerm: interpreted.primaryTerm ?? passthrough,
+    };
   }
 
   return {

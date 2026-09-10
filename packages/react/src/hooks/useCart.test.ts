@@ -94,6 +94,40 @@ describe("useCart", () => {
     expect(onCartChange).toHaveBeenCalledWith(updated);
   });
 
+  it("syncs cart snapshots across hook instances in the same tab", async () => {
+    const updated = { ...sampleCart, version: 2, totalQuantity: 3 };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).includes("/cart/add")) {
+        return { ok: true, json: async () => ({ cart: updated }) };
+      }
+      return { ok: true, json: async () => ({ cart: sampleCart }) };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result: widget } = renderHook(() => useCart({ apiBaseUrl: "/api/commerce-ai" }));
+    const { result: sheet } = renderHook(() =>
+      useCart({ apiBaseUrl: "/api/commerce-ai", currency: "EUR" }),
+    );
+
+    await waitFor(() => {
+      expect(widget.current.cart).toEqual(sampleCart);
+      expect(sheet.current.cart).toEqual(sampleCart);
+    });
+    const getCallsAfterMount = fetchMock.mock.calls.filter(([url]) =>
+      String(url).includes("/cart?"),
+    ).length;
+
+    await act(async () => {
+      await sheet.current.addToCart({ sku: "GLASS-RED", quantity: 3 });
+    });
+
+    expect(sheet.current.cart).toEqual(updated);
+    expect(widget.current.cart).toEqual(updated);
+    expect(
+      fetchMock.mock.calls.filter(([url]) => String(url).includes("/cart?")),
+    ).toHaveLength(getCallsAfterMount);
+  });
+
   it("adds multiple items through /cart/add-items", async () => {
     const updated = { ...sampleCart, version: 2, totalQuantity: 3 };
     const fetchMock = vi
@@ -185,6 +219,31 @@ describe("useCart", () => {
       .filter(([url]) => String(url).includes("/cart/add"))
       .map(([, init]) => JSON.parse((init as { body: string }).body));
     expect(addBodies[1]?.cartId).toBe("cart-created");
+  });
+
+  it("refreshes the cart when the panel opens", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ cart: sampleCart }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useCart({ apiBaseUrl: "/api/commerce-ai" }));
+
+    await waitFor(() => {
+      expect(result.current.cart).toEqual(sampleCart);
+    });
+    const callsAfterMount = fetchMock.mock.calls.length;
+
+    await act(async () => {
+      result.current.openCart();
+    });
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.length).toBeGreaterThan(callsAfterMount);
+    });
+    expect(result.current.isCartOpen).toBe(true);
+    expect(fetchMock).toHaveBeenLastCalledWith("/api/commerce-ai/cart?anonymousId=anon-1");
   });
 
   it("toggles the cart panel", () => {

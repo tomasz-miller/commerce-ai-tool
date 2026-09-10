@@ -1,0 +1,44 @@
+- description: Cheaper refine sets price_asc without inventing priceMax
+  vars:
+    refineQuery: cheaper
+    searchTerms: '["glasses"]'
+    filters: '{}'
+    queryLocale: en
+    catalogLocale: en-GB
+  assert:
+    - type: javascript
+      value: JSON.parse(output).sort === 'price_asc'
+    - type: javascript
+      value: |
+        const parsed = JSON.parse(output);
+        return parsed.searchTerms.join(' ').toLowerCase().includes('glass');
+    - type: javascript
+      value: |
+        const parsed = JSON.parse(output);
+        return !parsed.filters || parsed.filters.priceMax === undefined;
+
+- description: Height refine uses catalog range filter
+  vars:
+    refineQuery: above 10 cm
+    searchTerms: '["glasses"]'
+    filters: '{}'
+    queryLocale: en
+    catalogLocale: en-GB
+  assert:
+    - type: javascript
+      value: |
+        const parsed = JSON.parse(output);
+        return parsed.filters && (parsed.filters.heightMin === '10' || Number(parsed.filters.heightMin) === 10);
+
+- description: Drop color constraint removes the color filter
+  vars:
+    refineQuery: without the red
+    searchTerms: '["red shoes"]'
+    filters: '{"color":"red"}'
+    queryLocale: en
+    catalogLocale: en-GB
+  assert:
+    - type: javascript
+      value: |
+        const parsed = JSON.parse(output);
+        return !parsed.filters || !parsed.filters.color;

@@ -7,6 +7,13 @@ import type {
   VoiceAudioInterpretation,
 } from "../types/index.js";
 
+export interface GenerationMetrics {
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  cost?: number;
+}
+
 export interface AIProvider {
   interpretTextQuery(
     text: string,
@@ -26,11 +33,13 @@ export interface AIProvider {
     imageBase64: string,
     mimeType: string,
     locales: SearchLocaleContext,
+    attributeCatalog?: FacetAttributeDefinition[],
   ): Promise<InterpretedSearchQuery>;
   interpretVoiceAudio(
     audio: Uint8Array,
     mimeType: string,
     locales: SearchLocaleContext,
+    attributeCatalog?: FacetAttributeDefinition[],
   ): Promise<VoiceAudioInterpretation>;
   enhanceVoiceTranscript(transcript: string, locales: SearchLocaleContext): Promise<string>;
   suggestSearchTerms(
@@ -48,4 +57,5 @@ export interface AIProvider {
     locales: SearchLocaleContext,
     attributeCatalog?: FacetAttributeDefinition[],
   ): Promise<DecomposedShoppingMission>;
+  getLastGenerationMetrics?(): GenerationMetrics | undefined;
 }

@@ -6,6 +6,7 @@ import {
   isBedrockAvailable,
   isSkippedEvalOutput,
   loadEvalEnvFile,
+  parseAttributeCatalog,
   readImageFixture,
   readProviderConfig,
 } from "./eval-utils.ts";
@@ -137,6 +138,24 @@ describe("readProviderConfig", () => {
       voiceModel: "voice-model",
       skipIfUnavailable: true,
     });
+  });
+});
+
+describe("parseAttributeCatalog", () => {
+  it("parses a JSON array string", () => {
+    expect(
+      parseAttributeCatalog({
+        attributeCatalog: JSON.stringify([
+          { name: "color", label: "Color", kind: "distinct", attributeType: "enum" },
+        ]),
+      }),
+    ).toEqual([
+      expect.objectContaining({ name: "color" }),
+    ]);
+  });
+
+  it("returns empty when missing", () => {
+    expect(parseAttributeCatalog({})).toEqual([]);
   });
 });
 

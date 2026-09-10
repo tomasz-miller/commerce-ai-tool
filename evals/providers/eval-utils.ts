@@ -1,8 +1,12 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { configureLangfusePrompts, createAIProvider } from "@commerce-ai-tool/core";
-import type { AIProvider } from "@commerce-ai-tool/core";
+import {
+  configureLangfusePrompts,
+  createAIProvider,
+  createCommercetoolsClient,
+} from "@commerce-ai-tool/core";
+import type { AIProvider, CommercetoolsClient, FacetAttributeDefinition } from "@commerce-ai-tool/core";
 import type { ProviderOptions, ProviderResponse } from "promptfoo";
 
 export const DEFAULT_CATALOG_LOCALE = "no";
@@ -26,7 +30,10 @@ export interface EvalAIProviderResult {
 
 export function loadEvalEnvFile(): void {
   const evalDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-  const envPath = resolve(evalDir, ".env");
+  loadOptionalEnvFile(resolve(evalDir, ".env"));
+}
+
+export function loadOptionalEnvFile(envPath: string): void {
   if (!existsSync(envPath)) {
     return;
   }
@@ -41,11 +48,24 @@ export function loadEvalEnvFile(): void {
       continue;
     }
     const key = trimmed.slice(0, separator).trim();
-    const value = trimmed.slice(separator + 1).trim();
+    let value = trimmed.slice(separator + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
     if (key && process.env[key] === undefined) {
       process.env[key] = value;
     }
   }
+}
+
+export function loadCommercetoolsEvalEnv(): void {
+  loadEvalEnvFile();
+  const evalDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+  const repoRoot = resolve(evalDir, "..");
+  loadOptionalEnvFile(resolve(repoRoot, "apps/demo-next/.env.local"));
 }
 
 export function resolveAudioFixturePath(filename: string): string {
@@ -222,5 +242,70 @@ export function readProviderConfig(options: ProviderOptions): CreateEvalAIProvid
     visionModel: typeof config.visionModel === "string" ? config.visionModel : undefined,
     voiceModel: typeof config.voiceModel === "string" ? config.voiceModel : undefined,
     skipIfUnavailable: config.skipIfUnavailable === true,
+  };
+}
+
+export function parseAttributeCatalog(vars: Record<string, unknown>): FacetAttributeDefinition[] {
+  const raw = vars.attributeCatalog;
+  if (typeof raw === "string" && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      return Array.isArray(parsed) ? (parsed as FacetAttributeDefinition[]) : [];
+    } catch {
+      return [];
+    }
+  }
+  if (Array.isArray(raw)) {
+    return raw as FacetAttributeDefinition[];
+  }
+  return [];
+}
+
+export function isCommercetoolsAvailable(): boolean {
+  loadCommercetoolsEvalEnv();
+  return Boolean(
+    process.env.CTP_PROJECT_KEY?.trim() &&
+      process.env.CTP_CLIENT_ID?.trim() &&
+      process.env.CTP_CLIENT_SECRET?.trim() &&
+      process.env.CTP_REGION?.trim(),
+  );
+}
+
+export function createEvalCommercetoolsClient(): CommercetoolsClient {
+  loadCommercetoolsEvalEnv();
+  const projectKey = process.env.CTP_PROJECT_KEY?.trim();
+  const clientId = process.env.CTP_CLIENT_ID?.trim();
+  const clientSecret = process.env.CTP_CLIENT_SECRET?.trim();
+  const region = process.env.CTP_REGION?.trim();
+  if (!projectKey || !clientId || !clientSecret || !region) {
+    throw new Error(
+      "CTP_PROJECT_KEY, CTP_CLIENT_ID, CTP_CLIENT_SECRET, and CTP_REGION are required for retrieval evals.",
+    );
+  }
+  return createCommercetoolsClient({
+    projectKey,
+    clientId,
+    clientSecret,
+    region,
+  });
+}
+
+export function toEvalProviderResponse(
+  output: unknown,
+  ai: AIProvider,
+  startedAt: number,
+): ProviderResponse {
+  const metrics = ai.getLastGenerationMetrics?.();
+  return {
+    output: typeof output === "string" ? output : JSON.stringify(output, null, 2),
+    tokenUsage: {
+      prompt: metrics?.promptTokens,
+      completion: metrics?.completionTokens,
+      total: metrics?.totalTokens,
+    },
+    cost: metrics?.cost,
+    metadata: {
+      latencyMs: Date.now() - startedAt,
+    },
   };
 }

@@ -74,4 +74,14 @@ describe("mergeInterpretedSearchTerms", () => {
       ).searchTerms,
     ).toEqual([]);
   });
+
+  it("preserves primaryTerm when prepending the typed query", () => {
+    const merged = mergeInterpretedSearchTerms(
+      "coffee table",
+      { searchTerms: ["side table"], primaryTerm: "side table", interpretation: "tables" },
+      { queryLocale: "en", catalogLocale: "en-GB" },
+    );
+    expect(merged.searchTerms).toEqual(["coffee table", "side table"]);
+    expect(merged.primaryTerm).toBe("side table");
+  });
 });

@@ -24,6 +24,7 @@ describe("loadConfigFromEnv langfuse prompts", () => {
       "LANGFUSE_PROMPT_LABEL",
       "LANGFUSE_PROMPT_CACHE_TTL_SECONDS",
       "CAT_AI_PROVIDER",
+      "OPENROUTER_JSON_SCHEMA",
     ]) {
       previous.set(key, process.env[key]);
       delete process.env[key];
@@ -67,5 +68,19 @@ describe("loadConfigFromEnv langfuse prompts", () => {
     expect(config.langfuse?.promptCacheTtlSeconds).toBeUndefined();
     expect(config.langfuse?.promptsEnabled).toBe(false);
     expect(config.langfuse?.enabled).toBe(false);
+  });
+
+  it("disables OpenRouter json_schema when OPENROUTER_JSON_SCHEMA=false", () => {
+    process.env.OPENROUTER_JSON_SCHEMA = "false";
+
+    const config = loadConfigFromEnv();
+
+    expect(config.ai.openrouter?.jsonSchema).toBe(false);
+  });
+
+  it("leaves OpenRouter json_schema enabled by default", () => {
+    const config = loadConfigFromEnv();
+
+    expect(config.ai.openrouter?.jsonSchema).toBeUndefined();
   });
 });

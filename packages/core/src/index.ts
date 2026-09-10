@@ -6,7 +6,7 @@ export {
 } from "./messages/index.js";
 export type { CommerceAISearchMessages } from "./messages/index.js";
 export { createAIProvider } from "./ai/factory.js";
-export type { AIProvider } from "./ai/types.js";
+export type { AIProvider, GenerationMetrics } from "./ai/types.js";
 export { createCommercetoolsClient } from "./commercetools/client.js";
 export type { CommercetoolsClient, ProductSearchBuildInput, ProductSearchQueryOptions } from "./commercetools/client.js";
 export {
@@ -79,6 +79,7 @@ export {
   buildProjectionSearchQueryArgs,
   hasSearchableContent,
   joinSearchTerms,
+  PRIMARY_TERM_BOOST_MULTIPLIER,
 } from "./commercetools/query-builder.js";
 export {
   buildSearchKeywordsFromProductCopy,
@@ -113,6 +114,7 @@ export {
   buildSchemaAwareTextQueryUserMessage,
   buildSuggestSearchTermsUserMessage,
   TTS_SUMMARY_PROMPT,
+  REFINE_QUERY_SYSTEM_PROMPT,
   MAX_INTERPRETED_SEARCH_TERMS,
 } from "./prompts/index.js";
 export {
@@ -152,6 +154,7 @@ export {
   localesShareLanguage,
   mergeInterpretedSearchTerms,
 } from "./search/query-passthrough.js";
+export { relaxInterpretedSearch, dropSoftFilters, hasSoftFilters } from "./search/relax-search.js";
 export { logSearchTrace } from "./utils/dev-trace.js";
 export { SearchTimeoutError } from "./utils/with-timeout.js";
 export {

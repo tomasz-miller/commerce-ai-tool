@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildImageQueryUserMessage,
   buildProductSearchBody,
   buildRefineQueryUserMessage,
   buildTextQueryUserMessage,
@@ -8,7 +9,9 @@ import {
   parseSuggestSearchTerms,
   parseVoiceAudioInterpretation,
   TEXT_QUERY_SYSTEM_PROMPT,
+  withStructuredOutputInstruction,
 } from "./index.js";
+import { INTERPRETED_SEARCH_JSON_SCHEMA } from "./schemas.js";
 
 describe("formatLocaleContext", () => {
   it("includes query and catalog locales", () => {
@@ -75,6 +78,35 @@ describe("parseInterpretedQuery", () => {
     expect(result.searchTerms).toEqual(["laptop", "dell"]);
     expect(result.sort).toBe("price_asc");
     expect(result.interpretation).toBe("Looking for Dell laptops");
+    expect(result.primaryTerm).toBeUndefined();
+  });
+
+  it("promotes primaryTerm into searchTerms without duplicating", () => {
+    const result = parseInterpretedQuery(
+      JSON.stringify({
+        primaryTerm: "wine glass",
+        searchTerms: ["glass", "wine glass", "drinkware"],
+        interpretation: "drinkware",
+      }),
+    );
+
+    expect(result.primaryTerm).toBe("wine glass");
+    expect(result.searchTerms).toEqual(["wine glass", "glass", "drinkware"]);
+  });
+
+  it("accepts filters as a name/value array", () => {
+    const result = parseInterpretedQuery(
+      JSON.stringify({
+        searchTerms: ["shoes"],
+        filters: [
+          { name: "color", value: "red" },
+          { name: "priceMax", value: "200" },
+        ],
+        interpretation: "red shoes",
+      }),
+    );
+
+    expect(result.filters).toEqual({ color: "red", priceMax: "200" });
   });
 
   it("deduplicates and caps searchTerms", () => {
@@ -269,5 +301,36 @@ describe("buildProductSearchBody", () => {
     );
 
     expect(JSON.stringify(body.query)).toContain("variants.attributes.color.key");
+  });
+});
+
+describe("buildImageQueryUserMessage", () => {
+  it("includes the filterable attribute catalog", () => {
+    const message = buildImageQueryUserMessage(
+      { queryLocale: "en", catalogLocale: "en" },
+      [
+        {
+          name: "color",
+          label: "Color",
+          kind: "distinct",
+          attributeType: "enum",
+          field: "variants.attributes.color",
+          fieldType: "text",
+        },
+      ],
+    );
+
+    expect(message).toContain("Analyze this product image.");
+    expect(message).toContain("color");
+  });
+});
+
+describe("withStructuredOutputInstruction", () => {
+  it("appends the JSON schema for providers without json_schema", () => {
+    const message = withStructuredOutputInstruction("Analyze this product.", INTERPRETED_SEARCH_JSON_SCHEMA);
+
+    expect(message).toContain("Analyze this product.");
+    expect(message).toContain("primaryTerm");
+    expect(message).toContain("searchTerms");
   });
 });

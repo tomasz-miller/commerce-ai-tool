@@ -6,6 +6,7 @@ import {
   loadEvalEnvFile,
   readImageFixture,
   readProviderConfig,
+  toEvalProviderResponse,
 } from "./eval-utils.ts";
 
 loadEvalEnvFile();
@@ -39,14 +40,13 @@ export default class ImageSearchEvalProvider {
 
     try {
       const { base64, mimeType } = readImageFixture(imageFile);
+      const startedAt = Date.now();
       const result = await this.evalProvider.ai!.interpretImageQuery(base64, mimeType, {
         queryLocale,
         catalogLocale,
       });
 
-      return {
-        output: JSON.stringify(result, null, 2),
-      };
+      return toEvalProviderResponse(result, this.evalProvider.ai!, startedAt);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return { error: message };

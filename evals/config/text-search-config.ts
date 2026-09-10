@@ -1,5 +1,6 @@
 import { appendBedrockProvidersIfAvailable } from "./append-bedrock-providers.ts";
 import { jsonShapeAssertions } from "./assertions.ts";
+import { SAMPLE_ATTRIBUTE_CATALOG } from "./sample-attribute-catalog.ts";
 
 const OPENROUTER_PROVIDER = {
   id: "file://providers/text-search-provider.ts",
@@ -28,6 +29,9 @@ export default function textSearchConfig() {
       [BEDROCK_PROVIDER],
     ),
     defaultTest: {
+      vars: {
+        attributeCatalog: JSON.stringify(SAMPLE_ATTRIBUTE_CATALOG),
+      },
       assert: [...jsonShapeAssertions],
     },
     tests: ["file://tests/text-search.yaml"],

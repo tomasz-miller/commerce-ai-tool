@@ -1,0 +1,210 @@
+{
+  "catalogLocale": "en-GB",
+  "dumpedAt": "2026-09-09T13:17:19.260Z",
+  "projectKey": "zero-to-ct-storefront",
+  "products": [
+    {
+      "id": "03ece89c-18e5-4446-a553-4232fb392efc",
+      "sku": "GMCT-01",
+      "name": "Modern Gold Coffee Table",
+      "slug": "modern-gold-coffee-table",
+      "seedQuery": "coffee table"
+    },
+    {
+      "id": "c74d402f-f728-46de-83f6-2a565b793134",
+      "sku": "ADCT-01",
+      "name": "Art Deco Coffee Table",
+      "slug": "art-deco-coffe-table",
+      "seedQuery": "coffee table"
+    },
+    {
+      "id": "6520cdbe-4a82-41f5-ac8c-19dd439c374f",
+      "sku": "MTSS-01",
+      "name": "Modern Three Seater Sofa",
+      "slug": "modern-three-seater-sofa",
+      "seedQuery": "coffee table"
+    },
+    {
+      "id": "2c8cc4d0-69cb-4dd6-bf42-a47090212f2c",
+      "sku": "SBG-09",
+      "name": "Stout Beer Glass",
+      "slug": "stout-beer-glass",
+      "seedQuery": "glasses"
+    },
+    {
+      "id": "de8ba407-90b9-4a1e-9d3f-ff739ba3e4e4",
+      "sku": "HDG-02",
+      "name": "Harmony Drinking Glass",
+      "slug": "harmony-drinking-glass",
+      "seedQuery": "glasses"
+    },
+    {
+      "id": "f0adf303-3a1e-4204-8a47-b9c99910507c",
+      "sku": "CWG-01",
+      "name": "Chianti Wine Glass",
+      "slug": "chianti-wine-glass",
+      "seedQuery": "wine glass"
+    },
+    {
+      "id": "101e6d24-94fd-4145-a427-7a738c21ede4",
+      "sku": "CDG-09",
+      "name": "Crystal Drinking Glass",
+      "slug": "crystal-drinking-glass",
+      "seedQuery": "glasses"
+    },
+    {
+      "id": "56d4034f-6851-4e98-b3d4-1a1d15df5432",
+      "sku": "RWG-09",
+      "name": "Rye Whiskey Glass",
+      "slug": "rye-whiskey-glass",
+      "seedQuery": "glasses"
+    },
+    {
+      "id": "89bde0ad-eb7c-4a83-97aa-ca3535b8ffd8",
+      "sku": "CCG-02",
+      "name": "Clink Champagne Glass",
+      "slug": "clink-champagne-glass",
+      "seedQuery": "wine glass"
+    },
+    {
+      "id": "2ab357ee-6464-49ab-9f77-14b28b80ff5d",
+      "sku": "SCG-09",
+      "name": "Sparkle Champagne Glass",
+      "slug": "sparkle-champagne-glass",
+      "seedQuery": "wine glass"
+    },
+    {
+      "id": "b3112359-47ce-4240-b006-e9519ece8878",
+      "sku": "SGB-01",
+      "name": "Sunnai Glass Bowl",
+      "slug": "sunnai-glass-bowl",
+      "seedQuery": "glasses"
+    },
+    {
+      "id": "e72a54e3-3f94-4bf9-9b45-4bb6da64f805",
+      "sku": "RAM-094",
+      "name": "Rumi Chair",
+      "slug": "rumi-chair",
+      "seedQuery": "chair"
+    },
+    {
+      "id": "47a425a1-fa8e-4941-b4e9-574779716b88",
+      "sku": "BARM-03",
+      "name": "Bruno Chair",
+      "slug": "bruno-chair",
+      "seedQuery": "chair"
+    },
+    {
+      "id": "10c398b4-fe35-4ed3-8b63-4706b40c6574",
+      "sku": "CCH-093",
+      "name": "Charcoal Chair",
+      "slug": "charcoal-chair",
+      "seedQuery": "chair"
+    },
+    {
+      "id": "2661c8d7-ef63-4d82-953f-fe3d113ea99c",
+      "sku": "NJOP-09",
+      "name": "Wilma Chair",
+      "slug": "wilma-chair",
+      "seedQuery": "chair"
+    },
+    {
+      "id": "840cc058-610b-4f96-ba68-0de56f3701a0",
+      "sku": "VARM-09",
+      "name": "Emerald Velvet Chair",
+      "slug": "emerald-velvet-chair",
+      "seedQuery": "chair"
+    },
+    {
+      "id": "4588918d-d429-489c-b357-0fbfb5cb248a",
+      "sku": "RLC-08",
+      "name": "Rattan Lounge Chair",
+      "slug": "rattan-lounge-chair",
+      "seedQuery": "chair"
+    },
+    {
+      "id": "4abc8469-6fb3-4427-98d6-f19bcf325add",
+      "sku": "ADARM-04",
+      "name": "Art Deco Chair",
+      "slug": "art-deco-chair",
+      "seedQuery": "chair"
+    },
+    {
+      "id": "c071f146-5640-48ad-b799-3c0437213b35",
+      "sku": "BA-092",
+      "name": "Leather Weave Chair",
+      "slug": "leather-weave-chair",
+      "seedQuery": "chair"
+    },
+    {
+      "id": "cbd31e87-20a8-4a3a-a4c2-ac3854bfb521",
+      "sku": "CCG-01",
+      "name": "Classic Champagne Glasses",
+      "slug": "classic-champagne-glasses",
+      "seedQuery": "wine glass"
+    },
+    {
+      "id": "c1f9cdce-b553-45c8-b723-090d2e18421c",
+      "sku": "GRCG-01",
+      "name": "Gold Rimmed Champagne Glasses",
+      "slug": "gold-rimmed-champagne-glasses",
+      "seedQuery": "wine glass"
+    },
+    {
+      "id": "c962bd84-ad5a-41b1-b0c4-07318c4ea66f",
+      "sku": "CBM-03",
+      "name": "Classic Beer Mug",
+      "slug": "classic-beer-mug",
+      "seedQuery": "mug"
+    },
+    {
+      "id": "82c4acb2-af7d-4b46-818c-6b54557f0288",
+      "sku": "CCM-089",
+      "name": "Comfort Coffee Mug",
+      "slug": "comfort-coffee-mug",
+      "seedQuery": "mug"
+    },
+    {
+      "id": "ed5e30f8-75d1-4a9d-acb8-efbd420c7bd2",
+      "sku": "SCM-02",
+      "name": "Sipper Coffee Mug",
+      "slug": "sipper-coffee-mug",
+      "seedQuery": "mug"
+    },
+    {
+      "id": "9132d2f9-8fdf-47cc-a134-c43005407643",
+      "sku": "TCM-03",
+      "name": "Travel Coffee Mug",
+      "slug": "travel-coffee-mug",
+      "seedQuery": "mug"
+    },
+    {
+      "id": "81224cfa-1a77-4352-890d-696987aefcc8",
+      "sku": "STM-09",
+      "name": "Sand Tea Cup",
+      "slug": "sand-tea-cup",
+      "seedQuery": "mug"
+    },
+    {
+      "id": "2d0a6c11-791d-43b1-8d7c-c0b9b27cf988",
+      "sku": "BAMB-084",
+      "name": "Square Bamboo Coaster",
+      "slug": "square-bamboo-coaster",
+      "seedQuery": "mug"
+    },
+    {
+      "id": "3baf5619-f686-4926-b3b7-29be3c3b2bd5",
+      "sku": "AMR-09",
+      "name": "Amalia Rug",
+      "slug": "amalia-rug",
+      "seedQuery": "mug"
+    },
+    {
+      "id": "7c0cee84-889f-40a8-b7c0-b4947031daa6",
+      "sku": "AAR-34",
+      "name": "Aria Rug",
+      "slug": "aria-rug",
+      "seedQuery": "mug"
+    }
+  ]
+}

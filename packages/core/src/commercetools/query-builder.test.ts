@@ -324,6 +324,53 @@ describe("buildProductSearchRequest", () => {
 
     expect(JSON.stringify(body.query)).not.toContain("fuzzy");
   });
+
+  it("doubles field boosts for primaryTerm and skips fuzzy on alternates", () => {
+    const body = buildProductSearchRequest({
+      interpreted: {
+        primaryTerm: "wine glass",
+        searchTerms: ["wine glass", "glass"],
+        interpretation: "drinkware",
+      },
+      catalogLocale: "en",
+    });
+
+    const outer = body.query as {
+      or?: Array<{
+        or?: Array<{ fullText?: { value?: string; boost?: number }; fuzzy?: { value?: string } }>;
+      }>;
+    };
+
+    const primary = outer.or?.find((phrase) =>
+      phrase.or?.some((clause) => clause.fullText?.value === "wine glass"),
+    );
+    const alternate = outer.or?.find((phrase) =>
+      phrase.or?.some((clause) => clause.fullText?.value === "glass"),
+    );
+
+    expect(primary?.or).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ fullText: expect.objectContaining({ field: "name", boost: 6 }) }),
+        expect.objectContaining({ fuzzy: expect.objectContaining({ value: "wine glass" }) }),
+      ]),
+    );
+    expect(alternate?.or).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ fullText: expect.objectContaining({ field: "name", boost: 3 }) }),
+      ]),
+    );
+    expect(JSON.stringify(alternate)).not.toContain("fuzzy");
+  });
+
+  it("uses mustMatch any when requested", () => {
+    const body = buildProductSearchRequest({
+      interpreted: baseInterpreted,
+      catalogLocale: "en",
+      options: { mustMatch: "any" },
+    });
+
+    expect(JSON.stringify(body.query)).toContain('"mustMatch":"any"');
+  });
 });
 
 describe("buildProjectionSearchQueryArgs", () => {

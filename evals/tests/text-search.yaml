@@ -5,11 +5,12 @@
     catalogLocale: no
   assert:
     - type: javascript
-      value: JSON.parse(output).searchTerms.length > 0
+      value: JSON.parse(output).searchTerms.length === 1
     - type: javascript
       value: |
-        const terms = JSON.parse(output).searchTerms.join(' ').toLowerCase();
-        return terms.includes('rød') || terms.includes('røde') || terms.includes('sko');
+        const parsed = JSON.parse(output);
+        const terms = [parsed.primaryTerm, ...parsed.searchTerms].filter(Boolean).join(' ').toLowerCase();
+        return (terms.includes('rød') || terms.includes('røde')) && terms.includes('sko');
 
 - description: Polish query translated to Norwegian catalog (wallpaper knife)
   vars:
@@ -18,7 +19,7 @@
     catalogLocale: no
   assert:
     - type: javascript
-      value: JSON.parse(output).searchTerms.length > 0
+      value: JSON.parse(output).searchTerms.length === 1
     - type: javascript
       value: |
         const terms = JSON.parse(output).searchTerms.join(' ').toLowerCase();
@@ -31,7 +32,7 @@
     catalogLocale: no
   assert:
     - type: javascript
-      value: JSON.parse(output).searchTerms.length > 0
+      value: JSON.parse(output).searchTerms.length === 1
     - type: javascript
       value: |
         const terms = JSON.parse(output).searchTerms.join(' ').toLowerCase();
@@ -97,6 +98,8 @@
       value: |
         const parsed = JSON.parse(output);
         return typeof parsed.interpretation === 'string' && parsed.interpretation.length > 0;
+    - type: javascript
+      value: JSON.parse(output).searchTerms.length === 0
 
 - description: Polish broad drinkware intent translated to English catalog (multiple phrases)
   vars:
@@ -105,10 +108,16 @@
     catalogLocale: en-GB
   assert:
     - type: javascript
-      value: JSON.parse(output).searchTerms.length >= 3
+      value: |
+        const parsed = JSON.parse(output);
+        return parsed.searchTerms.length >= 3 && parsed.searchTerms.length <= 6;
     - type: javascript
       value: |
-        const terms = JSON.parse(output).searchTerms.join(' ').toLowerCase();
+        const parsed = JSON.parse(output);
+        const terms = parsed.searchTerms.join(' ').toLowerCase();
         const hits = ['glass', 'mug', 'cup', 'tumbler', 'drinkware'].filter((keyword) => terms.includes(keyword));
         return hits.length >= 2;
-
+    - type: javascript
+      value: |
+        const parsed = JSON.parse(output);
+        return typeof parsed.primaryTerm === 'string' && parsed.primaryTerm.length > 0;

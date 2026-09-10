@@ -61,6 +61,10 @@ BEDROCK_VISION_MODEL_ID=anthropic.claude-3-5-sonnet-20241022-v2:0
 | `pnpm eval:promptfoo:voice-enhance` | `promptfooconfig.voice-enhance.yaml` | Transcript cleanup (`enhanceVoiceTranscript`) |
 | `pnpm eval:promptfoo:voice-tts` | `promptfooconfig.voice-tts.yaml` | Result summaries (`summarizeVoiceResults`) |
 | `pnpm eval:promptfoo:mission` | `promptfooconfig.mission.yaml` | Multi-item shopping missions (`decomposeShoppingMission`) |
+| `pnpm eval:promptfoo:suggest` | `promptfooconfig.suggest.ts` | Autocomplete suggestions (`suggestSearchTerms`) |
+| `pnpm eval:promptfoo:refine` | `promptfooconfig.refine.ts` | Natural-language refine (`interpretRefineQuery`) |
+| `pnpm eval:promptfoo:retrieval` | `promptfooconfig.retrieval.ts` | Interpretation + live Product Search (`en-GB`) |
+| `pnpm eval:models` | `promptfooconfig.models.ts` | Cheaper-model matrix on the retrieval suite |
 | `pnpm eval:promptfoo:redteam` | `promptfooconfig.redteam.yaml` | Prompt injection + jailbreak probes on text search |
 | `pnpm eval:promptfoo:view` | — | Web UI matrix |
 
@@ -69,6 +73,7 @@ Fixture regeneration:
 ```bash
 pnpm eval:fixtures:audio    # macOS only — WAV voice clips
 pnpm eval:fixtures:images   # Resize/compress JPEG vision fixtures
+pnpm eval:fixtures:catalog  # Live commercetools product snapshot for retrieval golden SKUs
 ```
 
 ### OpenRouter vs Bedrock matrix
@@ -107,6 +112,35 @@ pnpm eval:promptfoo:mission
 ```
 
 Calls `decomposeShoppingMission` (`commerce-ai/mission-query`). Cases cover compound lists, quantity words, single-product `isMission: false`, cross-locale catalog-language terms, and off-topic input.
+
+### Suggest and refine evals
+
+```bash
+pnpm eval:promptfoo:suggest
+pnpm eval:promptfoo:refine
+```
+
+Cover `suggestSearchTerms` and `interpretRefineQuery` (`commerce-ai/refine-query`).
+
+### Retrieval evals
+
+```bash
+pnpm eval:fixtures:catalog
+pnpm eval:promptfoo:retrieval
+pnpm eval:models
+```
+
+`retrieval` interprets the query, builds a Product Search request, and hits the live catalog (`en-GB`). Requires `CTP_*` (evals `.env` or `apps/demo-next/.env.local`). Assertions check `total > 0` and that top product names match the intent. Providers report `tokenUsage`, `cost`, and `metadata.latencyMs`.
+
+`eval:models` runs the same suite across cheaper OpenRouter models so precision@5, tokens, and latency can be compared before changing defaults. Latest recommendation: [`baselines/MODEL-SELECTION.md`](baselines/MODEL-SELECTION.md).
+
+YAML list vars (for example `expectedSkus`) must be JSON strings (`'["SKU-1","SKU-2"]'`). A YAML array is expanded into one Promptfoo test per item.
+
+Commit compact summaries under [`baselines/`](baselines/). Write full Promptfoo JSON to `evals/output/` (gitignored). Extra Promptfoo flags need `pnpm exec` so they are not swallowed:
+
+```bash
+pnpm exec promptfoo eval -c evals/promptfooconfig.models.ts --env-file evals/.env --no-cache
+```
 
 ### Image search evals
 
@@ -169,11 +203,19 @@ evals/
   promptfooconfig.voice-enhance.yaml
   promptfooconfig.voice-tts.yaml
   promptfooconfig.mission.yaml
+  promptfooconfig.suggest.ts
+  promptfooconfig.refine.ts
+  promptfooconfig.retrieval.ts
+  promptfooconfig.models.ts
   promptfooconfig.redteam.yaml
+  baselines/                          # compact retrieval matrix summaries
   providers/
     eval-utils.ts                   # createEvalAIProvider, fixtures, skip helpers
     eval-utils.test.ts
     text-search-provider.ts
+    retrieval-search-provider.ts
+    suggest-search-provider.ts
+    refine-search-provider.ts
     image-search-provider.ts
     voice-baseline-provider.ts
     voice-audio-provider.ts
@@ -187,9 +229,13 @@ evals/
     voice-enhance.yaml
     voice-tts.yaml
     mission-search.yaml
+    suggest-search.yaml
+    refine-search.yaml
+    retrieval.yaml
   fixtures/
     audio/
     images/
+    catalog/
   scripts/
     generate-audio-fixtures.sh
     compress-image-fixtures.sh

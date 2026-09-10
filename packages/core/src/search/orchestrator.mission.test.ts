@@ -202,15 +202,16 @@ describe("createSearchOrchestrator.searchByText missions", () => {
   });
 
   it("falls back to standard search when every intent returns no products", async () => {
-    const searchProducts = vi
-      .fn()
-      .mockResolvedValueOnce({ productIds: [], total: 0, projections: [] })
-      .mockResolvedValueOnce({ productIds: [], total: 0, projections: [] })
-      .mockResolvedValueOnce({
+    const searchProducts = vi.fn().mockImplementation(async () => {
+      if (searchProducts.mock.calls.length <= 4) {
+        return { productIds: [], total: 0, projections: [] };
+      }
+      return {
         productIds: ["p1"],
         total: 1,
         projections: [{ id: "p1", name: "Sports" }],
-      });
+      };
+    });
     const ct = createMockCommercetoolsClient({ searchProducts });
     const ai = createMockAi({
       decomposeShoppingMission: vi.fn().mockResolvedValue(twoIntents),
@@ -223,7 +224,8 @@ describe("createSearchOrchestrator.searchByText missions", () => {
 
     const result = await orchestrator.searchByText({ query: "racket and balls" });
 
-    expect(searchProducts).toHaveBeenCalledTimes(3);
+    // Two intents × (initial + primary_any_match) then one standard search.
+    expect(searchProducts).toHaveBeenCalledTimes(5);
     expect(result.mission).toBeUndefined();
     expect(result.products[0]?.id).toBe("p1");
   });

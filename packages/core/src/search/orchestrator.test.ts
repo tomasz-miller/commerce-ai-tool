@@ -378,9 +378,9 @@ describe("createSearchOrchestrator.searchByText facets", () => {
 
   it("does not reuse a non-facet cache entry for a facet-enabled request", async () => {
     const searchProducts = vi.fn().mockResolvedValue({
-      productIds: [],
-      total: 0,
-      projections: [],
+      productIds: ["p1"],
+      total: 1,
+      projections: [{ id: "p1", name: "Glasses" }],
     });
     const ct = createMockCommercetoolsClient({ searchProducts });
     const ai = createMockAi();
@@ -514,6 +514,99 @@ describe("createSearchOrchestrator.searchByText query passthrough", () => {
   });
 });
 
+describe("createSearchOrchestrator zero-result relaxation", () => {
+  it("drops soft filters then retries with primaryTerm mustMatch any", async () => {
+    const searchProducts = vi
+      .fn()
+      .mockResolvedValueOnce({ productIds: [], total: 0, projections: [] })
+      .mockResolvedValueOnce({ productIds: [], total: 0, projections: [] })
+      .mockResolvedValueOnce({
+        productIds: ["p1"],
+        total: 1,
+        projections: [{ id: "p1", name: "Wine Glass" }],
+      });
+    const ct = createMockCommercetoolsClient({ searchProducts });
+    const ai = {
+      interpretTextQuery: vi.fn().mockResolvedValue({
+        primaryTerm: "wine glass",
+        searchTerms: ["wine glass", "glass"],
+        filters: { color: "red", priceMax: "40" },
+        interpretation: "red wine glasses",
+      }),
+      interpretRefineQuery: vi.fn(),
+      interpretImageQuery: vi.fn(),
+      interpretVoiceAudio: vi.fn(),
+      enhanceVoiceTranscript: vi.fn(),
+      suggestSearchTerms: vi.fn(),
+      summarizeVoiceResults: vi.fn(),
+    };
+    const orchestrator = createSearchOrchestrator({
+      config: baseConfig,
+      commercetoolsClient: ct,
+      aiProvider: ai as never,
+    });
+
+    const result = await orchestrator.searchByText({
+      query: "czerwony kieliszek do wina",
+      queryLocale: "pl",
+      catalogLocale: "en-GB",
+    });
+
+    expect(searchProducts).toHaveBeenCalledTimes(3);
+    expect(searchProducts.mock.calls[1]?.[0].interpreted.filters).toEqual({ priceMax: "40" });
+    expect(searchProducts.mock.calls[2]?.[0].interpreted.searchTerms).toEqual(["wine glass"]);
+    expect(searchProducts.mock.calls[2]?.[0].interpreted.filters).toEqual({ priceMax: "40" });
+    expect(searchProducts.mock.calls[2]?.[0].options?.mustMatch).toBe("any");
+    expect(result.meta.relaxation).toBe("primary_any_match");
+    expect(result.products).toHaveLength(1);
+  });
+
+  it("applies the same zero-result retries when paginating past offset 0", async () => {
+    const searchProducts = vi
+      .fn()
+      .mockResolvedValueOnce({ productIds: [], total: 0, projections: [] })
+      .mockResolvedValueOnce({
+        productIds: ["p2"],
+        total: 12,
+        projections: [{ id: "p2", name: "Wine Glass page 2" }],
+      });
+    const ct = createMockCommercetoolsClient({ searchProducts });
+    const ai = {
+      interpretTextQuery: vi.fn().mockResolvedValue({
+        primaryTerm: "wine glass",
+        searchTerms: ["wine glass"],
+        filters: { priceMax: "40" },
+        interpretation: "wine glasses",
+      }),
+      interpretRefineQuery: vi.fn(),
+      interpretImageQuery: vi.fn(),
+      interpretVoiceAudio: vi.fn(),
+      enhanceVoiceTranscript: vi.fn(),
+      suggestSearchTerms: vi.fn(),
+      summarizeVoiceResults: vi.fn(),
+    };
+    const orchestrator = createSearchOrchestrator({
+      config: baseConfig,
+      commercetoolsClient: ct,
+      aiProvider: ai as never,
+    });
+
+    const result = await orchestrator.searchByText({
+      query: "wine glass",
+      queryLocale: "en",
+      catalogLocale: "en-GB",
+      offset: 10,
+    });
+
+    expect(searchProducts).toHaveBeenCalledTimes(2);
+    expect(searchProducts.mock.calls[1]?.[0].offset).toBe(10);
+    expect(searchProducts.mock.calls[1]?.[0].options?.mustMatch).toBe("any");
+    expect(result.meta.relaxation).toBe("primary_any_match");
+    expect(result.meta.total).toBe(12);
+    expect(result.products).toHaveLength(1);
+  });
+});
+
 describe("createSearchOrchestrator with Langfuse disabled", () => {
   it("returns search results without requiring OTel setup", async () => {
     const ct = createMockCommercetoolsClient({
@@ -598,6 +691,100 @@ describe("createSearchOrchestrator Langfuse prompt config", () => {
         label: "staging",
         cacheTtlSeconds: 15,
       }),
+    );
+  });
+});
+
+describe("createSearchOrchestrator image and voice catalog", () => {
+  const colorProductType = {
+    version: 1,
+    attributes: [
+      {
+        name: "color",
+        label: { en: "Color" },
+        isSearchable: true,
+        type: { name: "enum" },
+      },
+    ],
+  };
+
+  it("passes the attribute catalog to image interpretation without exposing facets when facets are off", async () => {
+    const ct = createMockCommercetoolsClient({
+      listProductTypes: vi.fn().mockResolvedValue([colorProductType]),
+      searchProducts: vi.fn().mockResolvedValue({
+        productIds: ["p1"],
+        total: 1,
+        projections: [{ id: "p1", name: "Red Glass" }],
+      }),
+    });
+    const ai = {
+      interpretTextQuery: vi.fn(),
+      interpretRefineQuery: vi.fn(),
+      interpretImageQuery: vi.fn().mockResolvedValue({
+        searchTerms: ["wine glass"],
+        interpretation: "a wine glass",
+        filters: {},
+      }),
+      interpretVoiceAudio: vi.fn(),
+      enhanceVoiceTranscript: vi.fn(),
+      suggestSearchTerms: vi.fn(),
+      summarizeVoiceResults: vi.fn(),
+    };
+    const orchestrator = createSearchOrchestrator({
+      config: baseConfig,
+      commercetoolsClient: ct,
+      aiProvider: ai as never,
+    });
+
+    const result = await orchestrator.searchByImage(new Uint8Array([1]), "image/jpeg");
+
+    expect(ai.interpretImageQuery).toHaveBeenCalledWith(
+      expect.any(String),
+      "image/jpeg",
+      expect.anything(),
+      expect.arrayContaining([expect.objectContaining({ name: "color" })]),
+    );
+    expect(result.facetSchema).toBeUndefined();
+    expect(result.facets).toBeUndefined();
+  });
+
+  it("passes the attribute catalog to direct voice interpretation", async () => {
+    const ct = createMockCommercetoolsClient({
+      listProductTypes: vi.fn().mockResolvedValue([colorProductType]),
+      searchProducts: vi.fn().mockResolvedValue({
+        productIds: ["p1"],
+        total: 1,
+        projections: [{ id: "p1", name: "Red Glass" }],
+      }),
+    });
+    const ai = {
+      interpretTextQuery: vi.fn(),
+      interpretRefineQuery: vi.fn(),
+      interpretImageQuery: vi.fn(),
+      interpretVoiceAudio: vi.fn().mockResolvedValue({
+        transcript: "red glass",
+        enhancedQuery: "red glass",
+        searchTerms: ["red glass"],
+        interpretation: "red glass",
+        filters: {},
+      }),
+      enhanceVoiceTranscript: vi.fn(),
+      suggestSearchTerms: vi.fn(),
+      summarizeVoiceResults: vi.fn(),
+    };
+    const orchestrator = createSearchOrchestrator({
+      config: baseConfig,
+      commercetoolsClient: ct,
+      aiProvider: ai as never,
+    });
+
+    await orchestrator.searchByVoice(new Uint8Array([1]), "audio/webm", { enableTts: false });
+
+    expect(ai.interpretVoiceAudio).toHaveBeenCalledWith(
+      expect.any(Uint8Array),
+      "audio/webm",
+      expect.anything(),
+      expect.arrayContaining([expect.objectContaining({ name: "color" })]),
     );
   });
 });
