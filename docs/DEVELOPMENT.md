@@ -56,6 +56,8 @@ CI (`.github/workflows/ci.yml`) runs `lint` → `typecheck` → `test` → `buil
 
 Use GitHub Issues with a clear description, steps to reproduce, and environment details.
 
+Do **not** file security vulnerabilities as public issues. Follow [SECURITY.md](../.github/SECURITY.md).
+
 ## Publishing to npm
 
 Packages are versioned with [Changesets](https://github.com/changesets/changesets). To publish:

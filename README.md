@@ -62,6 +62,10 @@ pnpm build
 pnpm dev   # http://localhost:3000
 ```
 
+## Security
+
+Report vulnerabilities privately. See [SECURITY.md](.github/SECURITY.md).
+
 ## License
 
 MIT
