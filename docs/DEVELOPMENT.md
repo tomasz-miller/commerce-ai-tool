@@ -83,7 +83,7 @@ Then on each package page (`core`, `server`, `react`, `angular`) add a **Trusted
 - Workflow filename: `release.yml`
 - Allowed action: `npm publish`
 
-After that, restore `on.push.branches: [main]` in [`.github/workflows/release.yml`](../.github/workflows/release.yml). Later releases use GitHub OIDC (no `NPM_TOKEN`) and npm provenance.
+Later releases run on push to `main` via [`.github/workflows/release.yml`](.github/workflows/release.yml) (GitHub OIDC, no `NPM_TOKEN`, npm provenance). The first `2.4.0` publish is still local: OIDC cannot create a package that does not exist yet.
 
 ### Ongoing releases
 
