@@ -27,7 +27,7 @@ Custom providers call the same `createAIProvider` paths as production — no dup
 
 ## Prerequisites
 
-- Node.js ≥ 24, pnpm 9.15.9
+- Node.js ≥ 24, pnpm 11.22.0
 - OpenRouter API key (required for all suites)
 - Optional: AWS credentials + `AWS_REGION` for Bedrock matrix columns (omitted from the eval matrix when unset)
 - Built `@commerce-ai-tool/core` (`pnpm build` — eval scripts run this automatically)

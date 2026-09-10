@@ -19,7 +19,7 @@ Dependencies: `server` / `react` / `angular` → `core`. API secrets stay on the
 
 ## Stack
 
-TypeScript strict, tsup, Vitest, ESLint 9, Turbo 2, pnpm 9.15.9, Node ≥ 24.
+TypeScript strict, tsup, Vitest, ESLint 10, Turbo 2, pnpm 11.22.0, Node ≥ 24.
 
 ## Architecture
 

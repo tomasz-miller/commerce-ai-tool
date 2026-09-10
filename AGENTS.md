@@ -33,7 +33,7 @@ Package dependencies: `server`, `react`, `angular` → `core`.
 ## Environment requirements
 
 - **Node.js** ≥ 24 (CI: 24)
-- **pnpm** 9.15.9 (`packageManager` in root `package.json` — do not override version in workflows)
+- **pnpm** 11.22.0 (`packageManager` in root `package.json` — do not override version in workflows)
 - **Turbo** 2.x — task orchestration
 
 ## Tech stack
@@ -43,7 +43,7 @@ Package dependencies: `server`, `react`, `angular` → `core`.
 | Language / build | TypeScript 7.0 (`tsc`), `@typescript/typescript6` for legacy Compiler API consumers, tsup 8, ESM + CJS |
 | Monorepo | pnpm workspaces, Turborepo |
 | Unit tests | Vitest 3 (`packages/**/*.test.ts`) |
-| Lint | ESLint 9 + typescript-eslint |
+| Lint | ESLint 10 + typescript-eslint |
 | AI | `@openrouter/sdk`, `@aws-sdk/client-bedrock-runtime` |
 | Commerce | `@commercetools/platform-sdk`, `@commercetools/sdk-client-v2` (REST Product Search + GraphQL card hydrate via `apiRoot.graphql()`) |
 | Voice | `@elevenlabs/elevenlabs-js` (server) |
