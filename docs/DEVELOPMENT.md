@@ -62,20 +62,16 @@ Do **not** file security vulnerabilities as public issues. Follow [SECURITY.md](
 
 Four scoped packages are published: `@commerce-ai-tool/core`, `@commerce-ai-tool/server`, `@commerce-ai-tool/react`, and `@commerce-ai-tool/angular`. **`demo-next` is private and is never published.** Versions are linked as a **fixed** Changesets group so they stay in lockstep.
 
-### One-time npm org (manual)
+### One-time npm org
 
-1. Sign in as [peniakoff](https://www.npmjs.com/~peniakoff)
-2. Create the **`commerce-ai-tool`** organization at [npmjs.com/org/create](https://www.npmjs.com/org/create) (public packages)
-3. Enable 2FA on the account
-
-Do not store a long-lived `NPM_TOKEN` in GitHub. Classic npm tokens are deprecated.
+Scoped packages require an npm organization whose name matches the scope (`commerce-ai-tool`). Create it on npmjs.com if it does not exist yet. Do not store a long-lived `NPM_TOKEN` in GitHub.
 
 ### First publish (`2.4.0`) — after merge to `main`
 
 OIDC trusted publishing cannot create a package’s first version. From an up-to-date `main` (not a feature branch):
 
 ```bash
-npm login               # peniakoff
+npm login
 pnpm build
 pnpm exec changeset publish
 ```
