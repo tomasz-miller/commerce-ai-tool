@@ -16,3 +16,5 @@ Agent working rules: [AGENTS.md](AGENTS.md).
 ## Reporting issues
 
 Use GitHub Issues with a clear description, steps to reproduce, and environment details.
+
+Do **not** file security vulnerabilities as public issues. Follow [SECURITY.md](.github/SECURITY.md).
