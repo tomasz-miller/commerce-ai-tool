@@ -55,7 +55,7 @@
     "@types/node": "^24.0.0",
     "@typescript/native": "catalog:",
     "tsup": "^8.4.0",
-    "vitest": "^3.0.9"
+    "vitest": "^5.0.0"
   },
   "publishConfig": {
     "access": "public"
