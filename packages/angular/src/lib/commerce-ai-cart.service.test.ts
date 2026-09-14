@@ -16,8 +16,11 @@ const sampleCart = {
   totalQuantity: 0,
 };
 
+const createdServices: CommerceAiCartService[] = [];
+
 function createService(enabled = true): CommerceAiCartService {
   const service = new CommerceAiCartService();
+  createdServices.push(service);
   service.configure({ apiBaseUrl: "/api/commerce-ai", currency: "EUR", enabled });
   return service;
 }
@@ -29,6 +32,9 @@ describe("CommerceAiCartService", () => {
   });
 
   afterEach(() => {
+    for (const service of createdServices.splice(0)) {
+      service.ngOnDestroy();
+    }
     vi.restoreAllMocks();
     window.localStorage.clear();
   });
@@ -53,6 +59,78 @@ describe("CommerceAiCartService", () => {
       expect(service.cart()).toEqual(sampleCart);
     });
     expect(fetchMock).toHaveBeenCalledWith("/api/commerce-ai/cart?anonymousId=anon-1");
+  });
+
+  it("syncs cart snapshots across service instances in the same tab", async () => {
+    const updated = { ...sampleCart, version: 2, totalQuantity: 3 };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).includes("/cart/add")) {
+        return { ok: true, json: async () => ({ cart: updated }) };
+      }
+      return { ok: true, json: async () => ({ cart: sampleCart }) };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const widget = createService();
+    const sheet = createService();
+    await vi.waitFor(() => {
+      expect(widget.cart()).toEqual(sampleCart);
+      expect(sheet.cart()).toEqual(sampleCart);
+    });
+    const getCallsAfterConfigure = fetchMock.mock.calls.filter(([url]) =>
+      String(url).includes("/cart?"),
+    ).length;
+
+    await sheet.addToCart({ sku: "GLASS-RED", quantity: 3 });
+
+    expect(sheet.cart()).toEqual(updated);
+    expect(widget.cart()).toEqual(updated);
+    expect(
+      fetchMock.mock.calls.filter(([url]) => String(url).includes("/cart?")),
+    ).toHaveLength(getCallsAfterConfigure);
+  });
+
+  it("ignores a stale refresh that loses the race to a newer mutation", async () => {
+    const updated = { ...sampleCart, version: 2, totalQuantity: 3 };
+    let releaseStaleGet: (() => void) | undefined;
+    const staleGet = new Promise<void>((resolve) => {
+      releaseStaleGet = resolve;
+    });
+    let cartGets = 0;
+
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).includes("/cart/add")) {
+        return { ok: true, json: async () => ({ cart: updated }) };
+      }
+      if (String(url).includes("/cart?")) {
+        cartGets += 1;
+        if (cartGets > 2) {
+          await staleGet;
+          return { ok: true, json: async () => ({ cart: sampleCart }) };
+        }
+        return { ok: true, json: async () => ({ cart: sampleCart }) };
+      }
+      return { ok: true, json: async () => ({ cart: sampleCart }) };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const widget = createService();
+    const sheet = createService();
+    await vi.waitFor(() => {
+      expect(widget.cart()).toEqual(sampleCart);
+      expect(sheet.cart()).toEqual(sampleCart);
+    });
+
+    const refreshPromise = sheet.refresh();
+    await sheet.addToCart({ sku: "GLASS-RED", quantity: 3 });
+    expect(sheet.cart()).toEqual(updated);
+    expect(widget.cart()).toEqual(updated);
+
+    releaseStaleGet?.();
+    await refreshPromise;
+
+    expect(sheet.cart()).toEqual(updated);
+    expect(widget.cart()).toEqual(updated);
   });
 
   it("adds multiple items through /cart/add-items", async () => {

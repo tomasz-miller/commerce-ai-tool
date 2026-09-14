@@ -6,11 +6,21 @@ catalog:
   "@typescript/native": "npm:typescript@^7.0.2"
   typescript: "npm:@typescript/typescript6@^6.0.2"
 
+overrides:
+  # Single Angular runtime across the workspace. packages/angular declares
+  # v19 forms/platform-browser while the v20 core needs v20 peers; without
+  # this, apps/demo-angular would load two Angular runtimes (NG0203).
+  "@angular/forms": "20.3.27"
+  "@angular/platform-browser": "20.3.27"
+
 allowBuilds:
+  '@parcel/watcher': set this to true or false
   '@playwright/browser-chromium': true
   '@swc/core': true
   better-sqlite3: true
   esbuild: true
+  lmdb: set this to true or false
+  msgpackr-extract: set this to true or false
   onnxruntime-node: true
   protobufjs: true
   sharp: true

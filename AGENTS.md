@@ -26,7 +26,9 @@ Browser Widget → Host API (@commerce-ai-tool/server) → AI + ElevenLabs + com
 | `@commerce-ai-tool/server` | `packages/server` | Next.js / Express handlers, STT/TTS |
 | `@commerce-ai-tool/react` | `packages/react` | React/Next.js widget (glass UI) |
 | `@commerce-ai-tool/angular` | `packages/angular` | Angular component |
+| `@commerce-ai-tool/styles` | `packages/styles` | Shared widget CSS (private; inlined into React/Angular `dist/index.css`) |
 | `demo-next` | `apps/demo-next` | Demo app (Next.js 16) |
+| `demo-angular` | `apps/demo-angular` | Demo app (Angular 20 + Express BFF) |
 
 Package dependencies: `server`, `react`, `angular` → `core`.
 
@@ -89,7 +91,9 @@ Each library has `tsconfig.build.json` (excludes `*.test.ts`) for emit.
 ```bash
 pnpm install              # install
 pnpm build                # build all packages
-pnpm dev                  # dev (demo-next :3000 + library watch)
+pnpm dev                  # dev (demo-next :3000 + demo-angular :4200 / BFF :3002 + library watch)
+pnpm dev:react            # React/Next host only (:3000)
+pnpm dev:angular          # Angular host only (:4200 + Express BFF on :3002)
 pnpm lint                 # ESLint
 pnpm typecheck            # tsc --noEmit
 pnpm test                 # Vitest
@@ -161,14 +165,14 @@ Workflow `.github/workflows/ci.yml` on every PR/push to `main`:
 
 `pnpm test` is Vitest unit tests only. Promptfoo LLM evals and other live calls to OpenRouter, Langfuse, Bedrock, or commercetools are not run in GitHub Actions (no API secrets required).
 
-Release (`.github/workflows/release.yml`) runs on push to `main` (and `workflow_dispatch`). The first `2.4.0` must still be published locally — OIDC cannot create a package that does not exist yet. After that, add a Trusted Publisher on each npm package. Do not publish from feature branches. `demo-next` is never published.
+Release (`.github/workflows/release.yml`) runs on push to `main` (and `workflow_dispatch`). The first `2.4.0` must still be published locally — OIDC cannot create a package that does not exist yet. After that, add a Trusted Publisher on each npm package. Do not publish from feature branches. `demo-next` and `demo-angular` are never published.
 
 ## Typical feature structure
 
 1. Logic in `packages/core` (+ unit tests)
 2. Endpoints in `packages/server` (+ handler unit tests)
 3. UI in `packages/react` or `packages/angular` (+ component/hook tests)
-4. Integration in `apps/demo-next` (+ E2E if user flow applies)
+4. Integration in `apps/demo-next` or `apps/demo-angular` (+ E2E if user flow applies)
 5. Full verification: `pnpm lint && pnpm typecheck && pnpm test && pnpm build`
 
 ## Product documentation
@@ -194,7 +198,8 @@ Hard rules that still belong here: secrets never in the browser; widget modaliti
 | `scripts/emit-package-dts.mjs` | Native `tsc` declaration emit + `.d.cts` copy for libraries |
 | `eslint.config.mjs` | Root ESLint flat config |
 | `vitest.config.ts` | `packages/**/*.test.ts` pattern |
-| `apps/demo-next/.env.example` | Required environment variables |
+| `apps/demo-next/.env.example` | Required environment variables (React host) |
+| `apps/demo-angular/.env.example` | Required environment variables (Angular host + Express BFF) |
 | `docs/` | Canonical product documentation |
 | `evals/` | Promptfoo LLM prompt evaluations (local only) |
 | `.cursor/rules/` | Cursor agent rules (English only) |

@@ -8,7 +8,7 @@ import {
 } from "@commerce-ai-tool/core/client";
 import { useCart } from "../hooks/useCart.js";
 import { ICON_STROKE } from "../icons.js";
-import "../styles/commerce-ai-search.css";
+import "@commerce-ai-tool/styles/commerce-ai-search.css";
 
 export interface CommerceAIOrderStatusProps {
   apiBaseUrl: string;

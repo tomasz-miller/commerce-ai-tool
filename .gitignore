@@ -1,8 +1,12 @@
 node_modules
 dist
+dist-server
+.angular
 .next
 .turbo
 coverage
+test-results
+playwright-report
 *.log
 .env
 .env.*
