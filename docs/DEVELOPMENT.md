@@ -102,7 +102,7 @@ Then on each package page (`core`, `server`, `react`, `angular`) add a **Trusted
 
 Later releases run on push to `main` via [`.github/workflows/release.yml`](.github/workflows/release.yml) (GitHub OIDC, no `NPM_TOKEN`, npm provenance). The first `2.4.0` publish is still local: OIDC cannot create a package that does not exist yet.
 
-If CI fails with `TypeError: Cannot read properties of undefined (reading 'includes')` inside `isAlreadyPublishedError`, that is a `@changesets/cli` 2.x + pnpm bug masking the real registry error. Check Trusted Publisher config on each package, keep the release workflow on npm 11.x (not 12+), and ensure the empty `_authToken` line from `actions/setup-node` `registry-url` is stripped before publish so OIDC can run.
+If CI fails with `TypeError: Cannot read properties of undefined (reading 'includes')` inside `isAlreadyPublishedError`, that is a `@changesets/cli` 2.x + pnpm bug masking the real registry error. The release workflow uses Changesets 3, npm 11.x, and deliberately omits `actions/setup-node`'s `registry-url` option so it does not inject a placeholder `NODE_AUTH_TOKEN` that prevents OIDC authentication.
 
 ### Ongoing releases
 

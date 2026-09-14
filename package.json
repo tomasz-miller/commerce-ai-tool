@@ -37,7 +37,7 @@
     "sync:langfuse-prompts": "pnpm --filter @commerce-ai-tool/core build && node scripts/sync-langfuse-prompts.mjs"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.31.1",
+    "@changesets/cli": "^3.0.2",
     "@commerce-ai-tool/core": "workspace:*",
     "@eslint/js": "^10.0.1",
     "@langfuse/client": "^5.11.1",
