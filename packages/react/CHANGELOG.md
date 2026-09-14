@@ -1,5 +1,15 @@
 # @commerce-ai-tool/react
 
+## 2.5.0
+
+### Minor Changes
+
+- a124040: Add the Angular demo host (`apps/demo-angular`) with full `demo-next` parity: search with cart and missions, product preview, host-owned checkout and order pages, and a standalone Express BFF.
+
+### Patch Changes
+
+- a124040: Share widget CSS through `@commerce-ai-tool/styles` and align the Angular search widget and demo host with the React/Next layout (search shell, voice banner, dark page chrome).
+
 ## 2.4.0
 
 ### Initial public release

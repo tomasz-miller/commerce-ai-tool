@@ -1,7 +1,7 @@
 {
   "name": "@commerce-ai-tool/react",
-  "version": "2.4.0",
-  "description": "React component for Commerce AI Tool \u2014 glass morphism product search widget",
+  "version": "2.5.0",
+  "description": "React component for Commerce AI Tool — glass morphism product search widget",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.cjs",
