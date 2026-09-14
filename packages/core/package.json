@@ -1,6 +1,6 @@
 {
   "name": "@commerce-ai-tool/core",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "description": "Core business logic for Commerce AI Tool — commercetools search with AI interpretation",
   "license": "MIT",
   "type": "module",
