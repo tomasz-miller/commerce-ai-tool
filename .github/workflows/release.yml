@@ -28,8 +28,23 @@ jobs:
           cache: pnpm
           registry-url: https://registry.npmjs.org
 
+      # Trusted publishing needs npm >= 11.5.1. Do not use npm@latest:
+      # npm 12 wraps `npm info --json` in an array and breaks @changesets/cli 2.x.
       - name: Upgrade npm for trusted publishing
-        run: npm install -g npm@latest
+        run: npm install -g npm@^11.5.1
+
+      # setup-node writes //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}.
+      # With no token, that empty line makes npm skip OIDC and fail publish;
+      # @changesets/cli 2.31 then crashes in isAlreadyPublishedError (no summary).
+      - name: Strip empty _authToken for OIDC publish
+        run: |
+          NPMRC_PATH="${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}"
+          if [ -f "$NPMRC_PATH" ]; then
+            sed -i '/_authToken/d' "$NPMRC_PATH"
+          fi
+          if [ -f "$HOME/.npmrc" ] && [ "$HOME/.npmrc" != "$NPMRC_PATH" ]; then
+            sed -i '/_authToken/d' "$HOME/.npmrc"
+          fi
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
