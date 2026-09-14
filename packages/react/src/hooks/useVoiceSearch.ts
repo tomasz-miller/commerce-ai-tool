@@ -74,6 +74,7 @@ export function useVoiceSearch(options: UseVoiceSearchOptions) {
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current?.state === "recording") {
+      setIsProcessing(true);
       mediaRecorderRef.current.stop();
     }
     setIsRecording(false);
@@ -131,6 +132,7 @@ export function useVoiceSearch(options: UseVoiceSearchOptions) {
 
           onTranscript?.(data.transcript);
           onResults?.(data.products, data.meta, { mission: data.mission });
+          setIsProcessing(false);
 
           if (data.audioSummary) {
             setAudioSummary(data.audioSummary);
@@ -152,8 +154,8 @@ export function useVoiceSearch(options: UseVoiceSearchOptions) {
         } catch (err) {
           setError(err instanceof Error ? err.message : "Voice search failed");
           setAudioSummary(null);
-        } finally {
           setIsProcessing(false);
+          setIsLoadingTts(false);
         }
       };
 

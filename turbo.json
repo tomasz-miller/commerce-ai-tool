@@ -3,7 +3,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
+      "outputs": ["dist/**", "dist-server/**", ".next/**", "!.next/cache/**"]
     },
     "dev": {
       "dependsOn": ["^build", "build"],
@@ -11,6 +11,11 @@
       "persistent": true
     },
     "demo-next#dev": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true
+    },
+    "demo-angular#dev": {
       "dependsOn": ["^build"],
       "cache": false,
       "persistent": true

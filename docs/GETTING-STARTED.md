@@ -6,7 +6,7 @@ Add Commerce AI search to a host app. Secrets stay on the server; the widget cal
 
 ## 1. Install packages
 
-Install only the plugin pieces your host uses. The GitHub demo app (`apps/demo-next`) is not an npm package.
+Install only the plugin pieces your host uses. The GitHub demo apps (`apps/demo-next`, `apps/demo-angular`) are not npm packages.
 
 ```bash
 # React / Next.js host
@@ -56,6 +56,19 @@ import { createExpressRouter } from "@commerce-ai-tool/server/express";
 const app = express();
 app.use(createExpressRouter({ config: loadConfigFromEnv(), basePath: "/api/commerce-ai" }));
 app.listen(3001);
+```
+
+A runnable Express host ships with the repo: [`apps/demo-angular`](../apps/demo-angular) pairs this router with an Angular dev proxy so the widget keeps `apiBaseUrl="/api/commerce-ai"`:
+
+```json
+// apps/demo-angular/proxy.conf.json
+{
+  "/api/commerce-ai": {
+    "target": "http://localhost:3002",
+    "secure": false,
+    "changeOrigin": true
+  }
+}
 ```
 
 ## 4. Add the widget (React)

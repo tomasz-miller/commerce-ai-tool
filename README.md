@@ -60,7 +60,9 @@ Local demo:
 ```bash
 pnpm install
 pnpm build
-pnpm dev   # http://localhost:3000
+pnpm dev           # http://localhost:3000 (React) and http://localhost:4200 (Angular)
+pnpm dev:react     # React/Next host only (:3000)
+pnpm dev:angular   # Angular host only (:4200 + BFF on :3002)
 ```
 
 ## Security

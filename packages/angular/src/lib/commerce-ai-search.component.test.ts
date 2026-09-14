@@ -309,4 +309,70 @@ describe("CommerceAiSearchComponent", () => {
     expect(fixture.nativeElement.querySelector(".cat-mission__add-all")).toBeNull();
     expect(fixture.nativeElement.querySelector(".cat-result-card__add")).toBeNull();
   });
+
+  it("renders the search shell and action cluster", async () => {
+    await TestBed.configureTestingModule({
+      imports: [CommerceAiSearchComponent],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(CommerceAiSearchComponent);
+    fixture.componentInstance.enableVoice = true;
+    fixture.componentInstance.enableCameraSearch = true;
+    fixture.componentInstance.enableImageSearch = true;
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector(".cat-search-shell")).not.toBeNull();
+    expect(fixture.nativeElement.querySelector(".cat-search-actions")).not.toBeNull();
+    expect(fixture.nativeElement.querySelector(".cat-search-bar--voice-active")).toBeNull();
+  });
+
+  it("shows the voice banner while recording", async () => {
+    await TestBed.configureTestingModule({
+      imports: [CommerceAiSearchComponent],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(CommerceAiSearchComponent);
+    fixture.componentInstance.enableVoice = true;
+    fixture.componentInstance.isRecording = true;
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector(".cat-search-bar--voice-active")).not.toBeNull();
+    expect(fixture.nativeElement.querySelector(".cat-voice-banner")).not.toBeNull();
+    expect(fixture.nativeElement.querySelector(".cat-voice-banner")?.textContent).toContain(
+      "Listening…",
+    );
+  });
+
+  it("filters facets by suggested names and uses the new-search action class", async () => {
+    await TestBed.configureTestingModule({
+      imports: [CommerceAiSearchComponent],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(CommerceAiSearchComponent);
+    fixture.componentInstance.enableFacets = true;
+    fixture.componentInstance.lastSearchMode = "text";
+    fixture.componentInstance.hasSearched = true;
+    fixture.componentInstance.query = "red shoes";
+    fixture.componentInstance.facets = [
+      {
+        id: "color",
+        label: "Color",
+        type: "distinct",
+        buckets: [{ key: "red", label: "Red", count: 4 }],
+      },
+      {
+        id: "size",
+        label: "Size",
+        type: "distinct",
+        buckets: [{ key: "42", label: "42", count: 2 }],
+      },
+    ];
+    fixture.componentInstance.suggestedFacets = [{ name: "color" }];
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.visibleFacets.map((facet) => facet.id)).toEqual(["color"]);
+    expect(fixture.nativeElement.querySelector(".cat-facets__new")).not.toBeNull();
+    expect(fixture.nativeElement.querySelector(".cat-facet-chip__count")?.textContent).toBe("4");
+    expect(fixture.nativeElement.querySelector('[aria-label="Size"]')).toBeNull();
+  });
 });

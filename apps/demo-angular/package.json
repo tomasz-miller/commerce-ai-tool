@@ -1,0 +1,48 @@
+
+{
+  "name": "demo-angular",
+  "version": "0.1.0-alpha.0",
+  "private": true,
+  "description": "Angular demo host for Commerce AI Tool \u2014 search, cart, missions, checkout, and orders against the shared commerce-ai BFF",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n bff,ui \"pnpm dev:bff\" \"pnpm dev:ui\"",
+    "dev:ui": "ng serve --port 4200 --proxy-config proxy.conf.json",
+    "dev:bff": "tsx watch server/index.ts",
+    "build": "ng build && tsc -p tsconfig.server.json",
+    "start": "node dist-server/index.js",
+    "lint": "eslint src server --config ../../eslint.config.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.server.json",
+    "test": "vitest run",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@angular/common": "20.3.27",
+    "@angular/core": "20.3.27",
+    "@angular/forms": "20.3.27",
+    "@angular/platform-browser": "20.3.27",
+    "@angular/router": "20.3.27",
+    "@commerce-ai-tool/angular": "workspace:*",
+    "@commerce-ai-tool/styles": "workspace:*",
+    "rxjs": "^7.8.2",
+    "zone.js": "^0.15.0"
+  },
+  "devDependencies": {
+    "@angular-devkit/build-angular": "^20.3.0",
+    "@angular/cli": "^20.3.0",
+    "@angular/compiler": "20.3.27",
+    "@angular/compiler-cli": "20.3.27",
+    "@commerce-ai-tool/server": "workspace:*",
+    "@playwright/test": "^1.61.1",
+    "@types/express": "^5.0.0",
+    "@types/node": "^24.0.0",
+    "concurrently": "^9.1.2",
+    "dotenv": "^16.4.5",
+    "eslint": "^10.10.0",
+    "express": "^5.0.1",
+    "jsdom": "^26.1.0",
+    "tsx": "^4.19.2",
+    "typescript": "~5.9.2",
+    "vitest": "^3.0.9"
+  }
+}
