@@ -135,13 +135,13 @@ Keep Product Search API (REST) for search and facets. Use GraphQL only to fetch 
 - [x] Let users select products and add the requested quantities to the cart
 - [x] Fall back to standard search when intent decomposition is uncertain
 
-## v2.4 — Mission surfaces (current)
+## v2.4 — Mission surfaces
 
 - [x] Angular widget grouped mission results and batched add-to-cart
 - [x] Voice (and optionally image) shopping-mission decomposition
 
-## v2.5 — Angular demo host (planned)
+## v2.5 — Angular demo host (current)
 
-Local `pnpm dev` still runs the React host (`apps/demo-next`). An Angular host is not required for the v2.4 widget work.
-
-- [ ] Add `apps/demo-angular` (or equivalent) that mounts `@commerce-ai-tool/angular` against the same `/api/commerce-ai` BFF as `demo-next` ([#18](https://github.com/tomasz-miller/commerce-ai-tool/issues/18))
+- [x] Add `apps/demo-angular` that mounts `@commerce-ai-tool/angular` against the same `/api/commerce-ai` BFF as `demo-next` ([#18](https://github.com/tomasz-miller/commerce-ai-tool/issues/18))
+- [x] Standalone Express BFF (`createExpressRouter` + mock payment provider) with Angular dev proxy (`:4200` → BFF on `:3002`)
+- [x] Host-owned Angular checkout (addresses, shipping, payment, order placement) and order confirmation/tracking pages

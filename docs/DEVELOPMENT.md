@@ -9,13 +9,15 @@ Local workflow, quality gates, publishing, and hosting. Agent-specific toolchain
 ```bash
 pnpm install
 pnpm build
-pnpm dev      # demo-next on http://localhost:3000 + library watch
+pnpm dev           # demo-next on http://localhost:3000 + demo-angular UI on :4200/BFF on :3002 + library watch
+pnpm dev:react     # React/Next host only (:3000)
+pnpm dev:angular   # Angular host only (:4200 + Express BFF on :3002)
 pnpm lint
 pnpm typecheck
 pnpm test     # Vitest
 ```
 
-Copy `apps/demo-next/.env.example` to `apps/demo-next/.env.local` before `pnpm dev`. Local development uses the React host only; an Angular demo app is planned in [ROADMAP](ROADMAP.md).
+Copy `apps/demo-next/.env.example` to `apps/demo-next/.env.local` before `pnpm dev` or `pnpm dev:react`. For `pnpm dev:angular`, put secrets in `apps/demo-angular/.env` or `.env.local`; if `CTP_PROJECT_KEY` is still unset, the Express BFF reuses `apps/demo-next/.env.local` so you do not have to duplicate credentials. The Angular UI on `:4200` proxies `/api/commerce-ai` to the BFF on `127.0.0.1:3002` (see [Angular demo host](#angular-demo-host)).
 
 Before finishing a feature (same order as CI):
 
@@ -46,6 +48,21 @@ pnpm eval:fixtures:catalog
 
 CI (`.github/workflows/ci.yml`) runs `lint` → `typecheck` → `test` → `build`. It does not call OpenRouter, Langfuse, Bedrock, or commercetools.
 
+### Angular demo host
+
+`apps/demo-angular` (Angular 20, standalone components + signals) mirrors `demo-next` page for page: search with cart and missions, product preview sheet, host-owned checkout wizard, and order confirmation/tracking.
+
+- From the repo root: `pnpm dev:angular`. UI on `http://localhost:4200`, Express BFF on `127.0.0.1:3002` (loopback-only unless `BFF_HOST` is set). `proxy.conf.json` forwards `/api/commerce-ai` to `http://127.0.0.1:3002` (not `localhost`, which can resolve to IPv6 while the BFF binds IPv4). Package-local scripts: `pnpm --filter demo-angular dev:ui` / `dev:bff`.
+- The BFF loads `apps/demo-angular/.env`, then `.env.local`, then falls back to `apps/demo-next/.env.local` when `CTP_PROJECT_KEY` is still missing. It mounts every route via `createExpressRouter({ config, basePath: "/api/commerce-ai" })` with the demo mock payment provider (`server/`).
+- Checkout and orders have no Angular library components yet, so the host implements them against `CheckoutApiService` (`src/app/core/api/`), which mirrors the checkout subset of the React `useCart` hook; the step state machine lives in `CheckoutFacade` (`src/app/core/checkout/`).
+- The widget is compiled from `packages/angular` sources via a `tsconfig` path mapping because the published tsup bundle carries no Angular compiler metadata. Keep the mapping in sync with the library entry point if files move. The host also depends on `@commerce-ai-tool/styles` so Vite can resolve the shared widget stylesheet from those sources.
+- The `development` build keeps `sourceMap: false`: enabling style/vendor maps breaks the Angular 20.3 compiler program for path-mapped sources outside the project root. For local debugging, run `node_modules/.bin/ng serve --source-map=scripts` instead (proven to compile).
+- Page chrome (dark canvas, pill nav, hero, product sheet) lives in `src/styles.css` and matches `apps/demo-next/src/app/globals.css`.
+
+### Shared widget styles
+
+`packages/styles` (`@commerce-ai-tool/styles`, private) is the single source for `commerce-ai-search.css`. `@commerce-ai-tool/react` and `@commerce-ai-tool/angular` import it; tsup inlines the CSS into each published `dist/index.css` (`./styles.css` export). Do not copy the stylesheet into the UI packages.
+
 ## Contributing
 
 1. Fork and clone; create a feature branch from `main`
@@ -60,7 +77,7 @@ Do **not** file security vulnerabilities as public issues. Follow [SECURITY.md](
 
 ## Publishing to npm
 
-Four scoped packages are published: `@commerce-ai-tool/core`, `@commerce-ai-tool/server`, `@commerce-ai-tool/react`, and `@commerce-ai-tool/angular`. **`demo-next` is private and is never published.** Versions are linked as a **fixed** Changesets group so they stay in lockstep.
+Four scoped packages are published: `@commerce-ai-tool/core`, `@commerce-ai-tool/server`, `@commerce-ai-tool/react`, and `@commerce-ai-tool/angular`. **The demo apps (`demo-next`, `demo-angular`) are private and are never published.** Versions are linked as a **fixed** Changesets group so they stay in lockstep.
 
 ### One-time npm org
 

@@ -30,7 +30,7 @@ import { MissionResults } from "./MissionResults.js";
 import { SearchFacets } from "./SearchFacets.js";
 import { VoiceStatusBanner } from "./VoiceStatusBanner.js";
 import type { CameraFacingMode } from "../utils/camera.js";
-import "../styles/commerce-ai-search.css";
+import "@commerce-ai-tool/styles/commerce-ai-search.css";
 
 export type SearchMode = "text" | "image" | "voice" | null;
 

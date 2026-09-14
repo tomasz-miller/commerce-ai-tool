@@ -128,6 +128,60 @@ describe("useCart", () => {
     ).toHaveLength(getCallsAfterMount);
   });
 
+  it("ignores a stale refresh that loses the race to a newer mutation", async () => {
+    const updated = { ...sampleCart, version: 2, totalQuantity: 3 };
+    let releaseStaleGet: (() => void) | undefined;
+    const staleGet = new Promise<void>((resolve) => {
+      releaseStaleGet = resolve;
+    });
+    let cartGets = 0;
+
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).includes("/cart/add")) {
+        return { ok: true, json: async () => ({ cart: updated }) };
+      }
+      if (String(url).includes("/cart?")) {
+        cartGets += 1;
+        if (cartGets > 2) {
+          await staleGet;
+          return { ok: true, json: async () => ({ cart: sampleCart }) };
+        }
+        return { ok: true, json: async () => ({ cart: sampleCart }) };
+      }
+      return { ok: true, json: async () => ({ cart: sampleCart }) };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result: widget } = renderHook(() => useCart({ apiBaseUrl: "/api/commerce-ai" }));
+    const { result: sheet } = renderHook(() =>
+      useCart({ apiBaseUrl: "/api/commerce-ai", currency: "EUR" }),
+    );
+
+    await waitFor(() => {
+      expect(widget.current.cart).toEqual(sampleCart);
+      expect(sheet.current.cart).toEqual(sampleCart);
+    });
+
+    let refreshPromise!: Promise<void>;
+    await act(async () => {
+      refreshPromise = sheet.current.refresh();
+    });
+
+    await act(async () => {
+      await sheet.current.addToCart({ sku: "GLASS-RED", quantity: 3 });
+    });
+    expect(sheet.current.cart).toEqual(updated);
+    expect(widget.current.cart).toEqual(updated);
+
+    await act(async () => {
+      releaseStaleGet?.();
+      await refreshPromise;
+    });
+
+    expect(sheet.current.cart).toEqual(updated);
+    expect(widget.current.cart).toEqual(updated);
+  });
+
   it("adds multiple items through /cart/add-items", async () => {
     const updated = { ...sampleCart, version: 2, totalQuantity: 3 };
     const fetchMock = vi

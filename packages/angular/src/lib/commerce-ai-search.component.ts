@@ -37,6 +37,7 @@ import { CommerceAiApiService } from "./commerce-ai-api.service.js";
 import { CommerceAiCartPanelComponent } from "./commerce-ai-cart-panel.component.js";
 import { CommerceAiCartService } from "./commerce-ai-cart.service.js";
 import { CommerceAiMissionResultsComponent } from "./commerce-ai-mission-results.component.js";
+import { CommerceAiVoiceBannerComponent } from "./commerce-ai-voice-banner.component.js";
 import {
   buildCameraConstraints,
   createJpegFileFromVideo,
@@ -52,7 +53,12 @@ type SearchMode = "text" | "image" | "voice" | null;
 @Component({
   selector: "commerce-ai-search",
   standalone: true,
-  imports: [FormsModule, CommerceAiMissionResultsComponent, CommerceAiCartPanelComponent],
+  imports: [
+    FormsModule,
+    CommerceAiMissionResultsComponent,
+    CommerceAiCartPanelComponent,
+    CommerceAiVoiceBannerComponent,
+  ],
   providers: [CommerceAiCartService],
   template: `
     <div
@@ -74,7 +80,12 @@ type SearchMode = "text" | "image" | "voice" | null;
         <div class="cat-drag-overlay" aria-hidden="true">{{ resolvedMessages.dropImageToSearch }}</div>
       }
 
-      <form class="cat-search-bar" (ngSubmit)="onSubmit()">
+      <div class="cat-search-shell">
+      <form
+        class="cat-search-bar"
+        [class.cat-search-bar--voice-active]="isRecording"
+        (ngSubmit)="onSubmit()"
+      >
         <svg
           width="18"
           height="18"
@@ -108,6 +119,7 @@ type SearchMode = "text" | "image" | "voice" | null;
           />
         </div>
 
+        <div class="cat-search-actions">
         @if (enableVoice) {
           <button
             type="button"
@@ -185,6 +197,7 @@ type SearchMode = "text" | "image" | "voice" | null;
             </svg>
           </button>
         }
+        </div>
 
         @if (enableCart) {
           <button
@@ -250,6 +263,19 @@ type SearchMode = "text" | "image" | "voice" | null;
           </div>
         }
       </form>
+      </div>
+
+      @if (showVoiceBanner) {
+        <commerce-ai-voice-banner
+          [isRecording]="isRecording"
+          [isProcessing]="isProcessing"
+          [isLoadingTts]="isLoadingTts"
+          [error]="voiceError"
+          [durationSeconds]="recordingDuration"
+          [messages]="resolvedMessages"
+          (dismissError)="clearVoiceError()"
+        />
+      }
 
       @if (enableCameraSearch && (isCameraOpen || cameraError)) {
         <div class="cat-camera-overlay" role="dialog" [attr.aria-label]="resolvedMessages.cameraCapture">
@@ -312,7 +338,7 @@ type SearchMode = "text" | "image" | "voice" | null;
         />
       }
 
-      @if (enableFacets && lastSearchMode === "text" && hasSearched && facets.length && !showMission) {
+      @if (enableFacets && lastSearchMode === "text" && hasSearched && !showMission && visibleFacets.length) {
         <section class="cat-facets" [attr.aria-label]="resolvedMessages.filtersAriaLabel">
           <div class="cat-facets__header">
             <span>{{ resolvedMessages.narrowResults }}</span>
@@ -322,12 +348,12 @@ type SearchMode = "text" | "image" | "voice" | null;
                   {{ resolvedMessages.clearFilters }}
                 </button>
               }
-              <button type="button" class="cat-facets__clear" (click)="startNewSearch()">
+              <button type="button" class="cat-facets__new" (click)="startNewSearch()">
                 {{ resolvedMessages.newSearch }}
               </button>
             </div>
           </div>
-          @for (facet of facets; track facet.id) {
+          @for (facet of visibleFacets; track facet.id) {
             <div class="cat-facet-group" role="group" [attr.aria-label]="facet.label">
               <span class="cat-facet-group__label">{{ facet.label }}</span>
               <div class="cat-facet-group__options">
@@ -342,7 +368,8 @@ type SearchMode = "text" | "image" | "voice" | null;
                     @if (facetSwatch(facet.id, bucket.key); as swatch) {
                       <span class="cat-facet-chip__swatch" [style.background-color]="swatch" aria-hidden="true"></span>
                     }
-                    {{ bucket.label }} <span aria-hidden="true">{{ bucket.count }}</span>
+                    {{ bucket.label }}
+                    <span class="cat-facet-chip__count" aria-hidden="true">{{ bucket.count }}</span>
                   </button>
                 }
               </div>
@@ -512,14 +539,18 @@ export class CommerceAiSearchComponent implements OnInit, OnChanges, OnDestroy {
   isDragging = false;
   isRecording = false;
   isProcessing = false;
+  isLoadingTts = false;
   isCameraOpen = false;
   cameraError: string | null = null;
+  voiceError: string | null = null;
   lastSearchMode: SearchMode = null;
   audioSummary: string | null = null;
+  recordingDuration = 0;
 
   private mediaRecorder: MediaRecorder | null = null;
   private audioChunks: Blob[] = [];
   private cameraStream: MediaStream | null = null;
+  private recordingTimer: ReturnType<typeof setInterval> | null = null;
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
   private suggestionsTimer: ReturnType<typeof setTimeout> | null = null;
   private searchAbort: AbortController | null = null;
@@ -544,6 +575,7 @@ export class CommerceAiSearchComponent implements OnInit, OnChanges, OnDestroy {
     for (const timeout of this.addedTimeouts.values()) {
       clearTimeout(timeout);
     }
+    this.stopRecordingTimer();
     this.closeCamera();
     this.searchAbort?.abort();
     this.suggestionsAbort?.abort();
@@ -625,7 +657,19 @@ export class CommerceAiSearchComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   get showVoiceReplay(): boolean {
-    return this.enableTts && this.lastSearchMode === "voice" && !!this.audioSummary;
+    return this.enableVoice && this.enableTts && this.lastSearchMode === "voice" && !!this.audioSummary;
+  }
+
+  get showVoiceBanner(): boolean {
+    return (
+      this.enableVoice &&
+      (this.isRecording || this.isProcessing || this.isLoadingTts || Boolean(this.voiceError))
+    );
+  }
+
+  get visibleFacets(): SearchFacetGroup[] {
+    const suggestedNames = new Set(this.suggestedFacets.map((facet) => facet.name));
+    return this.facets.filter((facet) => suggestedNames.size === 0 || suggestedNames.has(facet.id));
   }
 
   onQueryChange(value: string): void {
@@ -1084,12 +1128,20 @@ export class CommerceAiSearchComponent implements OnInit, OnChanges, OnDestroy {
     );
   }
 
+  clearVoiceError(): void {
+    this.voiceError = null;
+  }
+
   async toggleRecording(): Promise<void> {
     if (this.isRecording) {
+      this.isProcessing = true;
       this.mediaRecorder?.stop();
       this.isRecording = false;
+      this.stopRecordingTimer();
       return;
     }
+
+    this.voiceError = null;
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -1117,15 +1169,21 @@ export class CommerceAiSearchComponent implements OnInit, OnChanges, OnDestroy {
               mission: data.mission,
             });
             this.error = null;
+            this.voiceError = null;
             this.hasSearched = true;
+            this.isProcessing = false;
+            this.cdr.detectChanges();
+
             if (data.audioSummary) {
               this.audioSummary = data.audioSummary;
               const audio = new Audio(`data:audio/mpeg;base64,${data.audioSummary}`);
               void audio.play();
             } else if (this.enableTts && data.ttsText && data.ttsPending) {
+              this.isLoadingTts = true;
+              this.cdr.detectChanges();
               try {
-                const blob = await this.api.synthesizeSpeech(this.apiBaseUrl, data.ttsText);
-                const buffer = await blob.arrayBuffer();
+                const speech = await this.api.synthesizeSpeech(this.apiBaseUrl, data.ttsText);
+                const buffer = await speech.arrayBuffer();
                 const bytes = new Uint8Array(buffer);
                 let binary = "";
                 for (let i = 0; i < bytes.length; i++) {
@@ -1136,21 +1194,25 @@ export class CommerceAiSearchComponent implements OnInit, OnChanges, OnDestroy {
                 void audio.play();
               } catch {
                 this.audioSummary = null;
+              } finally {
+                this.isLoadingTts = false;
+                this.cdr.detectChanges();
               }
             }
           })
           .catch((err: Error) => {
-            this.error = err.message;
-          })
-          .finally(() => {
+            this.voiceError = err.message;
             this.isProcessing = false;
+            this.isLoadingTts = false;
+            this.cdr.detectChanges();
           });
       };
 
       this.mediaRecorder.start();
       this.isRecording = true;
+      this.startRecordingTimer();
     } catch {
-      this.error = "Microphone access denied";
+      this.voiceError = "Microphone access denied";
     }
   }
 
@@ -1240,5 +1302,22 @@ export class CommerceAiSearchComponent implements OnInit, OnChanges, OnDestroy {
 
   private clearVoiceAudio(): void {
     this.audioSummary = null;
+  }
+
+  private startRecordingTimer(): void {
+    this.stopRecordingTimer();
+    this.recordingDuration = 0;
+    this.recordingTimer = setInterval(() => {
+      this.recordingDuration += 1;
+      this.cdr.detectChanges();
+    }, 1000);
+  }
+
+  private stopRecordingTimer(): void {
+    if (this.recordingTimer) {
+      clearInterval(this.recordingTimer);
+      this.recordingTimer = null;
+    }
+    this.recordingDuration = 0;
   }
 }

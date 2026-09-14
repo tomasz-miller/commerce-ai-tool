@@ -1,4 +1,4 @@
-import { Injectable, computed, signal } from "@angular/core";
+import { Injectable, computed, signal, type OnDestroy } from "@angular/core";
 import {
   CART_SESSION_HEADER,
   type CartSnapshot,
@@ -30,6 +30,19 @@ interface CartApiBody {
   customer?: CustomerSnapshot | null;
   sessionToken?: string;
   error?: string;
+}
+
+/** Ignore in-flight GET/refresh responses that lost a race to a newer mutation. */
+function isStaleCartSnapshot(
+  current: CartSnapshot | null,
+  next: CartSnapshot | null,
+): boolean {
+  return Boolean(
+    next &&
+      current &&
+      next.id === current.id &&
+      next.version < current.version,
+  );
 }
 
 function readStorage(key: string): string | null {
@@ -122,8 +135,19 @@ async function parseCartApi(response: Response): Promise<CartApiBody> {
   return body;
 }
 
+type CartSyncListener = (sourceId: number, cart: CartSnapshot | null) => void;
+
+const cartSyncListeners = new Set<CartSyncListener>();
+let cartSyncSeq = 0;
+
+function emitCartSync(sourceId: number, cart: CartSnapshot | null): void {
+  for (const listener of cartSyncListeners) {
+    listener(sourceId, cart);
+  }
+}
+
 @Injectable()
-export class CommerceAiCartService {
+export class CommerceAiCartService implements OnDestroy {
   readonly cart = signal<CartSnapshot | null>(null);
   readonly anonymousId = signal("");
   readonly customer = signal<CustomerSnapshot | null>(null);
@@ -144,6 +168,17 @@ export class CommerceAiCartService {
   private cartValue: CartSnapshot | null = null;
   private mutationChain: Promise<unknown> = Promise.resolve();
   private started = false;
+  private readonly syncId = ++cartSyncSeq;
+  private readonly onRemoteCart: CartSyncListener = (sourceId, next) => {
+    if (sourceId === this.syncId) {
+      return;
+    }
+    this.applyCart(next, false);
+  };
+
+  ngOnDestroy(): void {
+    cartSyncListeners.delete(this.onRemoteCart);
+  }
 
   sessionToken(): string | null {
     return this.sessionTokenValue;
@@ -158,8 +193,11 @@ export class CommerceAiCartService {
     this.onCartChange = options.onCartChange;
 
     if (!this.enabled) {
+      cartSyncListeners.delete(this.onRemoteCart);
       return;
     }
+
+    cartSyncListeners.add(this.onRemoteCart);
 
     if (!this.started) {
       this.started = true;
@@ -346,10 +384,16 @@ export class CommerceAiCartService {
     return pending;
   }
 
-  private applyCart(next: CartSnapshot | null): void {
+  private applyCart(next: CartSnapshot | null, sync = true): void {
+    if (isStaleCartSnapshot(this.cartValue, next)) {
+      return;
+    }
     this.cartValue = next;
     this.cart.set(next);
     this.onCartChange?.(next);
+    if (sync) {
+      emitCartSync(this.syncId, next);
+    }
   }
 
   private persistSession(token: string, nextCustomer: CustomerSnapshot): void {

@@ -1,0 +1,14 @@
+{
+  "name": "@commerce-ai-tool/styles",
+  "version": "2.4.0",
+  "private": true,
+  "description": "Shared widget styles for Commerce AI Tool React and Angular packages",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    "./commerce-ai-search.css": "./commerce-ai-search.css"
+  },
+  "files": [
+    "commerce-ai-search.css"
+  ]
+}

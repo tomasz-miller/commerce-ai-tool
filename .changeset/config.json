@@ -14,5 +14,5 @@
   "access": "public",
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
-  "ignore": ["demo-next"]
+  "ignore": ["demo-next", "demo-angular", "@commerce-ai-tool/styles"]
 }

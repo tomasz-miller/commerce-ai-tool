@@ -5,7 +5,7 @@ export default tseslint.config(
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    ignores: ["**/dist/**", "**/.next/**", "**/node_modules/**"],
+    ignores: ["**/dist/**", "**/dist-server/**", "**/.angular/**", "**/.next/**", "**/node_modules/**"],
   },
   {
     rules: {

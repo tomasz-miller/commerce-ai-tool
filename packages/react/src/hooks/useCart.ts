@@ -161,6 +161,19 @@ function emitCartSync(sourceId: number, cart: CartSnapshot | null): void {
   }
 }
 
+/** Ignore in-flight GET/refresh responses that lost a race to a newer mutation. */
+function isStaleCartSnapshot(
+  current: CartSnapshot | null,
+  next: CartSnapshot | null,
+): boolean {
+  return Boolean(
+    next &&
+      current &&
+      next.id === current.id &&
+      next.version < current.version,
+  );
+}
+
 class CartRequestError extends Error {
   status: number;
 
@@ -210,6 +223,9 @@ export function useCart(options: UseCartOptions): UseCartReturn {
   });
 
   const applyCart = useCallback((next: CartSnapshot | null, sync = true) => {
+    if (isStaleCartSnapshot(cartRef.current, next)) {
+      return;
+    }
     cartRef.current = next;
     setCart(next);
     onCartChangeRef.current?.(next);
