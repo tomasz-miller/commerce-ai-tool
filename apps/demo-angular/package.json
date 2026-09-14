@@ -1,9 +1,8 @@
-
 {
   "name": "demo-angular",
   "version": "0.1.0-alpha.0",
   "private": true,
-  "description": "Angular demo host for Commerce AI Tool \u2014 search, cart, missions, checkout, and orders against the shared commerce-ai BFF",
+  "description": "Angular demo host for Commerce AI Tool — search, cart, missions, checkout, and orders against the shared commerce-ai BFF",
   "type": "module",
   "scripts": {
     "dev": "concurrently -k -n bff,ui \"pnpm dev:bff\" \"pnpm dev:ui\"",
