@@ -14,13 +14,13 @@ overrides:
   "@angular/platform-browser": "20.3.27"
 
 allowBuilds:
-  '@parcel/watcher': set this to true or false
+  '@parcel/watcher': true
   '@playwright/browser-chromium': true
   '@swc/core': true
   better-sqlite3: true
   esbuild: true
-  lmdb: set this to true or false
-  msgpackr-extract: set this to true or false
+  lmdb: true
+  msgpackr-extract: true
   onnxruntime-node: true
   protobufjs: true
   sharp: true

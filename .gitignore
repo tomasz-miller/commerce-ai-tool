@@ -13,6 +13,7 @@ playwright-report
 !.env.example
 .DS_Store
 *.tsbuildinfo
+next-env.d.ts
 evals/.env
 evals/output
 .promptfoo
