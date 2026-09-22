@@ -21,7 +21,7 @@ import { LoadingSpinnerComponent } from "../../shared/ui/loading-spinner.compone
   imports: [RouterLink, ErrorBannerComponent, LoadingSpinnerComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <main id="main" class="demo-page cat-root cat-checkout" data-theme="dark">
+    <main id="main" class="demo-page cat-root cat-checkout" data-theme="light">
       @if (!loaded()) {
         <section class="cat-checkout__empty cat-checkout__bezel">
           <div class="cat-checkout__core">

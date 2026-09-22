@@ -57,7 +57,8 @@ CI (`.github/workflows/ci.yml`) runs `lint` → `typecheck` → `test` → `buil
 - Checkout and orders have no Angular library components yet, so the host implements them against `CheckoutApiService` (`src/app/core/api/`), which mirrors the checkout subset of the React `useCart` hook; the step state machine lives in `CheckoutFacade` (`src/app/core/checkout/`).
 - The widget is compiled from `packages/angular` sources via a `tsconfig` path mapping because the published tsup bundle carries no Angular compiler metadata. Keep the mapping in sync with the library entry point if files move. The host also depends on `@commerce-ai-tool/styles` so Vite can resolve the shared widget stylesheet from those sources.
 - The `development` build keeps `sourceMap: false`: enabling style/vendor maps breaks the Angular 20.3 compiler program for path-mapped sources outside the project root. For local debugging, run `node_modules/.bin/ng serve --source-map=scripts` instead (proven to compile).
-- Page chrome (dark canvas, pill nav, hero, product sheet) lives in `src/styles.css` and matches `apps/demo-next/src/app/globals.css`.
+- `angular.json` pins `cli.analytics: false`. Without it the CLI prompts for usage-data consent on the first `ng build` in an interactive shell, and under Turborepo that prompt is unanswerable — the build just hangs.
+- Page chrome (light canvas, pill nav, hero, product sheet) lives in `src/styles.css` and matches `apps/demo-next/src/app/globals.css`.
 
 ### Shared widget styles
 

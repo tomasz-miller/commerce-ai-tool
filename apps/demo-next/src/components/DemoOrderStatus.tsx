@@ -17,7 +17,7 @@ function OrderStatusView() {
     <CommerceAIOrderStatus
       apiBaseUrl="/api/commerce-ai"
       orderNumber={orderNumber}
-      theme="dark"
+      theme="light"
       catalogLocale={demoCatalogLocale}
       currency={demoCurrency}
       country={demoCountry}
