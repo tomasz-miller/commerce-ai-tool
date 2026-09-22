@@ -15,7 +15,7 @@ export const DEMO_CONFIG = new InjectionToken<DemoConfig>("DEMO_CONFIG");
 export function defaultDemoConfig(): DemoConfig {
   return {
     apiBaseUrl: "/api/commerce-ai",
-    theme: "dark",
+    theme: "light",
     currency: "EUR",
     country: "DE",
   };

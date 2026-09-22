@@ -5,7 +5,7 @@ describe("defaultDemoConfig", () => {
   it("points at the shared BFF with demo defaults", () => {
     expect(defaultDemoConfig()).toEqual({
       apiBaseUrl: "/api/commerce-ai",
-      theme: "dark",
+      theme: "light",
       currency: "EUR",
       country: "DE",
     });

@@ -11,7 +11,7 @@ export function DemoCheckout() {
   return (
     <CommerceAICheckout
       apiBaseUrl="/api/commerce-ai"
-      theme="dark"
+      theme="light"
       catalogLocale={demoCatalogLocale}
       currency={demoCurrency}
       country={demoCountry}

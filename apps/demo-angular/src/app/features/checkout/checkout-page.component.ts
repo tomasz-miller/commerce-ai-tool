@@ -40,7 +40,7 @@ import { ShippingStepComponent } from "./shipping-step.component.js";
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (!api.cart()) {
-      <main id="main" class="demo-page cat-root" data-theme="dark">
+      <main id="main" class="demo-page cat-root" data-theme="light">
         <section class="cat-checkout__empty cat-checkout__bezel">
           <div class="cat-checkout__core">
             @if (api.isLoading()) {
@@ -53,7 +53,7 @@ import { ShippingStepComponent } from "./shipping-step.component.js";
         </section>
       </main>
     } @else {
-      <main id="main" class="demo-page cat-root cat-checkout" data-theme="dark">
+      <main id="main" class="demo-page cat-root cat-checkout" data-theme="light">
         <header class="cat-checkout__intro">
           <p class="cat-checkout__eyebrow">Checkout</p>
           <h1>Checkout</h1>

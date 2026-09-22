@@ -17,7 +17,8 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={geist.variable}>
-      <body>
+      {/* Extensions inject attributes such as cz-shortcut-listen before hydration. */}
+      <body suppressHydrationWarning>
         <a className="demo-skip" href="#main">
           Skip to content
         </a>

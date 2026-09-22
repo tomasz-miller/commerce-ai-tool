@@ -172,7 +172,7 @@ export function DemoSearch() {
       <div inert={selectedProduct ? true : undefined}>
         <CommerceAISearch
           apiBaseUrl="/api/commerce-ai"
-          theme="dark"
+          theme="light"
           catalogLocale={demoCatalogLocale}
           queryLocale={demoQueryLocale}
           currency={demoCurrency}

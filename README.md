@@ -1,5 +1,3 @@
-![Commerce AI Tool](docs/logo.png)
-
 # Commerce AI Tool
 
 AI-powered product search plugin for [commercetools](https://commercetools.com) composable commerce projects. Supports React, Next.js, and Angular with voice, text, and image search.
