@@ -44,15 +44,15 @@
   "devDependencies": {
     "@commerce-ai-tool/core": "workspace:*",
     "@commerce-ai-tool/styles": "workspace:*",
-    "@angular/common": "^20.3.27",
-    "@angular/compiler": "^20.3.27",
-    "@angular/core": "^20.3.27",
+    "@angular/common": "^20.3.28",
+    "@angular/compiler": "^22.2.0",
+    "@angular/core": "^20.3.28",
     "@angular/forms": "^20.3.27",
     "@angular/platform-browser": "^20.3.27",
     "rxjs": "^7.8.2",
     "tsup": "^8.4.0",
     "@typescript/native": "catalog:",
-    "vitest": "^3.0.9",
+    "vitest": "^5.0.2",
     "zone.js": "^0.15.0"
   },
   "publishConfig": {
