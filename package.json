@@ -48,7 +48,7 @@
     "turbo": "^2.10.12",
     "typescript": "catalog:",
     "typescript-eslint": "^8.70.0",
-    "vitest": "^3.2.7"
+    "vitest": "^5.0.2"
   },
   "packageManager": "pnpm@11.22.0",
   "engines": {

@@ -16,8 +16,8 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@angular/common": "20.3.27",
-    "@angular/core": "20.3.27",
+    "@angular/common": "20.3.28",
+    "@angular/core": "20.3.28",
     "@angular/forms": "20.3.27",
     "@angular/platform-browser": "20.3.27",
     "@angular/router": "20.3.27",
@@ -29,7 +29,7 @@
   "devDependencies": {
     "@angular-devkit/build-angular": "^20.3.0",
     "@angular/cli": "^20.3.0",
-    "@angular/compiler": "20.3.27",
+    "@angular/compiler": "22.2.0",
     "@angular/compiler-cli": "20.3.27",
     "@commerce-ai-tool/server": "workspace:*",
     "@playwright/test": "^1.61.1",
@@ -42,6 +42,6 @@
     "jsdom": "^26.1.0",
     "tsx": "^4.19.2",
     "typescript": "~5.9.2",
-    "vitest": "^3.0.9"
+    "vitest": "^5.0.2"
   }
 }
