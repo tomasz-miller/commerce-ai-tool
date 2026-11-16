@@ -209,7 +209,7 @@ Workflow `.github/workflows/ci.yml` on every PR/push to `main`, three independen
 - `e2e`: build libraries, install Chromium, `pnpm test:e2e` (mocked backends, no secrets)
 - `angular-consumer`: `scripts/check-angular-consumer.mjs --angular 20.3|21.2` builds a fresh Angular app against the packed tarballs; it also runs weekly on a `schedule:` trigger (only this job, so Angular patch drift shows up outside PRs)
 
-`release.yml` reuses `ci.yml` as its `verify` job and publishes only after it passes. Actions are pinned to commit SHAs; Dependabot keeps them and npm dependencies current (`.github/dependabot.yml`).
+`release.yml` reuses `ci.yml` as its `verify` job and publishes only after it passes. Actions are pinned to commit SHAs; Dependabot keeps them and npm dependencies current (`.github/dependabot.yml`). Dependabot minor/patch PRs auto-merge after the required CI checks pass (`dependabot-auto-merge.yml`); majors are merged by hand.
 
 `pnpm test` is Vitest unit tests only. Promptfoo LLM evals and other live calls to OpenRouter, Langfuse, Bedrock, or commercetools are not run in GitHub Actions (no API secrets required).
 
