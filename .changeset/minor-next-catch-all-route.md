@@ -1,7 +1,0 @@
----
-"@commerce-ai-tool/server": minor
----
-
-Next.js hosts can serve every route from one file: `createNextRouteHandler(config, options?)` returns `{ GET, POST }` for `app/api/commerce-ai/[...path]/route.ts` (`ctx.params` is the Next.js 15+ Promise). `config` may also be a function, resolved on the first request. The Express router and both Next adapters now dispatch through one route table, so paths, rate-limit buckets, `Content-Type` checks, upload caps and error bodies cannot drift between them; `createNextHandlers` keeps its signature and now runs the same handlers as Express. All routes served by one handler instance share its rate-limit buckets, so create it once in a module. An unknown path, or a known path with the wrong method, returns 404 with the standard error body (Express leaves unmatched paths to the host app, which answers 404); `HEAD` is served by the matching `GET` route; path segments that are empty, `.`, `..` or contain a slash never match a route. The Getting Started Next.js section now shows the catch-all and singleton-module setup.
-
-Request streams that fail mid-upload (a client that disconnects during a multipart upload) now end the request with 499 or 400 instead of an uncaught exception. When a host body parser such as `express.json()` already parsed the body, the Express router uses `req.body` (still capped at 64 KB and object-only) instead of re-reading the consumed stream.
