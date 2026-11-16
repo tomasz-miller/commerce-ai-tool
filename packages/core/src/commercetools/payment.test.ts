@@ -9,6 +9,7 @@ import {
   PaymentNotConfiguredError,
   type PaymentGateway,
 } from "./payment.js";
+import { CountryNotAllowedError, CurrencyMismatchError } from "./checkout.js";
 
 function money(centAmount: number) {
   return {
@@ -89,7 +90,6 @@ function gateway(overrides: Partial<PaymentGateway> = {}): PaymentGateway {
     updateCart: vi.fn().mockResolvedValue(cart({ version: 5 })),
     getShippingMethodsMatchingCart: vi.fn().mockResolvedValue([]),
     createOrderFromCart: vi.fn(),
-    updateOrder: vi.fn(),
     createPayment: vi.fn().mockResolvedValue(paymentResource()),
     getPaymentById: vi.fn().mockResolvedValue(paymentResource()),
     getPaymentByKey: vi.fn().mockRejectedValue(notFound),
@@ -110,6 +110,109 @@ function provider(overrides: Partial<PaymentProvider> = {}): PaymentProvider {
     ...overrides,
   };
 }
+
+const shippingAddress = {
+  firstName: "Ada",
+  lastName: "Lovelace",
+  streetName: "Main Street",
+  postalCode: "10115",
+  city: "Berlin",
+  country: "DE",
+};
+
+describe("createPaymentOperations shipping scope", () => {
+  it("authorizePayment re-applies the shipping country before computing the amount", async () => {
+    // An add after the address step flipped cart.country back to PL.
+    const stale = cart({ country: "PL", shippingAddress });
+    const repriced = cart({
+      version: 5,
+      country: "DE",
+      shippingAddress,
+      totalPrice: money(12000),
+    });
+    const api = gateway({
+      queryCarts: vi.fn().mockResolvedValue([stale]),
+      updateCart: vi.fn().mockResolvedValueOnce(repriced).mockResolvedValue(cart({ version: 6 })),
+    });
+    const psp = provider();
+    const payments = createPaymentOperations(api, psp);
+
+    await payments.authorizePayment({ anonymousId: "anon-1", method: "CREDIT_CARD" });
+
+    expect(vi.mocked(api.updateCart).mock.calls[0]).toEqual([
+      "cart-1",
+      4,
+      [{ action: "setCountry", country: "DE" }],
+    ]);
+    expect(psp.authorize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        amount: { centAmount: 12000, currencyCode: "EUR" },
+        country: "DE",
+      }),
+    );
+    expect(api.createPayment).toHaveBeenCalledWith(
+      expect.objectContaining({ amountPlanned: { centAmount: 12000, currencyCode: "EUR" } }),
+    );
+  });
+
+  it("authorizePayment computes the amount from the version reconciled after a 409", async () => {
+    const austria = { ...shippingAddress, country: "AT" };
+    const stale = cart({ country: "PL", shippingAddress });
+    const latest = cart({ version: 5, country: "PL", shippingAddress: austria });
+    const reconciled = cart({
+      version: 6,
+      country: "AT",
+      shippingAddress: austria,
+      totalPrice: money(11000),
+    });
+    const api = gateway({
+      queryCarts: vi.fn().mockResolvedValue([stale]),
+      getCartById: vi.fn().mockResolvedValue(latest),
+      updateCart: vi
+        .fn()
+        .mockRejectedValueOnce({ statusCode: 409 })
+        .mockResolvedValueOnce(reconciled)
+        .mockResolvedValue(cart({ version: 7 })),
+    });
+    const psp = provider();
+
+    await createPaymentOperations(api, psp).authorizePayment({
+      anonymousId: "anon-1",
+      method: "CREDIT_CARD",
+    });
+
+    expect(vi.mocked(api.updateCart).mock.calls[1]).toEqual([
+      "cart-1",
+      5,
+      [{ action: "setCountry", country: "AT" }],
+    ]);
+    expect(psp.authorize).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: { centAmount: 11000, currencyCode: "EUR" }, country: "AT" }),
+    );
+  });
+
+  it("authorizePayment rejects a currency mismatch or a disallowed shipping country", async () => {
+    const swiss = { ...shippingAddress, country: "CH" };
+    const api = gateway({
+      queryCarts: vi.fn().mockResolvedValue([cart({ country: "CH", shippingAddress: swiss })]),
+    });
+    const psp = provider();
+
+    await expect(
+      createPaymentOperations(api, psp, { currencyByCountry: { CH: "CHF" } }).authorizePayment({
+        anonymousId: "anon-1",
+        method: "CREDIT_CARD",
+      }),
+    ).rejects.toBeInstanceOf(CurrencyMismatchError);
+    await expect(
+      createPaymentOperations(api, psp, { allowedCountries: ["DE"] }).authorizePayment({
+        anonymousId: "anon-1",
+        method: "CREDIT_CARD",
+      }),
+    ).rejects.toBeInstanceOf(CountryNotAllowedError);
+    expect(psp.authorize).not.toHaveBeenCalled();
+  });
+});
 
 describe("createPaymentOperations", () => {
   it("creates a PaymentDraft with a cart-scoped key and links it to the cart", async () => {
@@ -409,5 +512,10 @@ describe("createPaymentOperations", () => {
     expect(createPaymentKey("cat-1", "Stripe*Live", "cart-1", 2)).toBe(
       "cat-1-cart-1-StripeLive-2",
     );
+  });
+
+  it("sanitises the order number in the payment key like the other parts", () => {
+    expect(createPaymentKey('x" or 1=1', "MOCK", "cart-1")).toBe("xor11-cart-1-MOCK");
+    expect(createPaymentKey("  ", "MOCK", "cart-1")).toBe("order-cart-1-MOCK");
   });
 });

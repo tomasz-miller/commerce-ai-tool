@@ -10,5 +10,8 @@
   },
   "files": [
     "commerce-ai-search.css"
-  ]
+  ],
+  "scripts": {
+    "lint": "node ../../scripts/check-contrast.mjs"
+  }
 }

@@ -140,8 +140,16 @@ Keep Product Search API (REST) for search and facets. Use GraphQL only to fetch 
 - [x] Angular widget grouped mission results and batched add-to-cart
 - [x] Voice (and optionally image) shopping-mission decomposition
 
-## v2.5 — Angular demo host (current)
+## v2.5 — Angular demo host
 
 - [x] Add `apps/demo-angular` that mounts `@commerce-ai-tool/angular` against the same `/api/commerce-ai` BFF as `demo-next` ([#18](https://github.com/tomasz-miller/commerce-ai-tool/issues/18))
 - [x] Standalone Express BFF (`createExpressRouter` + mock payment provider) with Angular dev proxy (`:4200` → BFF on `:3002`)
 - [x] Host-owned Angular checkout (addresses, shipping, payment, order placement) and order confirmation/tracking pages
+
+## v3.0 — Secure defaults and accessible widgets (current)
+
+- [x] Strong cart session secret required; revocable 24-hour session tokens; guest id read from a header only ([migration guide](MIGRATION-3.0.md))
+- [x] Rate limits, input caps and upload limits on every route; typed `{ error, code }` error bodies
+- [x] React and Angular widgets on one shared browser client; WCAG 2.2 AA colours, labels, landmarks, live regions, combobox and dialog focus handling
+- [x] `@commerce-ai-tool/angular` as an Angular Package Format library (ESM only, zoneless-ready)
+- [x] Internal helpers moved to `@commerce-ai-tool/core/internal`; Product Projection Search fallback opt-in

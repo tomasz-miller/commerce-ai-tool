@@ -12,13 +12,15 @@ loadEvalEnvFile();
 export default class VoiceBaselineEvalProvider {
   private readonly providerId: string;
   private readonly evalProvider;
-  private readonly mode: "text-only" | "enhance-then-interpret";
+  private readonly mode: "text-only" | "enhance-then-interpret" | "transcript-interpret";
 
   constructor(options: ProviderOptions) {
     const config = options.config ?? {};
     this.providerId = options.id ?? "commerce-voice-baseline";
     this.mode =
-      config.mode === "enhance-then-interpret" ? "enhance-then-interpret" : "text-only";
+      config.mode === "enhance-then-interpret" || config.mode === "transcript-interpret"
+        ? config.mode
+        : "text-only";
     this.evalProvider = createEvalAIProvider(readProviderConfig(options));
   }
 
@@ -43,6 +45,17 @@ export default class VoiceBaselineEvalProvider {
     try {
       const locales = { queryLocale, catalogLocale };
       const ai = this.evalProvider.ai!;
+      if (this.mode === "transcript-interpret" && ai.interpretVoiceTranscript) {
+        // Production ElevenLabs path: one merged call returns enhancedQuery plus the interpretation.
+        const merged = await ai.interpretVoiceTranscript(transcript, locales);
+        return {
+          output: JSON.stringify(
+            { transcript, ...merged, enhancedQuery: merged.enhancedQuery || transcript.trim() },
+            null,
+            2,
+          ),
+        };
+      }
       const enhancedQuery =
         this.mode === "enhance-then-interpret"
           ? await ai.enhanceVoiceTranscript(transcript, locales)

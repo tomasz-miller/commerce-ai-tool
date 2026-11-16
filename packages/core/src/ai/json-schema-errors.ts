@@ -1,21 +1,31 @@
-/** Detect when OpenRouter rejected `json_schema` so we can retry `json_object`. */
+import { OpenRouterError } from "@openrouter/sdk/models/errors";
 
+/**
+ * Detect a provider body that rejects `json_schema` structured output, so the caller can retry
+ * with `json_object`. It must name the parameter and say it is unsupported: a 400 for a schema
+ * that is merely invalid also mentions json_schema and must not trigger the fallback.
+ */
 export function isJsonSchemaUnsupportedMessage(body: string): boolean {
   const lower = body.toLowerCase();
-  if (lower.includes("json_schema")) {
-    return true;
-  }
-  if (!lower.includes("response_format") && !lower.includes("responseformat")) {
+  const namesParameter =
+    lower.includes("json_schema") ||
+    lower.includes("response_format") ||
+    lower.includes("responseformat");
+  if (!namesParameter) {
     return false;
   }
   return (
     lower.includes("not support") ||
     lower.includes("unsupported") ||
-    lower.includes("unknown")
+    lower.includes("unknown parameter")
   );
 }
 
+/** A 400 from the OpenRouter SDK whose response body says `json_schema` is unsupported. */
 export function isJsonSchemaUnsupportedError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return isJsonSchemaUnsupportedMessage(message);
+  return (
+    error instanceof OpenRouterError &&
+    error.statusCode === 400 &&
+    isJsonSchemaUnsupportedMessage(error.body)
+  );
 }

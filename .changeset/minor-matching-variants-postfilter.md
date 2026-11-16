@@ -1,0 +1,11 @@
+---
+"@commerce-ai-tool/core": minor
+---
+
+Product cards use the variant that matched the search. Product Search requests set `markMatchingVariants: true`; for a product where only some variants matched, the GraphQL hydrate selects the first matched variant (`allVariants(skus:)`) and `ProductCard.sku`, `variantId`, `imageUrl` and `price` come from it, so add-to-cart adds the red variant for a red filter instead of the master. Other products keep the master variant. The REST hydrate fallback selects the same variant; the Product Projection Search fallback still shows the master variant. `CommercetoolsClient.searchProducts` may return `matchedSkus`, and `getProductProjections` takes an optional fifth `{ matchedSkus }` argument.
+
+Category facet chips no longer collapse their group: a `category` selection goes to Product Search `postFilter`, and the other facets are filtered by it while the categories facet is not. Every variant-level filter (color, brand, price, attributes) stays in `query`, chip or model, unless the request carries `facetSelections` (see the facet-selections entry): without it the server cannot tell a chip from the model's own constraint echoed back as `filters`, and commercetools computes matching variants from `query`. The price ranges facet is scoped to the request currency (facet `filter` on `variants.prices.currencyCode`). Category facet chips show localized category names, resolved with a batched, cached GraphQL `categories` query; on failure the chip shows the id, and a failed or empty lookup is not retried for 60 seconds. `CommercetoolsClient` has a new optional `getCategoryNames`. `currencyFractionDigits` caches its result per upper-cased currency code.
+
+The card hydrate query no longer requests `descriptionAllLocales`; `description(acceptLanguage:)` already applies the locale fallback.
+
+`category` is removed from the model's filter vocabulary (`FILTER_RULES`), and the parser drops a model-set `category`: Product Search matches categories by id, so a model-chosen category could only force zero results. `category` remains a facet-chip filter. Local prompt text changed: hosts that run Langfuse-managed prompts (`LANGFUSE_PROMPTS=true`) should re-sync them with `pnpm sync:langfuse-prompts` (new version, then promote the label). Run `pnpm eval:promptfoo` with an API key before releasing.

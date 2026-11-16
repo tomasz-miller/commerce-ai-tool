@@ -5,6 +5,7 @@ import {
   createSkippedProviderResponse,
   loadEvalEnvFile,
   readProviderConfig,
+  createEvalMetricsCapture,
   toEvalProviderResponse,
 } from "./eval-utils.ts";
 
@@ -40,13 +41,15 @@ export default class SuggestSearchEvalProvider {
 
     try {
       const startedAt = Date.now();
+      const capture = createEvalMetricsCapture();
       const suggestions = await this.evalProvider.ai!.suggestSearchTerms(
         query,
         { queryLocale, catalogLocale },
         Number.isFinite(limit) ? limit : 8,
+        capture.options,
       );
 
-      return toEvalProviderResponse({ suggestions }, this.evalProvider.ai!, startedAt);
+      return toEvalProviderResponse({ suggestions }, capture.get(), startedAt);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return { error: message };

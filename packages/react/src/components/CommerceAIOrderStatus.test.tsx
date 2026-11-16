@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { OrderSnapshot } from "@commerce-ai-tool/core/client";
@@ -117,5 +118,59 @@ describe("CommerceAIOrderStatus", () => {
     render(<CommerceAIOrderStatus apiBaseUrl="/api/commerce-ai" orderNumber="" />);
 
     expect(await screen.findByText("No orders yet")).not.toBeNull();
+  });
+
+  it("renders a section by default, with the title as its name", async () => {
+    mockCart();
+
+    const { container } = render(
+      <CommerceAIOrderStatus apiBaseUrl="/api/commerce-ai" orderNumber="cat-1" />,
+    );
+
+    const title = await screen.findByRole("heading", { level: 2, name: "cat-1" });
+    const root = container.firstElementChild!;
+    expect(container.querySelector("main")).toBeNull();
+    expect(root.tagName).toBe("SECTION");
+    expect(root.getAttribute("aria-labelledby")).toBe(title.id);
+    expect(screen.getByRole("heading", { level: 3, name: "Order summary" })).not.toBeNull();
+    expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
+  });
+
+  it("keeps main and h1 available through as and headingLevel", async () => {
+    mockCart();
+
+    render(
+      <CommerceAIOrderStatus
+        apiBaseUrl="/api/commerce-ai"
+        orderNumber="cat-1"
+        as="main"
+        headingLevel={1}
+      />,
+    );
+
+    expect(await screen.findByRole("heading", { level: 1, name: "cat-1" })).not.toBeNull();
+    expect(screen.getByRole("main", { name: "cat-1" })).not.toBeNull();
+    expect(screen.getByRole("heading", { level: 2, name: "Shipping address" })).not.toBeNull();
+  });
+
+  it("renderLink is used for navigation", async () => {
+    mockCart();
+    const renderLink = vi.fn(
+      ({ href, className, children }: { href: string; className: string; children: ReactNode }) => (
+        <a data-router-link="" href={href} className={className}>
+          {children}
+        </a>
+      ),
+    );
+
+    render(<CommerceAIOrderStatus apiBaseUrl="/api/commerce-ai" renderLink={renderLink} />);
+
+    const order = await screen.findByRole("link", { name: /cat-1/ });
+    expect(order.hasAttribute("data-router-link")).toBe(true);
+    expect(order.getAttribute("href")).toBe("/orders?orderNumber=cat-1");
+    expect(order.className).toBe("cat-order-status__list-link");
+    const back = screen.getByRole("link", { name: "Continue shopping" });
+    expect(back.hasAttribute("data-router-link")).toBe(true);
+    expect(back.getAttribute("href")).toBe("/");
   });
 });

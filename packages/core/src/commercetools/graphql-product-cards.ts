@@ -1,4 +1,5 @@
 import type { ProductCard } from "../types/index.js";
+import { formatCurrency } from "./cart.js";
 
 /** Max product IDs per GraphQL `products` query (commercetools pagination). */
 export const GRAPHQL_PRODUCT_CARD_CHUNK_SIZE = 100;
@@ -7,6 +8,14 @@ export const GRAPHQL_PRODUCT_CARD_CHUNK_SIZE = 100;
  * Card hydrate query — pass only `acceptLanguage` on localized strings
  * (commercetools rejects `locale` and `acceptLanguage` together).
  * Do not use `localeProjection` with `name(acceptLanguage:)`.
+ *
+ * `acceptLanguage` already applies the locale fallback chain, so `description` needs no
+ * all-locale copy. `nameAllLocales` / `slugAllLocales` stay as a last resort for a product
+ * with no value in any locale of the chain.
+ *
+ * `matchedVariants` selects the variants Product Search marked as matching (by sku, which is
+ * unique per project), so one list serves the whole chunk. It is skipped by `@include` when the
+ * chunk has no partially matched product.
  */
 export const PRODUCT_CARDS_GRAPHQL_QUERY = `
 query ProductCards(
@@ -15,6 +24,8 @@ query ProductCards(
   $locales: [Locale!]!
   $currency: Currency!
   $country: Country
+  $matchedSkus: [String!]
+  $includeMatched: Boolean!
 ) {
   products(where: $where, limit: $limit) {
     results {
@@ -26,19 +37,25 @@ query ProductCards(
           description(acceptLanguage: $locales)
           slug(acceptLanguage: $locales)
           nameAllLocales { locale value }
-          descriptionAllLocales { locale value }
           slugAllLocales { locale value }
           masterVariant {
-            id
-            sku
-            images { url }
-            price(currency: $currency, country: $country) {
-              value { centAmount currencyCode fractionDigits }
-            }
+            ...CardVariant
+          }
+          matchedVariants: allVariants(skus: $matchedSkus) @include(if: $includeMatched) {
+            ...CardVariant
           }
         }
       }
     }
+  }
+}
+
+fragment CardVariant on ProductVariant {
+  id
+  sku
+  images { url }
+  price(currency: $currency, country: $country) {
+    value { centAmount currencyCode fractionDigits }
   }
 }
 `.trim();
@@ -66,9 +83,10 @@ export interface GraphQLProductCardCurrent {
   description?: string | null;
   slug?: string | null;
   nameAllLocales?: Array<GraphQLLocalizedStringEntry | null> | null;
-  descriptionAllLocales?: Array<GraphQLLocalizedStringEntry | null> | null;
   slugAllLocales?: Array<GraphQLLocalizedStringEntry | null> | null;
   masterVariant?: GraphQLProductCardVariant | null;
+  /** Variants selected by `allVariants(skus: $matchedSkus)`; absent when not requested. */
+  matchedVariants?: Array<GraphQLProductCardVariant | null> | null;
 }
 
 export interface GraphQLProductCardResult {
@@ -91,7 +109,13 @@ export interface ProductCardsGraphQLVariables {
   locales: string[];
   currency: string;
   country?: string;
+  /** Skus of the matched variants of the products in this chunk. */
+  matchedSkus: string[];
+  includeMatched: boolean;
 }
+
+/** Product id -> sku of the matched variant to show on its card (see `extractMatchedSkus`). */
+export type MatchedSkus = Record<string, string>;
 
 /**
  * Build a commercetools query predicate for product IDs.
@@ -153,12 +177,16 @@ export function buildProductCardsGraphQLVariables(
   locale: string,
   currency: string,
   country?: string,
+  matchedSkus: MatchedSkus = {},
 ): ProductCardsGraphQLVariables {
+  const skus = productIds.flatMap((id) => (matchedSkus[id] ? [matchedSkus[id]] : []));
   const variables: ProductCardsGraphQLVariables = {
     where: buildProductIdsWhere(productIds),
     limit: productIds.length,
     locales: buildAcceptLanguageLocales(locale),
     currency,
+    matchedSkus: skus,
+    includeMatched: skus.length > 0,
   };
   if (country) {
     variables.country = country;
@@ -201,6 +229,7 @@ export function pickLocalizedValue(
 export function mapGraphQLProductToCard(
   product: GraphQLProductCardResult,
   locale: string,
+  matchedSku?: string,
 ): ProductCard | null {
   const current = product.masterData?.current;
   if (!current) {
@@ -211,14 +240,14 @@ export function mapGraphQLProductToCard(
   const name =
     pickLocalizedValue(current.name, current.nameAllLocales, preferredLocales) ??
     "Unnamed product";
-  const description = pickLocalizedValue(
-    current.description,
-    current.descriptionAllLocales,
-    preferredLocales,
-  );
+  const description = current.description?.trim() || undefined;
   const slug = pickLocalizedValue(current.slug, current.slugAllLocales, preferredLocales);
 
-  const variant = current.masterVariant;
+  // The matched variant when Product Search matched only some variants, else the master.
+  const matchedVariant = matchedSku
+    ? current.matchedVariants?.find((candidate) => candidate?.sku === matchedSku)
+    : undefined;
+  const variant = matchedVariant ?? current.masterVariant;
   const priceValue = variant?.price?.value;
   const fractionDigits = priceValue?.fractionDigits ?? 2;
   const amount = priceValue
@@ -238,10 +267,7 @@ export function mapGraphQLProductToCard(
       ? {
           amount: amount ?? 0,
           currency: priceValue.currencyCode,
-          formatted: new Intl.NumberFormat(locale, {
-            style: "currency",
-            currency: priceValue.currencyCode,
-          }).format(amount ?? 0),
+          formatted: formatCurrency(amount ?? 0, priceValue.currencyCode, locale),
         }
       : undefined,
   };
@@ -255,6 +281,7 @@ export function mapGraphQLProductsToCards(
   results: Array<GraphQLProductCardResult | null | undefined> | null | undefined,
   productIds: string[],
   locale: string,
+  matchedSkus: MatchedSkus = {},
 ): ProductCard[] {
   const orderMap = new Map(productIds.map((id, index) => [id, index]));
   const cards: ProductCard[] = [];
@@ -263,7 +290,7 @@ export function mapGraphQLProductsToCards(
     if (!product) {
       continue;
     }
-    const card = mapGraphQLProductToCard(product, locale);
+    const card = mapGraphQLProductToCard(product, locale, matchedSkus[product.id]);
     if (card) {
       cards.push(card);
     }
@@ -297,7 +324,7 @@ export function decideGraphQLProductCardsHydrate(body: {
   const hasResultsPayload = Array.isArray(data?.products?.results);
 
   if (hasResultsPayload) {
-    return { type: "use-data", data: data!, warnings };
+    return { type: "use-data", data: data, warnings };
   }
 
   if (warnings.length > 0) {

@@ -1,12 +1,17 @@
-import { Injectable } from "@angular/core";
-import type {
-  InterpretedSearchFilters,
-  MissionSearchResult,
-  ProductCard,
-  SearchResult,
-  SuggestedFacet,
-  SuggestionsResult,
+import { Injectable, inject } from "@angular/core";
+import {
+  createCommerceAIApiClient,
+  type ImageSearchRequest,
+  type InterpretedSearchFilters,
+  type MissionSearchResult,
+  type ProductCard,
+  type SearchRequestBody,
+  type SearchResult,
+  type SuggestedFacet,
+  type SuggestionsResult,
+  type VoiceSearchRequest,
 } from "@commerce-ai-tool/core/client";
+import { COMMERCE_AI_FETCH } from "./commerce-ai-fetch.token";
 
 export interface SearchLocaleFields {
   queryLocale?: string;
@@ -22,6 +27,8 @@ export interface SearchRequestOptions {
   includeFacets?: boolean;
   suggestedFacets?: SuggestedFacet[];
   enableMissions?: boolean;
+  /** Facet groups the shopper clicked a chip in; see `SearchRequestBody.facetSelections`. */
+  facetSelections?: Record<string, string[]>;
 }
 
 export interface VoiceSearchResult {
@@ -35,8 +42,10 @@ export interface VoiceSearchResult {
   ttsPending?: boolean;
 }
 
-function buildLocalePayload(options: SearchLocaleFields): Record<string, string> {
-  const payload: Record<string, string> = {};
+function buildLocalePayload(
+  options: SearchLocaleFields,
+): Pick<SearchRequestBody, "catalogLocale" | "queryLocale"> {
+  const payload: Pick<SearchRequestBody, "catalogLocale" | "queryLocale"> = {};
   const queryLocale = options.queryLocale ?? options.locale;
 
   if (options.catalogLocale) {
@@ -50,8 +59,19 @@ function buildLocalePayload(options: SearchLocaleFields): Record<string, string>
   return payload;
 }
 
+/**
+ * Typed calls to the host API routes on top of the shared browser client from
+ * `@commerce-ai-tool/core/client`. Every method rejects with a `CommerceAIApiError` for a non-2xx
+ * response and with an `AbortError` when `signal` aborts. Requests go through `COMMERCE_AI_FETCH`.
+ */
 @Injectable({ providedIn: "root" })
 export class CommerceAiApiService {
+  private readonly fetch = inject(COMMERCE_AI_FETCH);
+
+  private client(apiBaseUrl: string) {
+    return createCommerceAIApiClient({ baseUrl: apiBaseUrl, fetch: this.fetch });
+  }
+
   search(
     apiBaseUrl: string,
     query: string,
@@ -59,19 +79,10 @@ export class CommerceAiApiService {
     signal?: AbortSignal,
     options: SearchRequestOptions = {},
   ): Promise<SearchResult> {
-    const baseUrl = apiBaseUrl.replace(/\/$/, "");
-    return fetch(`${baseUrl}/search`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query, ...options, ...buildLocalePayload(locales) }),
-      signal,
-    }).then(async (response) => {
-      if (!response.ok) {
-        const data = (await response.json()) as { error?: string };
-        throw new Error(data.error ?? "Search failed");
-      }
-      return response.json() as Promise<SearchResult>;
-    });
+    return this.client(apiBaseUrl).search(
+      { query, ...options, ...buildLocalePayload(locales) },
+      { signal },
+    );
   }
 
   suggest(
@@ -80,19 +91,10 @@ export class CommerceAiApiService {
     locales: SearchLocaleFields = {},
     signal?: AbortSignal,
   ): Promise<SuggestionsResult> {
-    const baseUrl = apiBaseUrl.replace(/\/$/, "");
-    return fetch(`${baseUrl}/search/suggestions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query, ...buildLocalePayload(locales) }),
-      signal,
-    }).then(async (response) => {
-      if (!response.ok) {
-        const data = (await response.json()) as { error?: string };
-        throw new Error(data.error ?? "Suggestions failed");
-      }
-      return response.json() as Promise<SuggestionsResult>;
-    });
+    return this.client(apiBaseUrl).suggest(
+      { query, ...buildLocalePayload(locales) },
+      { signal },
+    );
   }
 
   searchByImage(
@@ -100,27 +102,13 @@ export class CommerceAiApiService {
     file: File,
     locales: SearchLocaleFields = {},
     enableMissions = false,
+    signal?: AbortSignal,
   ): Promise<SearchResult & { interpretation?: string }> {
-    const baseUrl = apiBaseUrl.replace(/\/$/, "");
-    const formData = new FormData();
-    formData.append("image", file);
-    for (const [key, value] of Object.entries(buildLocalePayload(locales))) {
-      formData.append(key, value);
-    }
-    if (enableMissions) {
-      formData.append("enableMissions", "true");
-    }
-
-    return fetch(`${baseUrl}/search/image`, {
-      method: "POST",
-      body: formData,
-    }).then(async (response) => {
-      if (!response.ok) {
-        const data = (await response.json()) as { error?: string };
-        throw new Error(data.error ?? "Image search failed");
-      }
-      return response.json() as Promise<SearchResult & { interpretation?: string }>;
-    });
+    const fields: ImageSearchRequest = {
+      ...buildLocalePayload(locales),
+      ...(enableMissions ? { enableMissions: "true" } : {}),
+    };
+    return this.client(apiBaseUrl).searchByImage(file, fields, { signal });
   }
 
   searchByVoice(
@@ -129,41 +117,17 @@ export class CommerceAiApiService {
     locales: SearchLocaleFields = {},
     enableTts = true,
     enableMissions = false,
+    signal?: AbortSignal,
   ): Promise<VoiceSearchResult> {
-    const baseUrl = apiBaseUrl.replace(/\/$/, "");
-    const formData = new FormData();
-    formData.append("audio", audio, "recording.webm");
-    for (const [key, value] of Object.entries(buildLocalePayload(locales))) {
-      formData.append(key, value);
-    }
-    formData.append("enableTts", String(enableTts));
-    if (enableMissions) {
-      formData.append("enableMissions", "true");
-    }
-
-    return fetch(`${baseUrl}/search/voice`, {
-      method: "POST",
-      body: formData,
-    }).then(async (response) => {
-      if (!response.ok) {
-        const data = (await response.json()) as { error?: string };
-        throw new Error(data.error ?? "Voice search failed");
-      }
-      return response.json() as Promise<VoiceSearchResult>;
-    });
+    const fields: VoiceSearchRequest = {
+      ...buildLocalePayload(locales),
+      enableTts: String(enableTts),
+      ...(enableMissions ? { enableMissions: "true" } : {}),
+    };
+    return this.client(apiBaseUrl).searchByVoice(audio, fields, { signal });
   }
 
-  synthesizeSpeech(apiBaseUrl: string, text: string): Promise<Blob> {
-    const baseUrl = apiBaseUrl.replace(/\/$/, "");
-    return fetch(`${baseUrl}/tts`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-    }).then(async (response) => {
-      if (!response.ok) {
-        throw new Error("TTS failed");
-      }
-      return response.blob();
-    });
+  synthesizeSpeech(apiBaseUrl: string, text: string, signal?: AbortSignal): Promise<Blob> {
+    return this.client(apiBaseUrl).tts({ text }, { signal });
   }
 }

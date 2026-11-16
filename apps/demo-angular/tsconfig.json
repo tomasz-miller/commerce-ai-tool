@@ -7,9 +7,6 @@
     "experimentalDecorators": true,
     "useDefineForClassFields": false,
     "types": ["node"],
-    "paths": {
-      "@commerce-ai-tool/angular": ["../../packages/angular/src/index.ts"]
-    },
     "noEmit": true,
     "strict": true,
     "noUncheckedIndexedAccess": true,

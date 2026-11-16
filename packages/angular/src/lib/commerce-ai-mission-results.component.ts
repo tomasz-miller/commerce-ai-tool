@@ -1,18 +1,32 @@
 import { NgTemplateOutlet } from "@angular/common";
-import { Component, EventEmitter, Input, OnChanges, OnDestroy, Output } from "@angular/core";
-import type {
-  AddToCartLineItem,
-  CommerceAISearchMessages,
-  MissionSearchResult,
-  ProductCard,
+import {
+  ChangeDetectionStrategy,
+  Component,
+  EventEmitter,
+  Input,
+  OnChanges,
+  OnDestroy,
+  Output,
+  signal,
+} from "@angular/core";
+import {
+  addToCartLabel,
+  formatMissionAddAll,
+  resolveCommerceAISearchMessages,
+  starterBundleItems,
+  type AddToCartLineItem,
+  type CommerceAISearchMessages,
+  type MissionSearchResult,
+  type ProductCard,
+  type ResolvedCommerceAISearchMessages,
 } from "@commerce-ai-tool/core/client";
-import { formatMissionAddAll, starterBundleItems } from "./mission.util.js";
 
 let missionTitleCounter = 0;
 
 @Component({
   selector: "commerce-ai-mission-results",
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [NgTemplateOutlet],
   template: `
     <div class="cat-mission">
@@ -36,7 +50,7 @@ let missionTitleCounter = 0;
             </div>
 
             @if (group.failed) {
-              <div class="cat-status cat-status--empty" role="status">
+              <div class="cat-status cat-status--empty">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                   <circle cx="11" cy="11" r="8" />
                   <path d="m21 21-4.3-4.3" />
@@ -48,7 +62,7 @@ let missionTitleCounter = 0;
                 </div>
               </div>
             } @else if (group.products.length === 0) {
-              <div class="cat-status cat-status--empty" role="status">
+              <div class="cat-status cat-status--empty">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                   <circle cx="11" cy="11" r="8" />
                   <path d="m21 21-4.3-4.3" />
@@ -113,11 +127,11 @@ let missionTitleCounter = 0;
           <button
             type="button"
             class="cat-checkout-cta cat-mission__add-all"
-            [class.cat-mission__add-all--added]="justAddedAll"
+            [class.cat-mission__add-all--added]="justAddedAllSig()"
             [disabled]="isMutating || bundleItems.length === 0"
             (click)="onAddAllClick()"
           >
-            {{ justAddedAll ? messages.missionItemsAdded : addAllLabel }}
+            {{ justAddedAllSig() ? messages.missionItemsAdded : addAllLabel }}
           </button>
         </div>
       }
@@ -147,7 +161,12 @@ let missionTitleCounter = 0;
 })
 export class CommerceAiMissionResultsComponent implements OnChanges, OnDestroy {
   @Input({ required: true }) mission!: MissionSearchResult;
-  @Input({ required: true }) messages!: CommerceAISearchMessages;
+  /** Accepts partial or full messages; keys left out fall back to the English defaults. */
+  @Input({
+    required: true,
+    transform: (value: CommerceAISearchMessages) => resolveCommerceAISearchMessages(value),
+  })
+  messages!: ResolvedCommerceAISearchMessages;
   @Input() enableCart = false;
   @Input() isMutating = false;
   @Input() addedProductIds: Record<string, true> = {};
@@ -158,11 +177,21 @@ export class CommerceAiMissionResultsComponent implements OnChanges, OnDestroy {
   @Output() addAll = new EventEmitter<AddToCartLineItem[]>();
 
   readonly titleId = `cat-mission-title-${(missionTitleCounter += 1)}`;
-  justAddedAll = false;
+  /** State behind `justAddedAll`: a signal, so the reset renders without zone.js. */
+  protected readonly justAddedAllSig = signal(false);
   private addedAllTimeout: ReturnType<typeof setTimeout> | null = null;
+  private destroyed = false;
   private lastMission: MissionSearchResult | null = null;
   private cachedBundleMission: MissionSearchResult | null = null;
   private cachedBundleItems: AddToCartLineItem[] = [];
+
+  /** True for a moment after "add all" succeeded. */
+  get justAddedAll(): boolean {
+    return this.justAddedAllSig();
+  }
+  set justAddedAll(value: boolean) {
+    this.justAddedAllSig.set(value);
+  }
 
   get bundleItems(): AddToCartLineItem[] {
     if (this.cachedBundleMission !== this.mission) {
@@ -180,39 +209,40 @@ export class CommerceAiMissionResultsComponent implements OnChanges, OnDestroy {
   ngOnChanges(): void {
     if (this.mission !== this.lastMission) {
       this.lastMission = this.mission;
-      this.justAddedAll = false;
+      this.clearAddedAllTimeout();
+      this.justAddedAllSig.set(false);
     }
   }
 
   ngOnDestroy(): void {
-    if (this.addedAllTimeout) {
-      clearTimeout(this.addedAllTimeout);
-      this.addedAllTimeout = null;
-    }
+    this.destroyed = true;
+    this.clearAddedAllTimeout();
   }
 
   addLabel(product: ProductCard): string {
-    if (this.addedProductIds[product.id]) {
-      return this.messages.itemAdded;
-    }
-    return product.sku || product.id ? this.messages.addToCart : this.messages.unableToAddToCart;
+    return addToCartLabel(this.messages, product, Boolean(this.addedProductIds[product.id]));
   }
 
   onAddAllClick(): void {
     const items = this.bundleItems;
     this.addAll.emit(items);
     void this.addAllHandler?.(items).then((result) => {
-      if (!result) {
+      if (!result || this.destroyed) {
         return;
       }
-      this.justAddedAll = true;
-      if (this.addedAllTimeout) {
-        clearTimeout(this.addedAllTimeout);
-      }
+      this.justAddedAllSig.set(true);
+      this.clearAddedAllTimeout();
       this.addedAllTimeout = setTimeout(() => {
-        this.justAddedAll = false;
         this.addedAllTimeout = null;
+        this.justAddedAllSig.set(false);
       }, 1200);
     });
+  }
+
+  private clearAddedAllTimeout(): void {
+    if (this.addedAllTimeout) {
+      clearTimeout(this.addedAllTimeout);
+      this.addedAllTimeout = null;
+    }
   }
 }

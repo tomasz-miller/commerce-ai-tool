@@ -1,4 +1,4 @@
-import type { GetOrderRequest, OrderSnapshot } from "@commerce-ai-tool/core";
+import type { GetOrderRequest, GetOrderResponse } from "@commerce-ai-tool/core";
 import type { CommerceAIServer } from "./server.js";
 import {
   optionalString,
@@ -6,18 +6,17 @@ import {
   resolveLocale,
 } from "./cart-actions.js";
 
-export interface GetOrderResponse {
-  order?: OrderSnapshot;
-  orders?: OrderSnapshot[];
-}
+export type { GetOrderResponse };
 
 export async function executeGetOrder(
   server: CommerceAIServer,
   body: GetOrderRequest,
 ): Promise<GetOrderResponse> {
-  const identity = resolveCartIdentity(server, body.sessionToken, body.anonymousId);
+  const identity = await resolveCartIdentity(server, body.sessionToken, body.anonymousId);
   const catalogLocale = resolveLocale(server, optionalString(body.catalogLocale));
-  const anonymousId = identity.anonymousId ?? optionalString(body.anonymousId);
+  // A customer session never widens the lookup with a client-supplied anonymousId: that id is a
+  // bearer value, and pairing it with any valid session would expose another guest's orders.
+  const anonymousId = identity.customerId ? undefined : identity.anonymousId;
   const orderNumber = optionalString(body.orderNumber);
 
   if (!orderNumber) {

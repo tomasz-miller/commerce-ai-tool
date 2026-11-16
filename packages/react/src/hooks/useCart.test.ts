@@ -1,10 +1,18 @@
+import { StrictMode } from "react";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CART_SESSION_HEADER, type CartSnapshot } from "@commerce-ai-tool/core/client";
+import {
+  ANONYMOUS_ID_HEADER,
+  CART_SESSION_HEADER,
+  DEFAULT_COMMERCE_AI_SEARCH_MESSAGES,
+  ORDER_NUMBER_PATTERN,
+  type CartSnapshot,
+} from "@commerce-ai-tool/core/client";
 import {
   ANONYMOUS_ID_STORAGE_KEY,
   CUSTOMER_SESSION_STORAGE_KEY,
   CUSTOMER_STORAGE_KEY,
+  createAnonymousId,
   useCart,
 } from "./useCart.js";
 
@@ -53,7 +61,9 @@ describe("useCart", () => {
     await waitFor(() => {
       expect(result.current.cart).toEqual(sampleCart);
     });
-    expect(fetchMock).toHaveBeenCalledWith("/api/commerce-ai/cart?anonymousId=anon-1");
+    expect(fetchMock).toHaveBeenCalledWith("/api/commerce-ai/cart", {
+      headers: { [ANONYMOUS_ID_HEADER]: "anon-1" },
+    });
   });
 
   it("adds a line item and notifies onCartChange", async () => {
@@ -297,7 +307,9 @@ describe("useCart", () => {
       expect(fetchMock.mock.calls.length).toBeGreaterThan(callsAfterMount);
     });
     expect(result.current.isCartOpen).toBe(true);
-    expect(fetchMock).toHaveBeenLastCalledWith("/api/commerce-ai/cart?anonymousId=anon-1");
+    expect(fetchMock).toHaveBeenLastCalledWith("/api/commerce-ai/cart", {
+      headers: { [ANONYMOUS_ID_HEADER]: "anon-1" },
+    });
   });
 
   it("toggles the cart panel", () => {
@@ -450,6 +462,8 @@ describe("useCart", () => {
       await result.current.logout();
     });
 
+    const logoutCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/cart/logout"));
+    expect(new Headers(logoutCall?.[1]?.headers).get(CART_SESSION_HEADER)).toBe("sess-1");
     expect(window.localStorage.getItem(CUSTOMER_SESSION_STORAGE_KEY)).toBeNull();
     expect(result.current.customer).toBeNull();
     expect(result.current.isAuthenticated).toBe(false);
@@ -505,6 +519,67 @@ describe("useCart", () => {
     expect(result.current.cart).toBeNull();
   });
 
+  it("order and cart reads send the anonymous id header, not a query parameter", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).includes("/orders")) {
+        return { ok: true, status: 200, json: async () => ({ orders: [], order: null }) };
+      }
+      if (String(url).includes("/shipping-methods")) {
+        return { ok: true, status: 200, json: async () => ({ shippingMethods: [] }) };
+      }
+      if (String(url).includes("/payment-methods")) {
+        return { ok: true, status: 200, json: async () => ({ paymentMethods: [] }) };
+      }
+      return { ok: true, status: 200, json: async () => ({ cart: sampleCart }) };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() => useCart({ apiBaseUrl: "/api/commerce-ai" }));
+
+    await waitFor(() => expect(result.current.cart).toEqual(sampleCart));
+    await act(async () => {
+      await result.current.getShippingMethods();
+      await result.current.getPaymentMethods();
+      await result.current.getOrder("cat-1");
+      await result.current.listOrders();
+    });
+
+    const reads = fetchMock.mock.calls as unknown as [string, RequestInit | undefined][];
+    expect(reads.map(([url]) => url.replace(/\?.*$/, ""))).toEqual([
+      "/api/commerce-ai/cart",
+      "/api/commerce-ai/cart/shipping-methods",
+      "/api/commerce-ai/cart/payment-methods",
+      "/api/commerce-ai/orders",
+      "/api/commerce-ai/orders",
+    ]);
+    for (const [url, init] of reads) {
+      expect(url).not.toContain("anonymousId");
+      expect(new Headers(init?.headers).get(ANONYMOUS_ID_HEADER)).toBe("anon-1");
+    }
+  });
+
+  it("fallback anonymousId uses crypto.getRandomValues", () => {
+    const getRandomValues = vi.fn(<T extends ArrayBufferView>(array: T): T => {
+      const bytes = new Uint8Array(array.buffer, array.byteOffset, array.byteLength);
+      bytes.forEach((_, index) => {
+        bytes[index] = (index * 37 + 11) % 256;
+      });
+      return array;
+    });
+    const mathRandom = vi.spyOn(Math, "random");
+    vi.stubGlobal("crypto", { getRandomValues });
+
+    try {
+      const id = createAnonymousId();
+
+      expect(getRandomValues).toHaveBeenCalled();
+      expect(mathRandom).not.toHaveBeenCalled();
+      expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+      expect(`cat-${id}`).toMatch(ORDER_NUMBER_PATTERN);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("returns null when shipping methods fail to load", async () => {
     const fetchMock = vi.fn(async (url: string) => {
       if (String(url).includes("/shipping-methods")) {
@@ -526,7 +601,78 @@ describe("useCart", () => {
     });
 
     expect(methods).toBeNull();
-    expect(result.current.error).toBe("Shipping methods request failed");
+    // The error is the widget's own message, not the server's developer-facing text.
+    expect(result.current.error).toBe(DEFAULT_COMMERCE_AI_SEARCH_MESSAGES.checkoutFailed);
+  });
+
+  it("takes error text from host message overrides, localized per failure", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).endsWith("/cart/add")) {
+        return {
+          ok: false,
+          status: 429,
+          json: async () => ({ error: "Too many requests", code: "RATE_LIMITED" }),
+        };
+      }
+      return { ok: true, status: 200, json: async () => ({ cart: sampleCart }) };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() =>
+      useCart({ apiBaseUrl: "/api/commerce-ai", messages: { rateLimited: "Zu viele Anfragen" } }),
+    );
+
+    await waitFor(() => expect(result.current.cart).toEqual(sampleCart));
+    await act(async () => {
+      await result.current.addToCart({ sku: "SHOE-RED" });
+    });
+
+    expect(result.current.error).toBe("Zu viele Anfragen");
+  });
+
+  it("shows the cart-load message when the background refresh fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: false,
+        status: 500,
+        json: async () => ({ error: "boom", code: "INTERNAL" }),
+      })),
+    );
+
+    const { result } = renderHook(() => useCart({ apiBaseUrl: "/api/commerce-ai" }));
+
+    await waitFor(() =>
+      expect(result.current.error).toBe(DEFAULT_COMMERCE_AI_SEARCH_MESSAGES.cartLoadFailed),
+    );
+    expect(result.current.error).not.toBe(DEFAULT_COMMERCE_AI_SEARCH_MESSAGES.checkoutFailed);
+  });
+
+  it("toggleCart refreshes once in StrictMode", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ cart: sampleCart }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() => useCart({ apiBaseUrl: "/api/commerce-ai" }), {
+      wrapper: StrictMode,
+    });
+
+    await waitFor(() => expect(result.current.cart).toEqual(sampleCart));
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    const callsBeforeToggle = fetchMock.mock.calls.length;
+
+    await act(async () => {
+      result.current.toggleCart();
+    });
+    expect(result.current.isCartOpen).toBe(true);
+    expect(fetchMock.mock.calls.length - callsBeforeToggle).toBe(1);
+
+    await act(async () => {
+      result.current.toggleCart();
+    });
+    expect(result.current.isCartOpen).toBe(false);
+    expect(fetchMock.mock.calls.length - callsBeforeToggle).toBe(1);
   });
 
   it("serializes placeOrder behind other cart mutations", async () => {

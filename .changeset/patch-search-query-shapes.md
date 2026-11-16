@@ -1,0 +1,7 @@
+---
+"@commerce-ai-tool/core": patch
+---
+
+Product Search filters now use documented shapes. Price and numeric attribute ranges are sent as `range` expressions with `gte` / `lte` (the previous `ranges: [{ from, to }]` is the facet shape and was not a valid query), and the price filter and price facet use `variants.prices.currentCentAmount` so Product Discounts are respected. `priceMin` / `priceMax` are converted with the request currency's fraction digits instead of a fixed factor of 100 (JPY 5000 is 5000, not 500000). Facet attributes of type lenum use `fieldType: "lenum"` and set attributes use `set_<element>` (for example `set_enum`); a set and its scalar element with the same name are treated as conflicting definitions. Products whose discounted price (Product Discounts) falls in the requested range now match price filters. Price sort still uses `variants.prices.centAmount`, because only that field is documented as sortable.
+
+Price facet chips follow the same currency fraction digits as the filter: `toggleFacetFilter`, `isFacetFilterSelected`, `priceRangeToFilterValues`, `priceBucketKeyFromFilters` and `normalizeProductSearchFacets` take an optional trailing `currency` (default: 2 digits, unchanged), and the `price` facet group now carries `currency` so the React and Angular widgets pass it through. A JPY chip now filters at the amount its bucket counts instead of 1/100 of it.

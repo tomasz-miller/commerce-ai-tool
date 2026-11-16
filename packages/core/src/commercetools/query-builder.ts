@@ -1,17 +1,35 @@
-import type { ProductSearchRequest, SearchSorting } from "@commercetools/platform-sdk";
+import type {
+  ProductSearchRequest,
+  SearchAndExpression,
+  SearchExactExpression,
+  SearchExistsExpression,
+  SearchFieldType,
+  SearchFullTextExpression,
+  SearchFuzzyExpression,
+  SearchLongRangeExpression,
+  SearchNumberRangeExpression,
+  SearchOrExpression,
+  SearchSorting,
+} from "@commercetools/platform-sdk";
 import type {
   InterpretedSearchFilters,
   InterpretedSearchQuery,
   ResolvedFacetSchema,
 } from "../types/index.js";
+import { currencyFractionDigits } from "./currency.js";
 import {
+  CATEGORIES_FACET_ID,
   buildProductSearchFacets,
   buildProjectionFacetParams,
+  facetGroupForFilterKey,
+  rangeBoundAttribute,
   getFacetAttribute,
 } from "./facets.js";
 
 export interface ProductSearchQueryOptions {
   currency?: string;
+  /** Price country. Only the Product Projection Search fallback sends it (`priceCountry`). */
+  country?: string;
   /** When true, adds a fuzzy match on product name (tolerates typos). Default: true. */
   enableFuzzyName?: boolean;
   /**
@@ -35,9 +53,57 @@ export interface ProductSearchBuildInput {
   offset?: number;
   options?: ProductSearchQueryOptions;
   facetSchema?: ResolvedFacetSchema;
+  /**
+   * Keys of `interpreted.filters` that are facet-chip selections. Only keys of a
+   * `POST_FILTER_GROUPS` group (the product-level `categories`) go to `postFilter`, unless
+   * `postFilterAllGroups` is set; only when facets are requested. Every other filter stays in
+   * `query`. See `POST_FILTER_GROUPS`.
+   */
+  postFilterKeys?: readonly string[];
+  /**
+   * The keys in `postFilterKeys` are explicit chip selections (`TextSearchRequest.facetSelections`),
+   * not echoed model filters: send every group among them to `postFilter`, not only
+   * `POST_FILTER_GROUPS`. A variant-level chip then no longer narrows `matchingVariants`, so the
+   * card of a product falls back to the master variant when the chip's variant is not the one that
+   * matched the query.
+   */
+  postFilterAllGroups?: boolean;
 }
 
-type SearchExpression = Record<string, unknown>;
+/**
+ * The query expressions this builder emits, as the SDK's concrete expression interfaces.
+ * `_SearchQuery` itself is not used here: it includes the empty `SearchQuery` interface, which
+ * accepts any object and would let a wrong shape (such as the facet `ranges` shape) compile.
+ */
+type SearchExpression =
+  | SearchAndExpression
+  | SearchOrExpression
+  | SearchExactExpression
+  | SearchExistsExpression
+  | SearchFullTextExpression
+  | SearchFuzzyExpression
+  | SearchLongRangeExpression
+  | SearchNumberRangeExpression;
+
+/**
+ * Facet groups whose chip selections go to `postFilter` when the request does not say which
+ * filters are chips (`postFilterAllGroups` unset). Rule (R28): the widget echoes
+ * `meta.appliedFilters`, model constraints included, as `filters`, so a variant-level key in
+ * `postFilterKeys` may be the model's own constraint. commercetools documents `matchingVariants`
+ * against `query`, so variant-level filters stay there to keep the card on the matching variant.
+ * `categories` is a product-level field and is never set by the model. A request that carries
+ * `facetSelections` sets `postFilterAllGroups` and opts every selected group in.
+ */
+const POST_FILTER_GROUPS: ReadonlySet<string> = new Set([CATEGORIES_FACET_ID]);
+
+/** Variant price field used for range filters. Respects Product Discounts. */
+const PRICE_RANGE_FIELD = "variants.prices.currentCentAmount";
+
+/** Bounds of a `range` expression. Both ends are inclusive (`gte` / `lte`). */
+interface RangeBounds {
+  gte?: number;
+  lte?: number;
+}
 
 const TEXT_FIELD_BOOSTS = [
   { field: "name", boost: 3 },
@@ -83,57 +149,73 @@ function normalizeSearchPhrases(searchTerms: string[]): string[] {
   return phrases;
 }
 
-export function buildProductSearchBody(
-  interpreted: InterpretedSearchQuery,
-  catalogLocale: string,
-  limit = 20,
-  offset = 0,
-  options?: ProductSearchQueryOptions,
-): ProductSearchRequest {
-  return buildProductSearchRequest({
-    interpreted,
-    catalogLocale,
-    limit,
-    offset,
-    options,
-  });
-}
-
 export function buildProductSearchRequest(input: ProductSearchBuildInput): ProductSearchRequest {
-  const { interpreted, catalogLocale, limit = 20, offset = 0, options } = input;
+  const { interpreted, catalogLocale, limit = 20, offset = 0, options, facetSchema } = input;
   const phrases = normalizeSearchPhrases(interpreted.searchTerms);
   const filters = normalizeFilters(interpreted.filters);
   const enableFuzzy = options?.enableFuzzyName !== false;
   const mustMatch = options?.mustMatch ?? "all";
   const primaryKey = interpreted.primaryTerm?.trim().replace(/\s+/g, " ").toLowerCase();
 
+  const postFilterGroups = new Set(
+    facetSchema
+      ? (input.postFilterKeys ?? [])
+          .map((key) => facetGroupForFilterKey(key, facetSchema))
+          .filter((group) => input.postFilterAllGroups || POST_FILTER_GROUPS.has(group))
+      : [],
+  );
+  const filterGroups = buildFilterGroups(filters, options?.currency, facetSchema);
+  const queryFilters = filterGroups.filter((part) => !postFilterGroups.has(part.group));
+  const chipFilters = filterGroups.filter((part) => postFilterGroups.has(part.group));
+
   const textQuery = buildPhraseQueries(phrases, catalogLocale, enableFuzzy, mustMatch, primaryKey);
-  const filterQuery = buildFilterExpressions(filters, options?.currency, input.facetSchema);
+  const filterQuery = combineAnd(queryFilters.map((part) => part.expression));
   const storeQuery = buildStoreScopeExpression(options);
 
-  const queryParts = [textQuery, filterQuery, storeQuery].filter(Boolean) as SearchExpression[];
-  let query: ProductSearchRequest["query"];
-  if (queryParts.length === 1) {
-    query = queryParts[0] as ProductSearchRequest["query"];
-  } else if (queryParts.length > 1) {
-    query = { and: queryParts } as ProductSearchRequest["query"];
-  }
-
+  const query = combineAnd([textQuery, filterQuery, storeQuery].filter(Boolean) as SearchExpression[]);
+  const postFilter = combineAnd(chipFilters.map((part) => part.expression));
   const sortEntry = buildPriceSort(interpreted.sort, options?.currency);
 
-  const request = {
+  const request: ProductSearchRequest = {
     limit,
     offset,
+    markMatchingVariants: true,
     ...(query ? { query } : {}),
+    ...(postFilter ? { postFilter } : {}),
     ...(sortEntry ? { sort: [sortEntry] } : {}),
   };
-  if (input.facetSchema) {
+  if (facetSchema) {
+    // Each facet is filtered by the chip selections of the other groups, never its own.
+    const facetNames = [
+      ...facetSchema.systemFacets,
+      ...facetSchema.attributes.map((attribute) => attribute.name),
+    ];
+    const facetFilterMap: Record<string, SearchExpression> = {};
+    for (const name of facetNames) {
+      const filter = combineAnd(
+        chipFilters.filter((part) => part.group !== name).map((part) => part.expression),
+      );
+      if (filter) {
+        facetFilterMap[name] = filter;
+      }
+    }
+    // Facet expressions are still built untyped in facets.ts.
     return {
       ...request,
-      facets: buildProductSearchFacets(input.facetSchema, interpreted.suggestedFacets),
+      facets: buildProductSearchFacets(facetSchema, interpreted.suggestedFacets, {
+        currency: options?.currency,
+        facetFilters: facetFilterMap,
+      }),
     } as ProductSearchRequest;
   }
   return request;
+}
+
+function combineAnd(parts: SearchExpression[]): SearchExpression | undefined {
+  if (parts.length === 0) {
+    return undefined;
+  }
+  return parts.length === 1 ? parts[0] : { and: parts };
 }
 
 /**
@@ -163,6 +245,9 @@ export function buildProjectionSearchQueryArgs(
 
   if (options?.currency) {
     queryArgs.priceCurrency = options.currency;
+  }
+  if (options?.country) {
+    queryArgs.priceCountry = options.country;
   }
 
   const projectionFilters = buildProjectionFilterParams(filters, options, input.facetSchema);
@@ -262,24 +347,33 @@ function normalizeFilters(filters?: InterpretedSearchFilters): InterpretedSearch
   return normalized;
 }
 
-function buildFilterExpressions(
+/** One filter expression and the facet group it belongs to (see `facetGroupForFilterKey`). */
+interface FilterGroupExpression {
+  group: string;
+  expression: SearchExpression;
+}
+
+function buildFilterGroups(
   filters: InterpretedSearchFilters,
   currency?: string,
   schema?: ResolvedFacetSchema,
-): SearchExpression | undefined {
-  const parts: SearchExpression[] = [];
+): FilterGroupExpression[] {
+  const parts: FilterGroupExpression[] = [];
+  const push = (key: string, expression: SearchExpression) =>
+    parts.push({ group: facetGroupForFilterKey(key, schema), expression });
 
-  pushAttributeExact(parts, filters, "color", schema, {
+  pushAttributeExact(push, filters, "color", schema, {
     field: "variants.attributes.color.key",
     fieldType: "enum",
   });
-  pushAttributeExact(parts, filters, "brand", schema, {
+  pushAttributeExact(push, filters, "brand", schema, {
     field: "variants.attributes.brand",
     fieldType: "text",
   });
 
   if (filters.category) {
-    parts.push({
+    // Category facet chips carry the category id (the `categories` field matches ids).
+    push("category", {
       exact: {
         field: "categories",
         value: filters.category,
@@ -288,40 +382,33 @@ function buildFilterExpressions(
     });
   }
 
-  const priceMin = parsePriceToCentAmount(filters.priceMin);
-  const priceMax = parsePriceToCentAmount(filters.priceMax);
+  const fractionDigits = currencyFractionDigits(currency);
+  const priceMin = parsePriceToCentAmount(filters.priceMin, fractionDigits);
+  const priceMax = parsePriceToCentAmount(filters.priceMax, fractionDigits);
   if (priceMin !== undefined || priceMax !== undefined) {
-    const range: { from?: number; to?: number } = {};
-    if (priceMin !== undefined) {
-      range.from = priceMin;
-    }
-    if (priceMax !== undefined) {
-      range.to = priceMax;
-    }
-    parts.push({
+    push("priceMin", {
       range: {
-        field: "variants.prices.centAmount",
-        ranges: [range],
+        field: PRICE_RANGE_FIELD,
+        ...rangeBounds(priceMin, priceMax),
       },
     });
-  }
-
-  if (currency && (priceMin !== undefined || priceMax !== undefined)) {
-    parts.push({
-      exact: {
-        field: "variants.prices.currencyCode",
-        value: currency,
-      },
-    });
+    if (currency) {
+      push("priceMin", {
+        exact: {
+          field: "variants.prices.currencyCode",
+          value: currency,
+        },
+      });
+    }
   }
 
   const numberRanges = collectNumberRanges(filters, schema);
   for (const range of numberRanges) {
-    parts.push({
+    push(range.name, {
       range: {
         field: range.field,
-        fieldType: "number",
-        ranges: [range.bounds],
+        fieldType: range.fieldType,
+        ...rangeBounds(range.bounds.from, range.bounds.to),
       },
     });
   }
@@ -330,14 +417,14 @@ function buildFilterExpressions(
     if (!value || SYSTEM_FILTER_KEYS.has(key) || key === "color" || key === "brand") {
       continue;
     }
-    if (key.endsWith("Min") || key.endsWith("Max")) {
+    if (rangeBoundAttribute(key, schema)) {
       continue;
     }
     const attribute = getFacetAttribute(schema ?? emptySchema, key);
     if (!attribute) {
       continue;
     }
-    parts.push({
+    push(key, {
       exact: {
         field: attribute.field,
         fieldType: attribute.fieldType,
@@ -347,11 +434,7 @@ function buildFilterExpressions(
     });
   }
 
-  if (parts.length === 0) {
-    return undefined;
-  }
-
-  return parts.length === 1 ? parts[0] : { and: parts };
+  return parts;
 }
 
 function buildStoreScopeExpression(options?: ProductSearchQueryOptions): SearchExpression | undefined {
@@ -386,8 +469,9 @@ function buildProjectionFilterParams(
     expressions.push(`categories.id:"${escapeFilterValue(filters.category)}"`);
   }
 
-  const priceMin = parsePriceToCentAmount(filters.priceMin);
-  const priceMax = parsePriceToCentAmount(filters.priceMax);
+  const fractionDigits = currencyFractionDigits(options?.currency);
+  const priceMin = parsePriceToCentAmount(filters.priceMin, fractionDigits);
+  const priceMax = parsePriceToCentAmount(filters.priceMax, fractionDigits);
   if (priceMin !== undefined || priceMax !== undefined) {
     const from = priceMin ?? "*";
     const to = priceMax ?? "*";
@@ -409,7 +493,7 @@ function buildProjectionFilterParams(
     if (!value || SYSTEM_FILTER_KEYS.has(key) || key === "color" || key === "brand") {
       continue;
     }
-    if (key.endsWith("Min") || key.endsWith("Max")) {
+    if (rangeBoundAttribute(key, schema)) {
       continue;
     }
     const attribute = getFacetAttribute(schema ?? emptySchema, key);
@@ -422,11 +506,11 @@ function buildProjectionFilterParams(
 }
 
 function pushAttributeExact(
-  parts: SearchExpression[],
+  push: (key: string, expression: SearchExpression) => void,
   filters: InterpretedSearchFilters,
   name: "color" | "brand",
   schema: ResolvedFacetSchema | undefined,
-  legacy: { field: string; fieldType: string },
+  legacy: { field: string; fieldType: SearchFieldType },
 ): void {
   const value = filters[name];
   if (!value) {
@@ -438,7 +522,7 @@ function pushAttributeExact(
     if (!attribute) {
       return;
     }
-    parts.push({
+    push(name, {
       exact: {
         field: attribute.field,
         fieldType: attribute.fieldType,
@@ -449,7 +533,7 @@ function pushAttributeExact(
     return;
   }
 
-  parts.push({
+  push(name, {
     exact: {
       field: legacy.field,
       fieldType: legacy.fieldType,
@@ -483,15 +567,22 @@ function pushProjectionAttributeExact(
   expressions.push(`${legacyField}:"${escapeFilterValue(value)}"`);
 }
 
+interface NumberRange {
+  name: string;
+  field: string;
+  fieldType: SearchFieldType;
+  bounds: { from?: number; to?: number };
+}
+
 function collectNumberRanges(
   filters: InterpretedSearchFilters,
   schema?: ResolvedFacetSchema,
-): Array<{ field: string; bounds: { from?: number; to?: number } }> {
+): NumberRange[] {
   if (!schema) {
     return [];
   }
 
-  const byName = new Map<string, { field: string; bounds: { from?: number; to?: number } }>();
+  const byName = new Map<string, NumberRange>();
 
   for (const [key, value] of Object.entries(filters)) {
     if (!value) {
@@ -510,7 +601,12 @@ function collectNumberRanges(
     if (!Number.isFinite(valueAsNumber)) {
       continue;
     }
-    const existing = byName.get(attributeName) ?? { field: attribute.field, bounds: {} };
+    const existing = byName.get(attributeName) ?? {
+      name: attributeName,
+      field: attribute.field,
+      fieldType: attribute.fieldType ?? "number",
+      bounds: {},
+    };
     if (rangeMatch[2] === "Min") {
       existing.bounds.from = valueAsNumber;
     } else {
@@ -558,7 +654,15 @@ function buildPriceSort(
   };
 }
 
-function parsePriceToCentAmount(value?: string): number | undefined {
+function rangeBounds(from?: number, to?: number): RangeBounds {
+  return {
+    ...(from !== undefined ? { gte: from } : {}),
+    ...(to !== undefined ? { lte: to } : {}),
+  };
+}
+
+/** Converts a major-unit amount ("200") to a commercetools cent amount for the currency. */
+export function parsePriceToCentAmount(value?: string, fractionDigits = 2): number | undefined {
   if (!value) {
     return undefined;
   }
@@ -568,7 +672,7 @@ function parsePriceToCentAmount(value?: string): number | undefined {
     return undefined;
   }
 
-  return Math.round(parsed * 100);
+  return Math.round(parsed * 10 ** fractionDigits);
 }
 
 function escapeFilterValue(value: string): string {

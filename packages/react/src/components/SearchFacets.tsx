@@ -1,5 +1,5 @@
 import type {
-  CommerceAISearchMessages,
+  ResolvedCommerceAISearchMessages,
   InterpretedSearchFilters,
   SearchFacetGroup,
   SuggestedFacet,
@@ -15,7 +15,7 @@ interface SearchFacetsProps {
   facets: SearchFacetGroup[];
   suggestedFacets: SuggestedFacet[];
   filters: InterpretedSearchFilters;
-  messages: CommerceAISearchMessages;
+  messages: ResolvedCommerceAISearchMessages;
   onChange: (filters: InterpretedSearchFilters) => void;
   onNewSearch?: () => void;
 }
@@ -54,7 +54,7 @@ export function SearchFacets({
           <span className="cat-facet-group__label">{facet.label}</span>
           <div className="cat-facet-group__options">
             {facet.buckets.map((bucket) => {
-              const selected = isFacetFilterSelected(filters, facet.id, bucket.key);
+              const selected = isFacetFilterSelected(filters, facet.id, bucket.key, facet.currency);
               const swatch = isColorLikeFacetName(facet.id)
                 ? hexColorSwatchValue(bucket.key)
                 : undefined;
@@ -64,7 +64,7 @@ export function SearchFacets({
                   type="button"
                   className={`cat-facet-chip ${selected ? "cat-facet-chip--selected" : ""}`}
                   aria-pressed={selected}
-                  onClick={() => onChange(toggleFacetFilter(filters, facet.id, bucket.key))}
+                  onClick={() => onChange(toggleFacetFilter(filters, facet.id, bucket.key, facet.currency))}
                 >
                   {swatch ? (
                     <span

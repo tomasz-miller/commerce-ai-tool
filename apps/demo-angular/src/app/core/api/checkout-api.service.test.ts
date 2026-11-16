@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ANONYMOUS_ID_HEADER } from "@commerce-ai-tool/core/client";
 import { CartSessionStore, createMemoryStorage } from "./cart-session.store.js";
 import { CheckoutApiService } from "./checkout-api.service.js";
 
@@ -37,10 +38,32 @@ describe("CheckoutApiService", () => {
     await vi.waitFor(() => {
       expect(service.cart()).toEqual(sampleCart);
     });
-    expect(fetch).toHaveBeenCalledWith(
-      "/api/commerce-ai/cart?anonymousId=anon-1",
-      expect.anything(),
-    );
+    expect(fetch).toHaveBeenCalledWith("/api/commerce-ai/cart", {
+      headers: { [ANONYMOUS_ID_HEADER]: "anon-1" },
+    });
+  });
+
+  it("order and cart reads send the anonymous id header, not a query parameter", async () => {
+    const service = createService();
+    await vi.waitFor(() => {
+      expect(service.cart()).toEqual(sampleCart);
+    });
+
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ shippingMethods: [] }));
+    await service.getShippingMethods();
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ paymentMethods: [] }));
+    await service.getPaymentMethods();
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ order: null }));
+    await service.getOrder("cat-1");
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ orders: [] }));
+    await service.listOrders();
+
+    const calls = vi.mocked(fetch).mock.calls as unknown as [string, RequestInit | undefined][];
+    expect(calls).toHaveLength(5);
+    for (const [url, init] of calls) {
+      expect(url).not.toContain("anonymousId");
+      expect(new Headers(init?.headers).get(ANONYMOUS_ID_HEADER)).toBe("anon-1");
+    }
   });
 
   it("refetches the cart on later configure calls", async () => {

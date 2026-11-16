@@ -21,6 +21,26 @@ const OPENROUTER_BASELINE_ENHANCE = {
   },
 } as const;
 
+const OPENROUTER_BASELINE_MERGED = {
+  id: "file://providers/voice-baseline-provider.ts",
+  label: "baseline-merged-gpt-56-luna",
+  config: {
+    provider: "openrouter",
+    model: "openai/gpt-5.6-luna",
+    mode: "transcript-interpret",
+  },
+} as const;
+
+const BEDROCK_BASELINE_MERGED = {
+  id: "file://providers/voice-baseline-provider.ts",
+  label: "baseline-merged-bedrock",
+  config: {
+    provider: "bedrock",
+    model: "anthropic.claude-3-5-sonnet-20241022-v2:0",
+    mode: "transcript-interpret",
+  },
+} as const;
+
 const BEDROCK_BASELINE_ENHANCE = {
   id: "file://providers/voice-baseline-provider.ts",
   label: "baseline-enhance-bedrock",
@@ -46,7 +66,8 @@ export default function voiceSearchConfig() {
     providers: [
       OPENROUTER_BASELINE_TEXT,
       OPENROUTER_BASELINE_ENHANCE,
-      ...appendBedrockProvidersIfAvailable([], [BEDROCK_BASELINE_ENHANCE]),
+      OPENROUTER_BASELINE_MERGED,
+      ...appendBedrockProvidersIfAvailable([], [BEDROCK_BASELINE_ENHANCE, BEDROCK_BASELINE_MERGED]),
       GEMINI_37_AUDIO,
     ],
     defaultTest: {

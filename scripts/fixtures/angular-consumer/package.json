@@ -1,0 +1,26 @@
+{
+  "name": "angular-consumer-fixture",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Minimal standalone Angular app that consumes the packed @commerce-ai-tool/angular tarball. Copied to a temp directory by scripts/check-angular-consumer.mjs, which fills in the Angular version and the tarball paths.",
+  "type": "module",
+  "dependencies": {
+    "@angular/common": "ANGULAR_RANGE",
+    "@angular/compiler": "ANGULAR_RANGE",
+    "@angular/core": "ANGULAR_RANGE",
+    "@angular/forms": "ANGULAR_RANGE",
+    "@angular/platform-browser": "ANGULAR_RANGE",
+    "@commerce-ai-tool/angular": "TARBALL_ANGULAR",
+    "rxjs": "^7.8.2",
+    "tslib": "^2.8.1"
+  },
+  "devDependencies": {
+    "@angular/build": "ANGULAR_RANGE",
+    "@angular/cli": "ANGULAR_RANGE",
+    "@angular/compiler-cli": "ANGULAR_RANGE",
+    "typescript": "~5.9.3"
+  },
+  "overrides": {
+    "@commerce-ai-tool/core": "TARBALL_CORE"
+  }
+}

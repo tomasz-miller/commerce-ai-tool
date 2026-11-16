@@ -1,0 +1,19 @@
+{
+  "$schema": "./node_modules/ng-packagr/ng-package.schema.json",
+  "dest": "dist",
+  "lib": {
+    "entryFile": "src/index.ts"
+  },
+  "assets": [
+    "CHANGELOG.md",
+    {
+      "input": "node_modules/@commerce-ai-tool/styles",
+      "glob": "commerce-ai-search.css",
+      "output": "."
+    }
+  ],
+  "allowedNonPeerDependencies": [
+    "@commerce-ai-tool/core",
+    "tslib"
+  ]
+}

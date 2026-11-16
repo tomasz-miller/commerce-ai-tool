@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useId, useMemo, useRef, useState } from "react";
 import {
   Camera,
   Check,
@@ -17,7 +17,12 @@ import type {
   ProductCard,
   ThemeMode,
 } from "@commerce-ai-tool/core/client";
-import { resolveCommerceAISearchMessages, looksLikeCompoundShoppingList } from "@commerce-ai-tool/core/client";
+import {
+  addToCartLabel,
+  looksLikeCompoundShoppingList,
+  resolveCommerceAISearchMessages,
+  searchAnnouncement,
+} from "@commerce-ai-tool/core/client";
 import { useCommerceAISearch } from "../hooks/useCommerceAISearch.js";
 import { useCameraCapture } from "../hooks/useCameraCapture.js";
 import { useCart } from "../hooks/useCart.js";
@@ -29,7 +34,7 @@ import { CartPanel } from "./CartPanel.js";
 import { MissionResults } from "./MissionResults.js";
 import { SearchFacets } from "./SearchFacets.js";
 import { VoiceStatusBanner } from "./VoiceStatusBanner.js";
-import type { CameraFacingMode } from "../utils/camera.js";
+import type { CameraFacingMode } from "@commerce-ai-tool/core/client";
 import "@commerce-ai-tool/styles/commerce-ai-search.css";
 
 export type SearchMode = "text" | "image" | "voice" | null;
@@ -106,14 +111,20 @@ export function CommerceAISearch({
     [messageOverrides, placeholder],
   );
 
+  const listboxId = useId();
+  const optionId = (index: number) => `${listboxId}-option-${index}`;
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const cameraButtonRef = useRef<HTMLButtonElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const cartToggleRef = useRef<HTMLButtonElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [lastSearchMode, setLastSearchMode] = useState<SearchMode>(null);
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
   const [suggestionsDismissed, setSuggestionsDismissed] = useState(false);
 
-  const camera = useCameraCapture({ facingMode: cameraFacingMode });
+  const camera = useCameraCapture({ facingMode: cameraFacingMode, messages });
 
   const {
     query,
@@ -141,6 +152,8 @@ export function CommerceAISearch({
     refine = async () => undefined,
     startNewSearch = async () => undefined,
     applySearchResult = () => undefined,
+    beginExternalSearch,
+    isCurrentRequest,
   } = useCommerceAISearch({
     apiBaseUrl,
     catalogLocale,
@@ -150,6 +163,7 @@ export function CommerceAISearch({
     enableFacets,
     persistSession,
     enableMissions,
+    messages,
   });
 
   const voice = useVoiceSearch({
@@ -159,6 +173,9 @@ export function CommerceAISearch({
     locale,
     enableTts,
     enableMissions,
+    messages,
+    beginExternalSearch,
+    isCurrentRequest,
     onResults: (products, resultMeta, extras) => {
       setLastSearchMode("voice");
       applySearchResult({
@@ -184,8 +201,10 @@ export function CommerceAISearch({
     country,
     catalogLocale,
     enabled: enableCart,
+    messages,
     onCartChange,
   });
+  const { addToCart } = cart;
   const cartQuantity = cart.cart?.totalQuantity ?? 0;
   const cartBadgeLabel = cartQuantity > 99 ? "99+" : String(cartQuantity);
   const [addedProductIds, setAddedProductIds] = useState<Record<string, true>>({});
@@ -195,7 +214,7 @@ export function CommerceAISearch({
       if (!product.sku && !product.id) {
         return;
       }
-      const next = await cart.addToCart(
+      const next = await addToCart(
         product.sku
           ? { sku: product.sku }
           : { productId: product.id, variantId: product.variantId },
@@ -212,7 +231,7 @@ export function CommerceAISearch({
         });
       }, 1200);
     },
-    [cart.addToCart],
+    [addToCart],
   );
 
   const displayResults = results;
@@ -225,19 +244,54 @@ export function CommerceAISearch({
     displayResults.length === 0 &&
     !showMission &&
     query.trim().length > 0;
+  // An error shows even without a query text: an image search that fails starts from an empty box.
   const showResults =
-    query.trim().length > 0 &&
-    (isLoading ||
-      !!error ||
-      displayResults.length > 0 ||
-      showEmptyResults ||
-      showMission);
+    !!error ||
+    (query.trim().length > 0 &&
+      (isLoading || displayResults.length > 0 || showEmptyResults || showMission));
   const showSuggestions =
     enableAutocomplete &&
     !suggestionsDismissed &&
     !showResults &&
     query.trim().length >= 2 &&
     (isLoadingSuggestions || suggestions.length > 0 || !!suggestionsError || suggestionsReady);
+
+  // The combobox is expanded only while the listbox exists, and the listbox exists only with options.
+  const suggestionsExpanded = showSuggestions && suggestions.length > 0;
+  const showNoSuggestions =
+    showSuggestions &&
+    !isLoadingSuggestions &&
+    !suggestionsError &&
+    suggestionsReady &&
+    suggestions.length === 0;
+
+  const resultCount = !showResults
+    ? null
+    : showMission && mission
+      ? mission.intents.reduce((sum, group) => sum + group.products.length, 0)
+      : displayResults.length > 0
+        ? displayResults.length
+        : null;
+  const missionLanes =
+    showResults && showMission && mission
+      ? {
+          failed: mission.intents.filter((group) => group.failed).length,
+          empty: mission.intents.filter((group) => !group.failed && group.products.length === 0)
+            .length,
+        }
+      : { failed: 0, empty: 0 };
+  const announcement = searchAnnouncement(messages, {
+    isRecording: enableVoice && voice.isRecording,
+    isProcessing: enableVoice && voice.isProcessing,
+    isLoadingTts: enableVoice && voice.isLoadingTts,
+    isLoading,
+    hasError: Boolean(error),
+    resultCount,
+    showEmptyResults,
+    noSuggestions: showNoSuggestions,
+    missionFailedLanes: missionLanes.failed,
+    missionEmptyLanes: missionLanes.empty,
+  });
 
   const handleSubmit = useCallback(
     (event: React.FormEvent) => {
@@ -306,6 +360,11 @@ export function CommerceAISearch({
   const handleInputKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLInputElement>) => {
       if (event.key === "Escape") {
+        // An open listbox owns this Escape (APG combobox: it dismisses the popup). Marking the
+        // event handled keeps the cart panel's document-level Escape from also closing the cart.
+        if (showSuggestions && suggestions.length > 0) {
+          event.preventDefault();
+        }
         setActiveSuggestionIndex(-1);
         setSuggestionsDismissed(true);
         return;
@@ -353,9 +412,9 @@ export function CommerceAISearch({
       try {
         const file = await camera.capturePhoto(video);
         handleImageSelect(file);
-      } catch (err) {
+      } catch {
         camera.close();
-        setError(err instanceof Error ? err.message : messages.couldNotCapturePhoto);
+        setError(messages.couldNotCapturePhoto);
       }
     },
     [camera, handleImageSelect, messages.couldNotCapturePhoto, setError],
@@ -375,7 +434,7 @@ export function CommerceAISearch({
   );
 
   const showVoiceReplay =
-    enableVoice && enableTts && lastSearchMode === "voice" && Boolean(voice.audioSummary);
+    enableVoice && enableTts && lastSearchMode === "voice" && Boolean(voice.audioClip);
 
   return (
     <div
@@ -402,6 +461,10 @@ export function CommerceAISearch({
       role="search"
       aria-label={messages.productSearchAriaLabel}
     >
+      <div className="cat-visually-hidden" role="status" aria-live="polite" aria-atomic="true">
+        {announcement}
+      </div>
+
       {isDragging && enableImageSearch && (
         <div className="cat-drag-overlay" aria-hidden="true">
           {messages.dropImageToSearch}
@@ -416,6 +479,7 @@ export function CommerceAISearch({
         <Search size={18} strokeWidth={ICON_STROKE} aria-hidden="true" color="var(--cat-text-muted)" />
         <div className="cat-search-input-wrap">
           <input
+            ref={searchInputRef}
             type="search"
             className="cat-search-input"
             value={query}
@@ -423,15 +487,20 @@ export function CommerceAISearch({
             onKeyDown={handleInputKeyDown}
             placeholder={messages.placeholder}
             aria-label={messages.searchAriaLabel}
-            aria-haspopup={enableAutocomplete ? "listbox" : undefined}
-            aria-autocomplete={enableAutocomplete ? "list" : undefined}
-            aria-expanded={showSuggestions}
-            aria-controls={showSuggestions ? "cat-suggestions-listbox" : undefined}
-            aria-activedescendant={
-              activeSuggestionIndex >= 0 ? `cat-suggestion-${activeSuggestionIndex}` : undefined
-            }
             autoComplete="off"
-            role={enableAutocomplete ? "combobox" : undefined}
+            {...(enableAutocomplete
+              ? {
+                  role: "combobox",
+                  "aria-haspopup": "listbox",
+                  "aria-autocomplete": "list",
+                  "aria-expanded": suggestionsExpanded,
+                  "aria-controls": suggestionsExpanded ? listboxId : undefined,
+                  "aria-activedescendant":
+                    suggestionsExpanded && activeSuggestionIndex >= 0
+                      ? optionId(activeSuggestionIndex)
+                      : undefined,
+                }
+              : {})}
           />
         </div>
 
@@ -443,7 +512,6 @@ export function CommerceAISearch({
             onClick={() => void voice.toggleRecording()}
             disabled={voice.isProcessing}
             aria-label={voice.isRecording ? messages.stopRecording : messages.voiceSearch}
-            aria-pressed={voice.isRecording}
           >
             {voice.isRecording ? (
               <Square size={16} strokeWidth={ICON_STROKE} />
@@ -456,6 +524,7 @@ export function CommerceAISearch({
         {enableCameraSearch ? (
           <>
             <button
+              ref={cameraButtonRef}
               type="button"
               className="cat-icon-btn"
               onClick={() => camera.open(cameraInputRef)}
@@ -497,6 +566,8 @@ export function CommerceAISearch({
               className="cat-hidden-input"
               onChange={(e) => {
                 const file = e.target.files?.[0];
+                // Reset so choosing the same file again (after a failed search) fires change again.
+                e.target.value = "";
                 if (file) handleImageSelect(file);
               }}
             />
@@ -519,6 +590,7 @@ export function CommerceAISearch({
           <button
             type="button"
             className={`cat-icon-btn cat-cart-toggle ${cart.isCartOpen ? "cat-cart-toggle--open" : ""}`}
+            ref={cartToggleRef}
             onClick={cart.toggleCart}
             aria-label={
               cartQuantity > 0
@@ -526,7 +598,6 @@ export function CommerceAISearch({
                 : messages.cartAriaLabel
             }
             aria-expanded={cart.isCartOpen}
-            aria-pressed={cart.isCartOpen}
           >
             <ShoppingCart size={16} strokeWidth={ICON_STROKE} />
             {cartQuantity > 0 && (
@@ -538,12 +609,7 @@ export function CommerceAISearch({
         )}
 
         {showSuggestions && (
-          <div
-            id="cat-suggestions-listbox"
-            className="cat-suggestions"
-            role="listbox"
-            aria-label={messages.suggestionsAriaLabel}
-          >
+          <div className="cat-suggestions">
             {isLoadingSuggestions && suggestions.length === 0 && !suggestionsError && (
               <div className="cat-suggestions__status">{messages.loadingSuggestions}</div>
             )}
@@ -554,29 +620,34 @@ export function CommerceAISearch({
               </div>
             )}
 
-            {!isLoadingSuggestions &&
-              !suggestionsError &&
-              suggestionsReady &&
-              suggestions.length === 0 && (
-                <div className="cat-suggestions__status">{messages.noSuggestions}</div>
-              )}
+            {showNoSuggestions && (
+              <div className="cat-suggestions__status">{messages.noSuggestions}</div>
+            )}
 
-            {suggestions.map((suggestion, index) => (
-              <button
-                key={`${index}-${suggestion}`}
-                id={`cat-suggestion-${index}`}
-                type="button"
-                className={`cat-suggestions__item ${
-                  index === activeSuggestionIndex ? "cat-suggestions__item--active" : ""
-                }`}
-                role="option"
-                aria-selected={index === activeSuggestionIndex}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => handleSuggestionSelect(suggestion)}
+            {suggestions.length > 0 && (
+              <ul
+                id={listboxId}
+                className="cat-suggestions__list"
+                role="listbox"
+                aria-label={messages.suggestionsAriaLabel}
               >
-                {suggestion}
-              </button>
-            ))}
+                {suggestions.map((suggestion, index) => (
+                  <li
+                    key={`${index}-${suggestion}`}
+                    id={optionId(index)}
+                    className={`cat-suggestions__item ${
+                      index === activeSuggestionIndex ? "cat-suggestions__item--active" : ""
+                    }`}
+                    role="option"
+                    aria-selected={index === activeSuggestionIndex}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => handleSuggestionSelect(suggestion)}
+                  >
+                    {suggestion}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
       </form>
@@ -613,11 +684,17 @@ export function CommerceAISearch({
           onCapture={(video) => void handleCameraCapture(video)}
           onClose={camera.close}
           onDismissError={camera.clearError}
+          returnFocusTo={cameraButtonRef}
+          fallbackFocusTo={searchInputRef}
         />
       )}
 
       {showResults && isLoading && <div className="cat-status">{messages.searching}</div>}
-      {showResults && error && <div className="cat-status cat-status--error">{error}</div>}
+      {showResults && error && (
+        <div className="cat-status cat-status--error" role="alert">
+          {error}
+        </div>
+      )}
 
       {!isLoading && !error && showResults && showMission && mission ? (
         <MissionResults
@@ -687,13 +764,7 @@ export function CommerceAISearch({
                       <button
                         type="button"
                         className={`cat-icon-btn cat-result-card__add ${justAdded ? "cat-result-card__add--added" : ""}`}
-                        aria-label={
-                          justAdded
-                            ? messages.itemAdded
-                            : canAdd
-                              ? messages.addToCart
-                              : messages.unableToAddToCart
-                        }
+                        aria-label={addToCartLabel(messages, product, justAdded)}
                         disabled={!canAdd || cart.isMutating}
                         onClick={() => handleAddToCart(product)}
                       >
@@ -710,7 +781,7 @@ export function CommerceAISearch({
             })}
 
           {!isLoading && !error && displayResults.length === 0 && showEmptyResults && (
-            <div className="cat-status cat-status--empty" role="status" aria-live="polite">
+            <div className="cat-status cat-status--empty">
               <SearchX size={18} strokeWidth={ICON_STROKE} aria-hidden="true" />
               <div className="cat-status__content">
                 <div className="cat-status__title">{messages.noProductsFound}</div>
@@ -742,6 +813,7 @@ export function CommerceAISearch({
           onLogin={(input) => void cart.login(input)}
           onLogout={() => void cart.logout()}
           onCheckout={onCheckout}
+          returnFocusTo={cartToggleRef}
         />
       )}
     </div>

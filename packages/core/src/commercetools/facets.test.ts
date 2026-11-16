@@ -8,7 +8,12 @@ import {
   priceBucketKeyFromFilters,
   priceRangeToFilterValues,
   toggleFacetFilter,
+  applyCategoryLabels,
+  DEFAULT_PRICE_RANGES,
+  facetGroupForFilterKey,
 } from "./facets.js";
+import type { InterpretedSearchFilters } from "../types/index.js";
+import { buildProductSearchRequest } from "./query-builder.js";
 
 const schema = {
   attributes: [
@@ -26,6 +31,46 @@ const schema = {
   resolvedAt: "2026-01-01T00:00:00.000Z",
 };
 
+describe("facetGroupForFilterKey", () => {
+  const rangeSchema = {
+    ...schema,
+    attributes: [
+      ...schema.attributes,
+      {
+        name: "weight",
+        label: "Weight",
+        kind: "range" as const,
+        attributeType: "number" as const,
+        field: "variants.attributes.weight",
+        fieldType: "number",
+      },
+      {
+        name: "temperatureMax",
+        label: "Temperature max",
+        kind: "distinct" as const,
+        attributeType: "enum" as const,
+        field: "variants.attributes.temperatureMax.key",
+        fieldType: "enum",
+      },
+    ],
+  };
+
+  it("maps system keys and number-attribute range bounds to their facet group", () => {
+    expect(facetGroupForFilterKey("priceMin")).toBe("price");
+    expect(facetGroupForFilterKey("priceMax", rangeSchema)).toBe("price");
+    expect(facetGroupForFilterKey("category")).toBe("categories");
+    expect(facetGroupForFilterKey("weightMin", rangeSchema)).toBe("weight");
+    expect(facetGroupForFilterKey("weightMax", rangeSchema)).toBe("weight");
+    expect(facetGroupForFilterKey("color", rangeSchema)).toBe("color");
+  });
+
+  it("does not treat a non-range attribute or an unknown key ending in Min/Max as a range bound", () => {
+    expect(facetGroupForFilterKey("temperatureMax", rangeSchema)).toBe("temperatureMax");
+    expect(facetGroupForFilterKey("colorMin", rangeSchema)).toBe("colorMin");
+    expect(facetGroupForFilterKey("weightMin")).toBe("weightMin");
+  });
+});
+
 describe("facet helpers", () => {
   it("whitelists AI suggestions against the resolved schema", () => {
     expect(
@@ -41,6 +86,17 @@ describe("facet helpers", () => {
       expect.objectContaining({
         distinct: expect.objectContaining({ field: "variants.attributes.color.key" }),
       }),
+    ]);
+  });
+
+  it("builds the Product Search price facet on the discount-aware amount", () => {
+    expect(buildProductSearchFacets(schema, [{ name: "price" }])).toEqual([
+      {
+        ranges: expect.objectContaining({
+          name: "price",
+          field: "variants.prices.currentCentAmount",
+        }),
+      },
     ]);
   });
 
@@ -90,6 +146,89 @@ describe("facet helpers", () => {
         buckets: [{ key: "blue", label: "blue", count: 2 }],
       },
     ]);
+  });
+
+  describe("price chips and buckets agree for the request currency", () => {
+    /** Range bounds sent to commercetools for a chip's filters. */
+    function queryBounds(filters: InterpretedSearchFilters, currency: string) {
+      const body = buildProductSearchRequest({
+        interpreted: { searchTerms: ["x"], interpretation: "x", filters },
+        catalogLocale: "en",
+        options: { currency },
+      });
+      const found: Array<Record<string, unknown>> = [];
+      const walk = (node: unknown): void => {
+        if (Array.isArray(node)) return node.forEach(walk);
+        if (!node || typeof node !== "object") return;
+        const record = node as Record<string, unknown>;
+        if (record.range) found.push(record.range as Record<string, unknown>);
+        Object.values(record).forEach(walk);
+      };
+      walk(body.query);
+      return found[0];
+    }
+
+    it.each([
+      ["JPY", "5000", "10000"],
+      ["KWD", "5", "10"],
+      ["EUR", "50", "100"],
+    ])("%s chip round-trips to its bucket", (currency, majorLow, majorHigh) => {
+      const under = toggleFacetFilter({}, "price", "under-50", currency);
+      expect(under).toEqual({ priceMax: majorLow });
+      expect(isFacetFilterSelected(under, "price", "under-50", currency)).toBe(true);
+      expect(priceBucketKeyFromFilters(under, currency)).toBe("under-50");
+      // The query bound equals the facet bucket bound (minor units).
+      expect(queryBounds(under, currency)).toMatchObject({ lte: 5_000 });
+
+      const mid = toggleFacetFilter({}, "price", "50-to-100", currency);
+      expect(mid).toEqual({ priceMin: majorLow, priceMax: majorHigh });
+      expect(priceBucketKeyFromFilters(mid, currency)).toBe("50-to-100");
+      expect(queryBounds(mid, currency)).toMatchObject({ gte: 5_000, lte: 10_000 });
+
+      expect(toggleFacetFilter(under, "price", "under-50", currency)).toEqual({});
+    });
+
+    it("EUR is unchanged and a missing currency keeps the 2-digit behavior", () => {
+      expect(toggleFacetFilter({}, "price", "under-50")).toEqual({ priceMax: "50" });
+      expect(toggleFacetFilter({}, "price", "under-50", "EUR")).toEqual({ priceMax: "50" });
+      expect(priceBucketKeyFromFilters({ priceMin: "50", priceMax: "100" }, "EUR")).toBe(
+        "50-to-100",
+      );
+      expect(DEFAULT_PRICE_RANGES.map((range) => range.key)).toEqual([
+        "under-50",
+        "50-to-100",
+        "100-plus",
+      ]);
+    });
+
+    it("a JPY selection is not active for the unscaled 2-digit values", () => {
+      expect(isFacetFilterSelected({ priceMax: "50" }, "price", "under-50", "JPY")).toBe(false);
+    });
+
+    it("normalized price group carries the currency and the selected key", () => {
+      // Product Search echoes the request range `key` on each bucket.
+      const [group] = normalizeProductSearchFacets(
+        [{ name: "price", buckets: [{ key: "under-50", count: 2 }] }],
+        schema,
+        [{ name: "price" }],
+        { priceMax: "5000" },
+        "JPY",
+      );
+      expect(group).toMatchObject({ id: "price", currency: "JPY", selectedKey: "under-50" });
+      expect(group?.buckets).toEqual([{ key: "under-50", label: "under-50", count: 2 }]);
+    });
+
+    it("a Projection Search range bucket maps to the under-50 chip by its bounds", () => {
+      const [group] = normalizeProductSearchFacets(
+        { price: { type: "range", ranges: [{ to: 5_000, count: 4 }] } },
+        schema,
+        [{ name: "price" }],
+        { priceMax: "50" },
+        "EUR",
+      );
+      expect(group?.buckets).toEqual([{ key: "under-50", label: "under-50", count: 4 }]);
+      expect(group?.selectedKey).toBe("under-50");
+    });
   });
 
   it("maps price bucket keys to priceMin/priceMax filters", () => {
@@ -205,5 +344,38 @@ describe("facet helpers", () => {
         { priceMax: "50" },
       )[0]?.selectedKey,
     ).toBe("under-50");
+  });
+});
+
+describe("category labels", () => {
+  it("category bucket label is the localized name", () => {
+    const groups = normalizeProductSearchFacets(
+      [
+        {
+          name: "categories",
+          buckets: [
+            { key: "cat-1", count: 3 },
+            { key: "cat-2", count: 1 },
+          ],
+        },
+      ],
+      { ...schema, attributes: [] },
+      [{ name: "categories" }],
+    );
+    const labelled = applyCategoryLabels(groups, { "cat-1": "Shoes" });
+    expect(labelled[0]?.buckets).toEqual([
+      { key: "cat-1", label: "Shoes", count: 3 },
+      // No name resolved: the id stays as the label.
+      { key: "cat-2", label: "cat-2", count: 1 },
+    ]);
+  });
+
+  it("leaves non-category groups untouched", () => {
+    const groups = normalizeProductSearchFacets(
+      [{ name: "color", buckets: [{ key: "cat-1", count: 3 }] }],
+      schema,
+      [{ name: "color" }],
+    );
+    expect(applyCategoryLabels(groups, { "cat-1": "Shoes" })).toEqual(groups);
   });
 });

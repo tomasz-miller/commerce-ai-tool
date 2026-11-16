@@ -70,4 +70,15 @@ describe("resolveMissionOptions", () => {
       minConfidence: 1,
     });
   });
+
+  it("request enableMissions=true is ignored when config.missions.enabled is false", () => {
+    expect(resolveMissionOptions({ enabled: false }, true).enabled).toBe(false);
+  });
+
+  it("request enableMissions opts in when the host leaves missions.enabled unset", () => {
+    expect(resolveMissionOptions(undefined, true).enabled).toBe(true);
+    expect(resolveMissionOptions({}, true).enabled).toBe(true);
+    expect(resolveMissionOptions({ enabled: true }, undefined).enabled).toBe(true);
+    expect(resolveMissionOptions({ enabled: true }, false).enabled).toBe(false);
+  });
 });

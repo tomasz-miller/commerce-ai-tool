@@ -17,15 +17,25 @@ export default defineConfig({
   webServer: externalBaseUrl
     ? undefined
     : {
-        command: `node_modules/.bin/ng serve --port ${e2ePort} --proxy-config proxy.e2e.json`,
+        // The widget comes from the linked packages/angular/dist. Angular's persistent build cache
+        // (.angular/cache) can keep serving a previous build of it, so every run starts from an
+        // empty cache (`ng cache clean`) and its own server: a stale cache or an old server on this
+        // port would make the suite test an old widget. Set PLAYWRIGHT_BASE_URL to use your own.
+        command: `node_modules/.bin/ng cache clean && node_modules/.bin/ng serve --port ${e2ePort} --proxy-config proxy.e2e.json`,
         url: e2eBaseUrl,
-        reuseExistingServer: !process.env.CI,
+        reuseExistingServer: false,
         timeout: 180_000,
       },
   projects: [
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      use: {
+        ...devices["Desktop Chrome"],
+        // A synthetic camera for the camera overlay test; other tests never ask for one.
+        launchOptions: {
+          args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"],
+        },
+      },
     },
   ],
 });

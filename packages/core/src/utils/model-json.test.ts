@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  extractJsonObjectLiteral,
-  parseModelJson,
-  repairTruncatedJsonObject,
-} from "./model-json.js";
+import { extractJsonObjectLiteral, parseModelJson } from "./model-json.js";
 
 describe("extractJsonObjectLiteral", () => {
   it("extracts JSON from markdown fences", () => {
@@ -22,34 +18,6 @@ describe("extractJsonObjectLiteral", () => {
   });
 });
 
-describe("repairTruncatedJsonObject", () => {
-  it("closes an unterminated string and object", () => {
-    const raw = '{"transcript":"szukam butów","interpretation":"użytkownik szuka';
-    expect(repairTruncatedJsonObject(raw)).toBe(
-      '{"transcript":"szukam butów","interpretation":"użytkownik szuka"}',
-    );
-  });
-
-  it("fills a dangling colon before closing the object", () => {
-    expect(repairTruncatedJsonObject('{\n  "transcript":')).toBe(
-      '{\n  "transcript": null}',
-    );
-  });
-
-  it("fills an empty value before an existing closing brace", () => {
-    expect(repairTruncatedJsonObject('{\n  "transcript":}')).toBe(
-      '{\n  "transcript": null}',
-    );
-  });
-
-  it("does not rewrite colons that appear inside string values", () => {
-    const raw = '{"interpretation":"use :} carefully","transcript":';
-    expect(repairTruncatedJsonObject(raw)).toBe(
-      '{"interpretation":"use :} carefully","transcript": null}',
-    );
-  });
-});
-
 describe("parseModelJson", () => {
   it("parses fenced JSON payloads", () => {
     const result = parseModelJson<{ searchTerms: string[] }>(
@@ -59,21 +27,22 @@ describe("parseModelJson", () => {
     expect(result.searchTerms).toEqual(["tapetkniv"]);
   });
 
-  it("repairs truncated JSON objects", () => {
-    const result = parseModelJson<{ transcript: string; enhancedQuery: string }>(
-      '{"transcript":"czerwone buty","enhancedQuery":"czerwone buty","searchTerms":["sko"],"interpretation":"Looking for',
-    );
-
-    expect(result.transcript).toBe("czerwone buty");
-    expect(result.enhancedQuery).toBe("czerwone buty");
+  it("rejects truncated JSON instead of repairing it", () => {
+    expect(() =>
+      parseModelJson(
+        '{"transcript":"czerwone buty","enhancedQuery":"czerwone buty","searchTerms":["sko"],"interpretation":"Looking for',
+      ),
+    ).toThrow("malformed JSON");
   });
 
-  it("repairs truncation right after a property colon", () => {
-    const result = parseModelJson<{ transcript: string | null }>(
-      '{\n  "transcript":',
-    );
+  it("rejects truncation right after a property colon", () => {
+    expect(() => parseModelJson('{\n  "transcript":')).toThrow("malformed JSON");
+  });
 
-    expect(result.transcript).toBeNull();
+  it("still accepts complete JSON wrapped in prose", () => {
+    expect(
+      parseModelJson<{ searchTerms: string[] }>('Sure: {"searchTerms":["boots"]} hope that helps'),
+    ).toEqual({ searchTerms: ["boots"] });
   });
 
   it("throws a clear error for invalid JSON", () => {

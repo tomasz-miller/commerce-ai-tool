@@ -8,29 +8,42 @@ on:
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
 permissions:
-  contents: write
-  pull-requests: write
-  id-token: write
+  contents: read
 
 jobs:
+  verify:
+    # Same gates as CI (lint, typecheck, test, build, package checks, e2e)
+    # with read-only permissions. Nothing is published unless this passes.
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
   release:
+    needs: verify
+    # Never publish from a feature branch (workflow_dispatch can target any ref).
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: pnpm
 
       # npm 11 supports trusted publishing and avoids npm 12's array-wrapped
       # registry responses, which are not yet handled by pnpm registry queries.
+      # Pinned to an exact version; bump deliberately.
       - name: Upgrade npm for trusted publishing
-        run: npm install -g npm@^11.5.1
+        run: npm install -g npm@11.21.2
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -39,7 +52,7 @@ jobs:
         run: pnpm build
 
       - name: Create Release Pull Request or Publish
-        uses: changesets/action@v2
+        uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
         with:
           publish-script: pnpm exec changeset publish
           pr-title: Version packages

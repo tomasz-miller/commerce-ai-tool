@@ -1,4 +1,5 @@
 import {
+  useId,
   useMemo,
   useState,
   useTransition,
@@ -10,6 +11,7 @@ import {
   resolveCommerceAISearchMessages,
   type CheckoutAddress,
   type CommerceAISearchMessages,
+  type ResolvedCommerceAISearchMessages,
   type OrderSnapshot,
   type PaymentMethodOption,
   type PaymentSnapshot,
@@ -18,9 +20,18 @@ import {
 } from "@commerce-ai-tool/core/client";
 import { useCart } from "../hooks/useCart.js";
 import { ICON_STROKE } from "../icons.js";
+import { countryLabel } from "../utils/country-label.js";
+import {
+  CheckoutRoot,
+  Heading,
+  PageLink,
+  headingTags,
+  type CommerceAIPageOptions,
+  type HeadingTag,
+} from "./checkout-shell.js";
 import "@commerce-ai-tool/styles/commerce-ai-search.css";
 
-export interface CommerceAICheckoutProps {
+export interface CommerceAICheckoutProps extends CommerceAIPageOptions {
   apiBaseUrl: string;
   theme?: ThemeMode;
   catalogLocale?: string;
@@ -34,7 +45,7 @@ export interface CommerceAICheckoutProps {
 
 interface AddressFieldsProps {
   address: CheckoutAddress;
-  messages: CommerceAISearchMessages;
+  messages: ResolvedCommerceAISearchMessages;
   prefix: string;
   locale?: string;
   onChange: (address: CheckoutAddress) => void;
@@ -68,18 +79,6 @@ function checkoutCountryCodes(selected: string): string[] {
     codes.add(normalized);
   }
   return [...codes].sort();
-}
-
-function countryLabel(code: string, locale = "en"): string {
-  try {
-    return new Intl.DisplayNames([locale, "en"], { type: "region" }).of(code) ?? code;
-  } catch {
-    try {
-      return new Intl.DisplayNames(["en"], { type: "region" }).of(code) ?? code;
-    } catch {
-      return code;
-    }
-  }
 }
 
 function createEmptyAddress(country: string): CheckoutAddress {
@@ -202,16 +201,18 @@ function AddressFields({
 function OrderSummary({
   cart,
   messages,
+  headingTag,
 }: {
   cart: NonNullable<ReturnType<typeof useCart>["cart"]>;
-  messages: CommerceAISearchMessages;
+  messages: ResolvedCommerceAISearchMessages;
+  headingTag: HeadingTag;
 }) {
   return (
     <section className="cat-checkout__bezel cat-checkout__summary">
       <div className="cat-checkout__core">
         <div className="cat-checkout__section-heading">
           <Package size={18} strokeWidth={ICON_STROKE} aria-hidden="true" />
-          <h2>{messages.orderSummary}</h2>
+          <Heading tag={headingTag}>{messages.orderSummary}</Heading>
         </div>
         <ul className="cat-checkout__items">
           {cart.lineItems.map((item) => (
@@ -285,12 +286,18 @@ export function CommerceAICheckout({
   continueShoppingHref = "/",
   orderStatusHref = "/orders",
   onOrderPlaced,
+  as,
+  headingLevel = 2,
+  renderLink,
 }: CommerceAICheckoutProps) {
   const messages = useMemo(
     () => resolveCommerceAISearchMessages(messageOverrides),
     [messageOverrides],
   );
-  const cart = useCart({ apiBaseUrl, catalogLocale, currency, country });
+  const cart = useCart({ apiBaseUrl, catalogLocale, currency, country, messages });
+  const placeOrderHintId = useId();
+  const titleId = useId();
+  const tags = headingTags(headingLevel);
   const [shippingAddress, setShippingAddress] = useState(() =>
     createEmptyAddress(country),
   );
@@ -387,51 +394,62 @@ export function CommerceAICheckout({
 
   if (order) {
     return (
-      <main className="cat-root cat-checkout" data-theme={theme}>
+      <CheckoutRoot as={as} theme={theme} titleId={titleId}>
         <section className="cat-checkout__success cat-checkout__bezel">
           <div className="cat-checkout__core">
             <span className="cat-checkout__success-icon" aria-hidden="true">
               <Check size={24} strokeWidth={ICON_STROKE} />
             </span>
             <p className="cat-checkout__eyebrow">{messages.checkout}</p>
-            <h1>{messages.orderPlaced}</h1>
+            <Heading tag={tags.title} id={titleId}>
+              {messages.orderPlaced}
+            </Heading>
             <strong>{order.orderNumber ?? order.id}</strong>
             {(order.orderNumber || order.id) && orderStatusHref ? (
-              <a
+              <PageLink
+                renderLink={renderLink}
                 className="cat-checkout__back"
                 href={`${orderStatusHref}?orderNumber=${encodeURIComponent(order.orderNumber ?? order.id)}`}
               >
                 {messages.viewOrderStatus}
-              </a>
+              </PageLink>
             ) : null}
-            <a className="cat-checkout__back" href={continueShoppingHref}>
+            <PageLink
+              renderLink={renderLink}
+              className="cat-checkout__back"
+              href={continueShoppingHref}
+            >
               <ArrowLeft size={15} strokeWidth={ICON_STROKE} aria-hidden="true" />
               {messages.continueShopping}
-            </a>
+            </PageLink>
           </div>
         </section>
-      </main>
+      </CheckoutRoot>
     );
   }
 
   if (!cart.cart) {
     return (
-      <main className="cat-root cat-checkout" data-theme={theme}>
+      <CheckoutRoot as={as} theme={theme} titleId={titleId}>
         <section className="cat-checkout__empty cat-checkout__bezel">
           <div className="cat-checkout__core">
             <Package size={24} strokeWidth={ICON_STROKE} aria-hidden="true" />
-            <h1>
+            <Heading tag={tags.title} id={titleId}>
               {cart.isLoading || !cart.anonymousId
                 ? messages.searching
                 : messages.emptyCart}
-            </h1>
-            <a className="cat-checkout__back" href={continueShoppingHref}>
+            </Heading>
+            <PageLink
+              renderLink={renderLink}
+              className="cat-checkout__back"
+              href={continueShoppingHref}
+            >
               <ArrowLeft size={15} strokeWidth={ICON_STROKE} aria-hidden="true" />
               {messages.continueShopping}
-            </a>
+            </PageLink>
           </div>
         </section>
-      </main>
+      </CheckoutRoot>
     );
   }
 
@@ -459,10 +477,12 @@ export function CommerceAICheckout({
     : undefined;
 
   return (
-    <main className="cat-root cat-checkout" data-theme={theme}>
+    <CheckoutRoot as={as} theme={theme} titleId={titleId}>
       <header className="cat-checkout__intro">
         <p className="cat-checkout__eyebrow">{messages.checkout}</p>
-        <h1>{messages.checkoutTitle}</h1>
+        <Heading tag={tags.title} id={titleId}>
+          {messages.checkoutTitle}
+        </Heading>
         <ol className="cat-checkout__steps">
           <li
             className={`cat-checkout__step${hasLoadedShippingMethods ? "" : " cat-checkout__step--current"}`}
@@ -489,12 +509,12 @@ export function CommerceAICheckout({
 
       {cart.error ? (
         <div className="cat-status cat-status--error" role="alert">
-          {cart.error || messages.checkoutFailed}
+          {cart.error}
         </div>
       ) : null}
 
       <div className="cat-checkout__layout">
-        <OrderSummary cart={cart.cart} messages={messages} />
+        <OrderSummary cart={cart.cart} messages={messages} headingTag={tags.section} />
 
         <div className="cat-checkout__flow">
           <form
@@ -504,7 +524,7 @@ export function CommerceAICheckout({
             <div className="cat-checkout__core">
               <div className="cat-checkout__section-heading">
                 <MapPin size={18} strokeWidth={ICON_STROKE} aria-hidden="true" />
-                <h2>{messages.shippingAddress}</h2>
+                <Heading tag={tags.section}>{messages.shippingAddress}</Heading>
               </div>
               <AddressFields
                 address={shippingAddress}
@@ -523,7 +543,7 @@ export function CommerceAICheckout({
               </label>
               {!billingMatchesShipping ? (
                 <div className="cat-checkout__billing">
-                  <h3>{messages.billingAddress}</h3>
+                  <Heading tag={tags.subsection}>{messages.billingAddress}</Heading>
                   <AddressFields
                     address={billingAddress}
                     messages={messages}
@@ -548,7 +568,7 @@ export function CommerceAICheckout({
             <div className="cat-checkout__core">
               <div className="cat-checkout__section-heading">
                 <Package size={18} strokeWidth={ICON_STROKE} aria-hidden="true" />
-                <h2>{messages.shippingMethod}</h2>
+                <Heading tag={tags.section}>{messages.shippingMethod}</Heading>
               </div>
               {shippingMethods.length > 0 ? (
                 <div
@@ -579,7 +599,7 @@ export function CommerceAICheckout({
             <div className="cat-checkout__core">
               <div className="cat-checkout__section-heading">
                 <CreditCard size={18} strokeWidth={ICON_STROKE} aria-hidden="true" />
-                <h2>{messages.paymentMethod}</h2>
+                <Heading tag={tags.section}>{messages.paymentMethod}</Heading>
               </div>
               <div
                 className="cat-checkout__shipping-methods"
@@ -626,7 +646,7 @@ export function CommerceAICheckout({
           disabled={!canPlaceOrder || checkoutBusy}
           onClick={placeOrder}
           aria-busy={checkoutBusy && canPlaceOrder ? true : undefined}
-          aria-describedby={placeOrderHint ? "cat-checkout-place-hint" : undefined}
+          aria-describedby={placeOrderHint ? placeOrderHintId : undefined}
         >
           <span>{isPlacingOrder ? messages.placingOrder : messages.placeOrder}</span>
           <span className="cat-checkout-cta__icon" aria-hidden="true">
@@ -634,11 +654,11 @@ export function CommerceAICheckout({
           </span>
         </button>
         {placeOrderHint ? (
-          <p id="cat-checkout-place-hint" className="cat-checkout__place-hint">
+          <p id={placeOrderHintId} className="cat-checkout__place-hint">
             {placeOrderHint}
           </p>
         ) : null}
       </div>
-    </main>
+    </CheckoutRoot>
   );
 }

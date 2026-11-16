@@ -1,6 +1,7 @@
 import type { Cart, Payment, PaymentReference, Transaction } from "@commercetools/platform-sdk";
 import type { PaymentSnapshot } from "../types/index.js";
 import { formatMoney } from "./cart.js";
+import { commercetoolsErrorParts } from "./sdk-error.js";
 
 export function mapPaymentStatus(
   transactions: Transaction[] | undefined,
@@ -88,15 +89,20 @@ export function mapCartPayments(cart: Cart, locale: string): PaymentSnapshot[] |
 
 export type CartPaymentCoverage = "ok" | "missing" | "mismatch";
 
-export async function resolveCartPaymentCoverage(
+/** Payments linked to the cart: expanded objects are used as is, the rest are fetched once. */
+export async function loadCartPayments(
   cart: Cart,
   getPaymentById: (id: string) => Promise<Payment>,
-): Promise<CartPaymentCoverage> {
+): Promise<Payment[]> {
   const refs = cart.paymentInfo?.payments ?? [];
+  return Promise.all(
+    refs.map(async (ref) => resolveExpandedPayment(ref) ?? (await getPaymentById(ref.id))),
+  );
+}
+
+export function resolveCartPaymentCoverage(payments: Payment[], cart: Cart): CartPaymentCoverage {
   let sawSuccess = false;
-  for (const ref of refs) {
-    const expanded = resolveExpandedPayment(ref);
-    const payment = expanded ?? (await getPaymentById(ref.id));
+  for (const payment of payments) {
     if (!paymentHasSuccessfulAuthorization(payment)) {
       continue;
     }
@@ -108,15 +114,9 @@ export async function resolveCartPaymentCoverage(
   return sawSuccess ? "mismatch" : "missing";
 }
 
-export async function resolveOrderPaymentState(
-  cart: Cart,
-  getPaymentById: (id: string) => Promise<Payment>,
-): Promise<"Paid" | "Pending" | undefined> {
-  const refs = cart.paymentInfo?.payments ?? [];
+export function resolveOrderPaymentState(payments: Payment[]): "Paid" | "Pending" | undefined {
   let authorized = false;
-  for (const ref of refs) {
-    const expanded = resolveExpandedPayment(ref);
-    const payment = expanded ?? (await getPaymentById(ref.id));
+  for (const payment of payments) {
     if (paymentHasSuccessfulCharge(payment)) {
       return "Paid";
     }
@@ -128,55 +128,26 @@ export async function resolveOrderPaymentState(
 }
 
 function httpStatus(error: unknown): number | undefined {
-  if (!error || typeof error !== "object") {
-    return undefined;
-  }
-  const candidate = error as {
-    statusCode?: number;
-    body?: { statusCode?: number; errors?: Array<{ code?: string }> };
-  };
-  return candidate.statusCode ?? candidate.body?.statusCode;
+  return commercetoolsErrorParts(error).status;
 }
 
 export function isDuplicateField(error: unknown): boolean {
-  if (httpStatus(error) !== 400) {
+  const { status, codes } = commercetoolsErrorParts(error);
+  if (status !== 400) {
     return false;
   }
-
-  const candidate = error as { body?: { errors?: Array<{ code?: string }> } };
-  return (
-    candidate.body?.errors?.some(
-      (item) => item.code === "DuplicateField" || item.code === "DuplicateFieldWithConflictingResource",
-    ) ?? false
+  return codes.some(
+    (code) => code === "DuplicateField" || code === "DuplicateFieldWithConflictingResource",
   );
 }
 
 export function isResourceNotFound(error: unknown): boolean {
-  if (httpStatus(error) === 404) {
-    return true;
-  }
-  const candidate = error as { body?: { errors?: Array<{ code?: string }> } };
-  return candidate.body?.errors?.some((item) => item.code === "ResourceNotFound") ?? false;
+  const { status, codes } = commercetoolsErrorParts(error);
+  return status === 404 || codes.includes("ResourceNotFound");
 }
 
 function errorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-  if (!error || typeof error !== "object") {
-    return "";
-  }
-  const candidate = error as {
-    message?: string;
-    body?: { message?: string; errors?: Array<{ message?: string }> };
-  };
-  return [
-    candidate.message,
-    candidate.body?.message,
-    ...(candidate.body?.errors?.map((item) => item.message) ?? []),
-  ]
-    .filter((value): value is string => Boolean(value))
-    .join(" ");
+  return commercetoolsErrorParts(error).messages.join(" ");
 }
 
 export function isAnonymousIdAlreadyUsed(error: unknown): boolean {

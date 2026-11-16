@@ -32,41 +32,114 @@ interface CachedSchema {
   schema: ResolvedFacetSchema;
 }
 
-export class FacetSchemaStore {
-  private readonly entries = new Map<string, CachedSchema>();
-  private readonly pending = new Map<string, Promise<ResolvedFacetSchema>>();
+interface CachedProductTypes {
+  expiresAt: number;
+  productTypes: ProductTypeForFacets[];
+}
 
-  constructor(private readonly ttlMs = 10 * 60_000) {}
+/**
+ * Two bounded caches. Product types are loaded once per TTL per project, independent of
+ * locale, options or request volume. Resolved schemas (one per options key) are derived
+ * from that list, so a new locale costs no commercetools call. Resolved schemas live in a
+ * small LRU (`maxEntries`) and never outlive the product type list they came from.
+ */
+export class FacetSchemaStore {
+  private readonly schemas = new Map<string, CachedSchema>();
+  private readonly productTypes = new Map<string, CachedProductTypes>();
+  private readonly pendingSchemas = new Map<string, Promise<ResolvedFacetSchema>>();
+  private readonly pendingProductTypes = new Map<string, Promise<CachedProductTypes>>();
+
+  constructor(
+    private readonly ttlMs = 600_000,
+    private readonly maxEntries = 32,
+  ) {}
 
   async getOrResolve(
     options: FacetSchemaOptions,
     loadProductTypes: () => Promise<ProductTypeForFacets[]>,
   ): Promise<ResolvedFacetSchema> {
     const key = buildSchemaCacheKey(options);
-    const cached = this.entries.get(key);
-    if (cached && cached.expiresAt > Date.now()) {
+    const cached = this.readFresh(this.schemas, key);
+    if (cached) {
       return cached.schema;
     }
 
-    const inFlight = this.pending.get(key);
+    const inFlight = this.pendingSchemas.get(key);
     if (inFlight) {
       return inFlight;
     }
 
-    const request = loadProductTypes()
-      .then((productTypes) => resolveFacetSchema(productTypes, options))
-      .then((schema) => {
-        this.entries.set(key, { schema, expiresAt: Date.now() + this.ttlMs });
+    const request = this.loadProductTypes(options.projectKey, loadProductTypes)
+      .then(({ productTypes, expiresAt }) => {
+        const schema = resolveFacetSchema(productTypes, options);
+        this.store(this.schemas, key, { schema, expiresAt });
         return schema;
       })
-      .finally(() => this.pending.delete(key));
+      .finally(() => this.pendingSchemas.delete(key));
 
-    this.pending.set(key, request);
+    this.pendingSchemas.set(key, request);
     return request;
   }
 
   clear(): void {
-    this.entries.clear();
+    this.schemas.clear();
+    this.productTypes.clear();
+  }
+
+  private loadProductTypes(
+    projectKey: string,
+    load: () => Promise<ProductTypeForFacets[]>,
+  ): Promise<CachedProductTypes> {
+    const cached = this.readFresh(this.productTypes, projectKey);
+    if (cached) {
+      return Promise.resolve(cached);
+    }
+
+    const inFlight = this.pendingProductTypes.get(projectKey);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const request = load()
+      .then((productTypes) => {
+        const entry = { productTypes, expiresAt: Date.now() + this.ttlMs };
+        this.store(this.productTypes, projectKey, entry);
+        return entry;
+      })
+      .finally(() => this.pendingProductTypes.delete(projectKey));
+
+    this.pendingProductTypes.set(projectKey, request);
+    return request;
+  }
+
+  /** Returns a fresh entry and marks it most recently used; deletes an expired one. */
+  private readFresh<T extends { expiresAt: number }>(
+    map: Map<string, T>,
+    key: string,
+  ): T | undefined {
+    const entry = map.get(key);
+    if (!entry) {
+      return undefined;
+    }
+    map.delete(key);
+    if (entry.expiresAt <= Date.now()) {
+      return undefined;
+    }
+    map.set(key, entry);
+    return entry;
+  }
+
+  /** Inserts as most recently used and evicts the least recently used beyond the cap. */
+  private store<T>(map: Map<string, T>, key: string, entry: T): void {
+    map.delete(key);
+    map.set(key, entry);
+    while (map.size > this.maxEntries) {
+      const oldest = map.keys().next();
+      if (oldest.done) {
+        break;
+      }
+      map.delete(oldest.value);
+    }
   }
 }
 
@@ -93,7 +166,8 @@ export function resolveFacetSchema(
         candidates.set(definition.name, definition);
       } else if (
         existing.attributeType !== definition.attributeType ||
-        existing.field !== definition.field
+        existing.field !== definition.field ||
+        existing.fieldType !== definition.fieldType
       ) {
         conflicts.add(definition.name);
       }
@@ -132,16 +206,18 @@ function toFacetAttribute(
     Object.values(attribute.label ?? {})[0] ??
     attribute.name;
   const isEnum = attributeType === "enum" || attributeType === "lenum";
+  const isSet = attribute.type.name === "set";
 
   return {
     name: attribute.name,
     label,
     kind: attributeType === "number" ? "range" : "distinct",
     attributeType,
+    // Per the Product Search attribute table: (set of) enum and lenum are addressed via `.key`.
     field: isEnum
       ? `variants.attributes.${attribute.name}.key`
       : `variants.attributes.${attribute.name}`,
-    fieldType: isEnum ? "enum" : attributeType,
+    fieldType: isSet ? `set_${attributeType}` : attributeType,
   };
 }
 

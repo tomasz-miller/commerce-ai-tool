@@ -1,6 +1,7 @@
 import type { PaymentProvider } from "../payments/types.js";
 
 export type { PaymentMethodOption } from "../payments/types.js";
+export type * from "./api.js";
 
 export type ThemeMode = "auto" | "light" | "dark";
 
@@ -30,16 +31,25 @@ export interface SearchTimeoutsConfig {
   elevenLabsTtsMs?: number;
 }
 
-export const SUGGESTIONS_MIN_PREFIX_LENGTH = 2;
-export const SUGGESTIONS_DEFAULT_LIMIT = 8;
-export const SUGGESTIONS_MAX_LIMIT = 20;
-
 export interface CommercetoolsConfig {
   projectKey: string;
   clientId: string;
   clientSecret: string;
   region: string;
+  /**
+   * OAuth scopes requested for the access token, in the `scope:projectKey` form (for example
+   * `view_published_products:my-project`). When unset or empty the scope parameter is omitted and
+   * the token gets exactly the scopes of the API client created in the Merchant Center. Create
+   * that client with the least-privilege list in docs/CONFIGURATION.md. Env: `CTP_SCOPES`.
+   */
   scopes?: string[];
+  /**
+   * Opt in to the deprecated Product Projection Search fallback when Product Search is not
+   * enabled on the project. Default `false` since 3.0.0: the search then fails with an error that
+   * says to enable Product Search. `true` allows the fallback, with a one-time deprecation
+   * warning. Env: `CAT_LEGACY_PRODUCT_PROJECTION_SEARCH`.
+   */
+  legacyProductProjectionSearch?: boolean;
 }
 
 export interface OpenRouterConfig {
@@ -87,6 +97,17 @@ export interface CommerceAIDefaults {
   country?: string;
 }
 
+/**
+ * Server-side price-scope policy for carts. When set, the host ignores client-supplied
+ * `currency` and `country` values outside the policy and falls back to `defaults`.
+ */
+export interface CartPolicy {
+  /** ISO 3166-1 alpha-2 codes a cart may use for price selection and shipping. */
+  allowedCountries?: string[];
+  /** ISO 4217 currency per country code, for example `{ DE: "EUR", CH: "CHF" }`. */
+  currencyByCountry?: Record<string, string>;
+}
+
 export interface PaymentConfig {
   provider?: PaymentProvider;
   /** Block order creation without a successful authorization. Defaults to true when a provider is set. */
@@ -107,6 +128,22 @@ export interface LangfuseConfig {
   promptLabel?: string;
   /** Client-side prompt cache TTL in seconds (default 60). From LANGFUSE_PROMPT_CACHE_TTL_SECONDS or this field. */
   promptCacheTtlSeconds?: number;
+  /**
+   * Upper bound in milliseconds for one prompt fetch (default 2000). On timeout or error the local prompt
+   * is used and the fetch is not retried for 30 s. From LANGFUSE_PROMPT_FETCH_TIMEOUT_MS or this field.
+   */
+  promptFetchTimeoutMs?: number;
+  /** Retries of a failed prompt fetch inside the SDK (default 0; `0` disables retries). From LANGFUSE_PROMPT_MAX_RETRIES or this field. */
+  promptMaxRetries?: number;
+}
+
+export interface VoiceConfig {
+  /**
+   * Opt-in. When true, the spoken summary (`ttsText`) is written by the LLM
+   * (`summarizeVoiceResults`, one extra call per voice search). Default: the deterministic
+   * `buildTtsSummaryFallback` sentence, no LLM call. From `CAT_VOICE_LLM_SUMMARY=true`.
+   */
+  llmSummary?: boolean;
 }
 
 export interface MissionsConfig {
@@ -120,18 +157,60 @@ export interface MissionsConfig {
   minConfidence?: number;
 }
 
+/** Customer cart session token settings. */
+export interface CartSessionConfig {
+  /**
+   * HMAC secret for customer cart session tokens. From `CAT_CART_SESSION_SECRET` when loading from
+   * env. Whenever it is set it must be at least 32 bytes (UTF-8, trimmed), in every environment.
+   * It may be omitted only when `NODE_ENV` is `development` or `test`, which then use a random
+   * per-process secret (sessions end on restart) with a warning; with any other `NODE_ENV`,
+   * including unset, `createCommerceAIServer` throws. The commercetools client secret is never
+   * used.
+   */
+  secret?: string;
+  /**
+   * Called for every validly signed, unexpired session token before it is trusted (cart,
+   * checkout, payment, orders). Return `true` to reject the token with 401 `SESSION_INVALID`.
+   * `iat` is the token's issue time in seconds. Errors thrown here fail the request (500).
+   */
+  isRevoked?: (payload: { customerId: string; iat: number }) => boolean | Promise<boolean>;
+  /**
+   * Called by `POST /cart/logout` when the request carries a valid, unrevoked session token in
+   * the `x-commerce-ai-cart-session` header, for example to add the token to a denylist that
+   * `isRevoked` reads. Not called for logout without a token or with an invalid one.
+   */
+  onLogout?: (payload: { customerId: string; iat: number; exp: number }) => void | Promise<void>;
+}
+
 export interface CommerceAIConfig {
   commercetools: CommercetoolsConfig;
   ai: AIConfig;
   elevenlabs?: ElevenLabsConfig;
   defaults?: CommerceAIDefaults;
+  /**
+   * Locales the host accepts from clients (BCP 47, for example `["en-GB", "de-DE"]`).
+   * Enforced by `@commerce-ai-tool/server` on catalog locales only: any other `catalogLocale`
+   * falls back to the default. `queryLocale` (the shopper's language) is never restricted by this
+   * list. Invalid entries are dropped with a warning. When omitted, only well-formed locales are
+   * required.
+   */
+  supportedLocales?: string[];
   voiceMode?: VoiceMode;
+  /** Voice search options. See {@link VoiceConfig}. */
+  voice?: VoiceConfig;
   cache?: SearchCacheConfig;
   timeouts?: SearchTimeoutsConfig;
   facets?: FacetConfig;
   langfuse?: LangfuseConfig;
   payments?: PaymentConfig;
   missions?: MissionsConfig;
+  /**
+   * Restricts the cart currency and country to server policy. Unset: body values are used
+   * and fall back to `defaults`. See docs/CART-AND-CHECKOUT.md.
+   */
+  cartPolicy?: CartPolicy;
+  /** Customer cart session settings. See {@link CartSessionConfig}. */
+  cartSession?: CartSessionConfig;
 }
 
 export interface ProductCard {
@@ -140,9 +219,13 @@ export interface ProductCard {
   name: string;
   description?: string;
   imageUrl?: string;
-  /** SKU of the master variant — used for add-to-cart. */
+  /**
+   * SKU used for add-to-cart: the first matching variant when Product Search matched only some
+   * variants of the product (for example the red variant for a red filter), else the master
+   * variant. `imageUrl` and `price` come from the same variant.
+   */
   sku?: string;
-  /** Master variant id — fallback when `sku` is missing. */
+  /** Id of the same variant as `sku` — fallback when `sku` is missing. */
   variantId?: number;
   price?: {
     amount: number;
@@ -245,12 +328,6 @@ export interface CustomerSnapshot {
   email: string;
 }
 
-/** HMAC cart session header for GET /cart — never send the token in the query string. */
-export const CART_SESSION_HEADER = "x-commerce-ai-cart-session";
-
-/** Upper bound for a single add-to-cart line quantity (mission add-all and batch add). */
-export const MAX_LINE_ITEM_QUANTITY = 99;
-
 export interface CartLoginRequest {
   email: string;
   password: string;
@@ -302,7 +379,6 @@ export interface CartMutationRequest {
   customerId?: string;
   lineItemId: string;
   cartId?: string;
-  cartVersion?: number;
   catalogLocale?: string;
   sessionToken?: string;
 }
@@ -406,6 +482,8 @@ export interface SearchResult {
 export interface SuggestionsRequest extends SearchLocaleOptions {
   query: string;
   limit?: number;
+  /** Aborts the commercetools and AI steps that have not finished yet. */
+  signal?: AbortSignal;
 }
 
 export interface SuggestionsResult {
@@ -434,8 +512,24 @@ export interface TextSearchRequest {
   includeFacets?: boolean;
   /** AI-suggested facets from the active search session (chip refine). */
   suggestedFacets?: SuggestedFacet[];
+  /**
+   * Facet chips the shopper selected (`SearchFacetGroup.id` to `SearchFacetBucket.key` values).
+   * When present, every listed group's key in `filters` goes to Product Search `postFilter`; when
+   * absent, only the `categories` group does. See `SearchRequestBody.facetSelections`.
+   */
+  facetSelections?: Record<string, string[]>;
   /** Per-request override of `CommerceAIConfig.missions.enabled`. */
   enableMissions?: boolean;
+  /**
+   * Client-generated, non-personal id (at most 200 characters) that groups a widget session's
+   * requests into one Langfuse session. Handled by the server adapters; the orchestrator ignores it.
+   */
+  widgetSessionId?: string;
+  /**
+   * Aborts the steps that have not finished yet, including in-flight AI calls. Server adapters
+   * pass the host request's signal. Never serialised or cached.
+   */
+  signal?: AbortSignal;
 }
 
 export interface SearchLocaleOptions {
@@ -559,6 +653,12 @@ export interface SearchFacetGroup {
   type: "distinct" | "range";
   buckets: SearchFacetBucket[];
   selectedKey?: string;
+  /**
+   * ISO 4217 currency of the search. Set on the `price` group so chip helpers can convert
+   * bucket bounds to major units. Pass it as the `currency` argument of
+   * `toggleFacetFilter` / `isFacetFilterSelected`.
+   */
+  currency?: string;
 }
 
 export interface SearchSessionState {
@@ -575,5 +675,7 @@ export interface VoiceAudioInterpretation extends InterpretedSearchQuery {
   enhancedQuery: string;
 }
 
-/** @deprecated Use ProductSearchRequest from query-builder / platform-sdk */
-export type { ProductSearchRequest as ProductSearchQueryBody } from "@commercetools/platform-sdk";
+/** One structured call over an STT transcript: the cleaned query plus the interpreted search. */
+export interface VoiceTranscriptInterpretation extends InterpretedSearchQuery {
+  enhancedQuery: string;
+}

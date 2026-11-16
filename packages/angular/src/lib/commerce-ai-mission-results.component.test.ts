@@ -1,11 +1,10 @@
-import "zone.js";
-import "zone.js/testing";
+import { provideZonelessChangeDetection } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import { BrowserTestingModule, platformBrowserTesting } from "@angular/platform-browser/testing";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { resolveCommerceAISearchMessages } from "@commerce-ai-tool/core/client";
 import type { AddToCartLineItem, MissionSearchResult } from "@commerce-ai-tool/core/client";
-import { CommerceAiMissionResultsComponent } from "./commerce-ai-mission-results.component.js";
+import { CommerceAiMissionResultsComponent } from "./commerce-ai-mission-results.component";
 
 const messages = resolveCommerceAISearchMessages();
 
@@ -56,17 +55,18 @@ describe("CommerceAiMissionResultsComponent", () => {
   }) {
     await TestBed.configureTestingModule({
       imports: [CommerceAiMissionResultsComponent],
+      providers: [provideZonelessChangeDetection()],
     }).compileComponents();
 
     const fixture = TestBed.createComponent(CommerceAiMissionResultsComponent);
-    fixture.componentInstance.mission = options?.mission ?? mission;
-    fixture.componentInstance.messages = messages;
-    fixture.componentInstance.enableCart = options?.enableCart ?? true;
-    fixture.componentInstance.isMutating = false;
+    fixture.componentRef.setInput("mission", options?.mission ?? mission);
+    fixture.componentRef.setInput("messages", messages);
+    fixture.componentRef.setInput("enableCart", options?.enableCart ?? true);
+    fixture.componentRef.setInput("isMutating", false);
     if (options?.bindProductSelect) {
       fixture.componentInstance.productSelect.subscribe(() => undefined);
     }
-    fixture.detectChanges();
+    await fixture.whenStable();
     return fixture;
   }
 
@@ -74,8 +74,8 @@ describe("CommerceAiMissionResultsComponent", () => {
     const fixture = await render();
     const onAddAll = vi.fn().mockResolvedValue({ id: "cart-1" });
     fixture.componentInstance.addAll.subscribe(onAddAll);
-    fixture.componentInstance.addAllHandler = onAddAll;
-    fixture.detectChanges();
+    fixture.componentRef.setInput("addAllHandler", onAddAll);
+    await fixture.whenStable();
 
     expect(fixture.nativeElement.textContent).toContain("tennis racket");
     expect(fixture.nativeElement.textContent).toContain("golf balls");
@@ -103,7 +103,7 @@ describe("CommerceAiMissionResultsComponent", () => {
     const onAddItem = vi.fn();
     fixture.componentInstance.productSelect.subscribe(onProductSelect);
     fixture.componentInstance.addItem.subscribe(onAddItem);
-    fixture.detectChanges();
+    await fixture.whenStable();
 
     const nameButtons = Array.from(
       fixture.nativeElement.querySelectorAll(".cat-result-card__select"),
@@ -112,10 +112,37 @@ describe("CommerceAiMissionResultsComponent", () => {
     expect(onProductSelect).toHaveBeenCalledWith(expect.objectContaining({ id: "p2", sku: "RACKET-2" }));
 
     const addButtons = Array.from(
-      fixture.nativeElement.querySelectorAll('[aria-label="Add to cart"]'),
+      fixture.nativeElement.querySelectorAll('[aria-label="Add Club Racket to cart"]'),
     ) as HTMLButtonElement[];
-    addButtons[1]?.click();
+    addButtons[0]?.click();
     expect(onAddItem).toHaveBeenCalledWith(expect.objectContaining({ id: "p2", sku: "RACKET-2" }));
+  });
+
+  it("add-to-cart button name includes the product name", async () => {
+    const fixture = await render();
+    const labels = Array.from(
+      fixture.nativeElement.querySelectorAll(".cat-result-card__add") as NodeListOf<HTMLElement>,
+    ).map((button) => button.getAttribute("aria-label"));
+
+    expect(labels).toContain("Add Pro Racket to cart");
+    expect(labels).toContain("Add Club Racket to cart");
+    expect(labels).not.toContain("Add to cart");
+  });
+
+  it("leaves the empty-lane state to the widget's live region", async () => {
+    const fixture = await render({
+      enableCart: false,
+      mission: {
+        interpretation: "partial",
+        intents: [
+          { intent: { id: "i0", label: "x", quantity: 1, searchTerms: ["x"] }, products: [], total: 0 },
+          { intent: { id: "i1", label: "y", quantity: 1, searchTerms: ["y"] }, products: [], total: 0, failed: true },
+        ],
+      },
+    });
+
+    expect(fixture.nativeElement.querySelectorAll(".cat-status--empty")).toHaveLength(2);
+    expect(fixture.nativeElement.querySelector('[role="status"]')).toBeNull();
   });
 
   it("renders empty and failed intent states", async () => {
@@ -153,8 +180,8 @@ describe("CommerceAiMissionResultsComponent", () => {
     const fixture = await render();
     const emitted: unknown[] = [];
     fixture.componentInstance.addAll.subscribe((items) => emitted.push(items));
-    fixture.componentInstance.addAllHandler = vi.fn().mockResolvedValue(null);
-    fixture.detectChanges();
+    fixture.componentRef.setInput("addAllHandler", vi.fn().mockResolvedValue(null));
+    await fixture.whenStable();
 
     (fixture.nativeElement.querySelector(".cat-mission__add-all") as HTMLButtonElement).click();
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -168,11 +195,14 @@ describe("CommerceAiMissionResultsComponent", () => {
     const emitted: AddToCartLineItem[][] = [];
     const handled: AddToCartLineItem[][] = [];
     fixture.componentInstance.addAll.subscribe((items) => emitted.push(items));
-    fixture.componentInstance.addAllHandler = vi.fn(async (items: AddToCartLineItem[]) => {
-      handled.push(items);
-      return { id: "cart-1" };
-    });
-    fixture.detectChanges();
+    fixture.componentRef.setInput(
+      "addAllHandler",
+      vi.fn(async (items: AddToCartLineItem[]) => {
+        handled.push(items);
+        return { id: "cart-1" };
+      }),
+    );
+    await fixture.whenStable();
 
     (fixture.nativeElement.querySelector(".cat-mission__add-all") as HTMLButtonElement).click();
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -185,14 +215,14 @@ describe("CommerceAiMissionResultsComponent", () => {
 
   it("resets the add-all confirmation when a new mission arrives", async () => {
     const fixture = await render();
-    fixture.componentInstance.addAllHandler = vi.fn().mockResolvedValue({ id: "cart-1" });
-    fixture.detectChanges();
+    fixture.componentRef.setInput("addAllHandler", vi.fn().mockResolvedValue({ id: "cart-1" }));
+    await fixture.whenStable();
 
     (fixture.nativeElement.querySelector(".cat-mission__add-all") as HTMLButtonElement).click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(fixture.componentInstance.justAddedAll).toBe(true);
 
-    fixture.componentInstance.mission = {
+    fixture.componentRef.setInput("mission", {
       interpretation: "new search",
       intents: [
         {
@@ -201,9 +231,11 @@ describe("CommerceAiMissionResultsComponent", () => {
           total: 1,
         },
       ],
-    };
-    fixture.componentInstance.ngOnChanges();
+    });
+    await fixture.whenStable();
+
     expect(fixture.componentInstance.justAddedAll).toBe(false);
+    expect(fixture.nativeElement.querySelector(".cat-mission__add-all--added")).toBeNull();
   });
 
   it("returns the cached bundle while the mission reference is unchanged", async () => {
@@ -211,18 +243,54 @@ describe("CommerceAiMissionResultsComponent", () => {
     expect(fixture.componentInstance.bundleItems).toBe(fixture.componentInstance.bundleItems);
   });
 
+  it("justAddedAll resets after the timeout", async () => {
+    const fixture = await render();
+    fixture.componentRef.setInput("addAllHandler", vi.fn().mockResolvedValue({ id: "cart-1" }));
+    await fixture.whenStable();
+    const addAll = () =>
+      fixture.nativeElement.querySelector(".cat-mission__add-all") as HTMLButtonElement;
+
+    addAll().click();
+
+    // No detectChanges anywhere: the signal alone must re-render the OnPush view, both ways.
+    await vi.waitFor(() => expect(addAll().className).toContain("cat-mission__add-all--added"));
+    expect(addAll().textContent?.trim()).toBe(messages.missionItemsAdded);
+    await vi.waitFor(() => expect(addAll().className).not.toContain("cat-mission__add-all--added"), {
+      timeout: 3000,
+    });
+    expect(addAll().textContent?.trim()).toBe("Add 2 top picks to cart");
+    expect(fixture.componentInstance.justAddedAll).toBe(false);
+  });
+
   it("clears the pending add-all timer on destroy", async () => {
     const fixture = await render();
-    fixture.componentInstance.addAllHandler = vi.fn().mockResolvedValue({ id: "cart-1" });
-    fixture.detectChanges();
+    fixture.componentRef.setInput("addAllHandler", vi.fn().mockResolvedValue({ id: "cart-1" }));
+    await fixture.whenStable();
 
     (fixture.nativeElement.querySelector(".cat-mission__add-all") as HTMLButtonElement).click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(fixture.componentInstance.justAddedAll).toBe(true);
 
     const clearSpy = vi.spyOn(globalThis, "clearTimeout");
-    fixture.componentInstance.ngOnDestroy();
+    fixture.destroy();
     expect(clearSpy).toHaveBeenCalled();
     clearSpy.mockRestore();
+  });
+
+  it("does not start the confirmation timer when the handler resolves after destroy", async () => {
+    const fixture = await render();
+    let release!: (value: unknown) => void;
+    fixture.componentRef.setInput(
+      "addAllHandler",
+      vi.fn(() => new Promise((resolve) => (release = resolve))),
+    );
+    await fixture.whenStable();
+
+    (fixture.nativeElement.querySelector(".cat-mission__add-all") as HTMLButtonElement).click();
+    fixture.destroy();
+    release({ id: "cart-1" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(fixture.componentInstance.justAddedAll).toBe(false);
   });
 });

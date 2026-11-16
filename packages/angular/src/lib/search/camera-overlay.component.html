@@ -1,0 +1,38 @@
+@let t = messages();
+<div class="cat-camera-overlay__panel">
+  @if (error()) {
+    <div class="cat-camera-overlay__error" role="alert">
+      <p>{{ error() }}</p>
+      <button type="button" class="cat-camera-overlay__btn" (click)="errorDismissed.emit()">
+        {{ t.dismiss }}
+      </button>
+    </div>
+  } @else {
+    <video
+      #video
+      class="cat-camera-preview"
+      autoplay
+      playsinline
+      muted
+      [attr.aria-label]="t.cameraPreview"
+    ></video>
+    <div class="cat-camera-actions">
+      <button
+        type="button"
+        class="cat-camera-overlay__btn cat-camera-overlay__btn--secondary"
+        [attr.aria-label]="t.cancel"
+        (click)="closed.emit()"
+      >
+        {{ t.cancel }}
+      </button>
+      <button
+        type="button"
+        class="cat-camera-overlay__btn cat-camera-overlay__btn--primary"
+        [attr.aria-label]="t.capturePhoto"
+        (click)="captured.emit()"
+      >
+        {{ t.capturePhoto }}
+      </button>
+    </div>
+  }
+</div>

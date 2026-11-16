@@ -5,15 +5,22 @@
   --cat-glass-border: rgba(255, 255, 255, 0.28);
   --cat-glass-shadow: 0 24px 80px rgba(15, 18, 40, 0.12);
   --cat-text: #1a1a2e;
-  --cat-text-muted: rgba(26, 26, 46, 0.6);
-  --cat-accent: #6366f1;
-  --cat-accent-hover: #4f46e5;
+  --cat-text-muted: rgba(26, 26, 46, 0.65);
+  --cat-accent: #4f46e5;
+  --cat-accent-hover: #4338ca;
+  --cat-accent-contrast: #ffffff;
+  --cat-error: #b91c1c;
+  --cat-success: #15803d;
   --cat-blur: 20px;
   --cat-radius: 1.25rem;
   --cat-shell-radius: 2rem;
   --cat-input-bg: rgba(255, 255, 255, 0.35);
   --cat-overlay-bg: rgba(255, 255, 255, 0.97);
   --cat-overlay-shadow: 0 24px 80px rgba(15, 18, 40, 0.16);
+  --cat-cart-panel-bg: var(--cat-overlay-bg);
+  --cat-z-dropdown: 20;
+  --cat-z-panel: 25;
+  --cat-z-overlay: 40;
   --cat-border: var(--cat-glass-border);
   --cat-surface: var(--cat-input-bg);
   --cat-max-width: 46rem;
@@ -45,6 +52,9 @@
   --cat-text-muted: rgba(240, 240, 245, 0.6);
   --cat-accent: #818cf8;
   --cat-accent-hover: #a5b4fc;
+  --cat-accent-contrast: #0c0c12;
+  --cat-error: #f87171;
+  --cat-success: #4ade80;
   --cat-input-bg: rgba(255, 255, 255, 0.06);
   --cat-overlay-bg: rgba(12, 12, 18, 0.96);
   --cat-overlay-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
@@ -60,6 +70,9 @@
     --cat-text-muted: rgba(240, 240, 245, 0.6);
     --cat-accent: #818cf8;
     --cat-accent-hover: #a5b4fc;
+    --cat-accent-contrast: #0c0c12;
+    --cat-error: #f87171;
+    --cat-success: #4ade80;
     --cat-input-bg: rgba(255, 255, 255, 0.06);
     --cat-overlay-bg: rgba(12, 12, 18, 0.96);
     --cat-overlay-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
@@ -184,7 +197,7 @@
   top: calc(100% + 0.5rem);
   left: 0;
   right: 0;
-  z-index: 20;
+  z-index: var(--cat-z-dropdown, 20);
   display: flex;
   flex-direction: column;
   gap: 0.125rem;
@@ -195,6 +208,15 @@
   box-shadow: var(--cat-overlay-shadow);
 }
 
+.cat-suggestions__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 .cat-suggestions__status {
   padding: 0.5rem 0.75rem;
   font-size: 0.8125rem;
@@ -202,11 +224,12 @@
 }
 
 .cat-suggestions__status--error {
-  color: var(--cat-error, #b91c1c);
+  color: var(--cat-error);
 }
 
 .cat-suggestions__item {
   display: block;
+  box-sizing: border-box;
   width: 100%;
   padding: 0.5rem 0.75rem;
   border: none;
@@ -566,7 +589,7 @@
 }
 
 .cat-result-card__add--added {
-  color: var(--cat-accent);
+  color: var(--cat-success);
 }
 
 .cat-mission {
@@ -705,8 +728,9 @@
   padding: 0.45rem 1.15rem;
 }
 
-.cat-mission__add-all--added {
-  color: var(--cat-accent);
+.cat-checkout-cta.cat-mission__add-all--added {
+  background: var(--cat-success);
+  color: var(--cat-accent-contrast);
 }
 
 .cat-cart-toggle {
@@ -730,7 +754,7 @@
   padding: 0 0.2rem;
   border-radius: 999px;
   background: var(--cat-accent);
-  color: #fff;
+  color: var(--cat-accent-contrast);
   font-size: 0.5625rem;
   font-weight: 700;
   line-height: 0.95rem;
@@ -740,11 +764,10 @@
 }
 
 .cat-cart-panel {
-  --cat-cart-panel-bg: #ffffff;
   position: absolute;
   top: 4.85rem;
   right: max(0px, calc((100% - min(var(--cat-search-max-width), 100%)) / 2));
-  z-index: 25;
+  z-index: var(--cat-z-panel, 25);
   display: flex;
   flex-direction: column;
   width: 25rem;
@@ -757,16 +780,6 @@
   overflow: hidden;
   isolation: isolate;
   animation: cat-cart-panel-enter 500ms cubic-bezier(0.32, 0.72, 0, 1) both;
-}
-
-.cat-root[data-theme="dark"] .cat-cart-panel {
-  --cat-cart-panel-bg: #0c0c12;
-}
-
-@media (prefers-color-scheme: dark) {
-  .cat-root[data-theme="auto"] .cat-cart-panel {
-    --cat-cart-panel-bg: #0c0c12;
-  }
 }
 
 .cat-cart-panel--with-items {
@@ -1034,7 +1047,7 @@
 
 .cat-cart-panel__input:focus {
   border-color: var(--cat-accent);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cat-accent) 15%, transparent);
 }
 
 .cat-cart-panel__input:disabled,
@@ -1053,7 +1066,7 @@
   border: 1px solid transparent;
   border-radius: 0.5rem;
   background: var(--cat-accent);
-  color: #fff;
+  color: var(--cat-accent-contrast);
   font-size: 0.8125rem;
   font-weight: 500;
   cursor: pointer;
@@ -1142,7 +1155,7 @@
 }
 
 .cat-status--error {
-  color: #ef4444;
+  color: var(--cat-error);
 }
 
 .cat-status--empty {
@@ -1180,6 +1193,19 @@
   display: none;
 }
 
+/* Visible to assistive technology only: the always-mounted live region of each widget. */
+.cat-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 .cat-checkout-cta {
   display: inline-flex;
   width: auto;
@@ -1192,7 +1218,7 @@
   border: 0;
   border-radius: 999px;
   background: var(--cat-accent);
-  color: #fff;
+  color: var(--cat-accent-contrast);
   font: inherit;
   font-weight: 650;
   cursor: pointer;
@@ -1221,8 +1247,8 @@
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.16);
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.18);
+  background: color-mix(in srgb, var(--cat-accent-contrast) 16%, transparent);
+  box-shadow: inset 0 1px 1px color-mix(in srgb, var(--cat-accent-contrast) 18%, transparent);
   transition: transform 500ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 
@@ -1274,9 +1300,10 @@
   color: var(--cat-text);
 }
 
-.cat-checkout__intro h1,
-.cat-checkout__success h1,
-.cat-checkout__empty h1 {
+/* The title tag follows the host's `headingLevel` (h1 to h3), so the style cannot hang on the tag. */
+.cat-checkout__intro :is(h1, h2, h3),
+.cat-checkout__success :is(h1, h2, h3),
+.cat-checkout__empty :is(h1, h2, h3) {
   margin: 0;
   font-size: clamp(2rem, 5vw, 4.25rem);
   line-height: 0.98;
@@ -1339,7 +1366,7 @@
   color: var(--cat-accent);
 }
 
-.cat-checkout__section-heading h2 {
+.cat-checkout__section-heading :is(h2, h3, h4) {
   margin: 0;
   font-size: 0.95rem;
 }
@@ -1461,9 +1488,15 @@
   border-top: 1px solid var(--cat-glass-border);
 }
 
-.cat-checkout__billing h3 {
+.cat-checkout__billing :is(h3, h4, h5) {
   margin: 0 0 0.75rem;
   font-size: 0.8125rem;
+}
+
+/* An unstyled section heading keeps the size of the default <h2> whatever tag it renders as. */
+.cat-checkout__plain-heading {
+  margin: 0.83em 0;
+  font-size: 1.5em;
 }
 
 .cat-checkout__secondary,
@@ -1615,8 +1648,8 @@
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--cat-accent) 15%, transparent);
-  color: var(--cat-accent);
+  background: color-mix(in srgb, var(--cat-success) 15%, transparent);
+  color: var(--cat-success);
 }
 
 .cat-order-status__badges {
@@ -1809,7 +1842,7 @@
 }
 
 .cat-voice-banner--error {
-  border-color: rgba(239, 68, 68, 0.35);
+  border-color: color-mix(in srgb, var(--cat-error) 35%, transparent);
 }
 
 .cat-voice-banner__content {
@@ -1829,7 +1862,7 @@
 }
 
 .cat-voice-banner--error .cat-voice-banner__label {
-  color: #ef4444;
+  color: var(--cat-error);
   white-space: normal;
 }
 
@@ -1872,7 +1905,7 @@
   width: 0.5rem;
   height: 0.5rem;
   border-radius: 50%;
-  background: #ef4444;
+  background: var(--cat-error);
   animation: cat-voice-dot-pulse 1.5s var(--cat-ease) infinite;
 }
 
@@ -1985,12 +2018,34 @@
 .cat-camera-overlay {
   position: fixed;
   inset: 0;
-  z-index: 40;
+  z-index: var(--cat-z-overlay, 40);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 1rem;
   background: rgba(5, 5, 8, 0.62);
+}
+
+/* Both widgets render the overlay as a modal <dialog>: undo the user-agent box (shrink to
+   content, border, margin, system colours, backdrop) so it keeps filling the viewport. */
+dialog.cat-camera-overlay {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  color: inherit;
+}
+
+/* `display: flex` above would otherwise show a dialog that is not open. */
+dialog.cat-camera-overlay:not([open]) {
+  display: none;
+}
+
+dialog.cat-camera-overlay::backdrop {
+  background: transparent;
 }
 
 .cat-camera-overlay__panel {
@@ -2045,11 +2100,11 @@
 .cat-camera-overlay__btn--primary {
   border-color: transparent;
   background: var(--cat-accent);
-  color: #fff;
+  color: var(--cat-accent-contrast);
 }
 
 .cat-camera-overlay__btn--primary:hover {
-  background: color-mix(in srgb, var(--cat-accent) 88%, #000);
+  background: var(--cat-accent-hover);
 }
 
 .cat-camera-overlay__btn--secondary {
@@ -2064,5 +2119,16 @@
 .cat-camera-overlay__error p {
   margin: 0;
   font-size: 0.8125rem;
-  color: #ef4444;
+  color: var(--cat-error);
+}
+
+/* iOS Safari zooms the page when a focused field is below 16px; keep fields at 16px on narrow
+   and touch viewports without disabling pinch zoom. */
+@media (max-width: 36rem), (pointer: coarse) {
+  .cat-search-input,
+  .cat-cart-panel__input,
+  .cat-checkout__field input,
+  .cat-checkout__field select {
+    font-size: max(16px, 1rem);
+  }
 }

@@ -11,7 +11,8 @@ Agent working rules: [AGENTS.md](AGENTS.md).
 1. Create a feature branch from `main`
 2. Keep changes focused and minimal
 3. Update the matching page in `docs/` when APIs or behavior change
-4. Run `pnpm lint && pnpm typecheck && pnpm test && pnpm build` before opening the PR
+4. Run `pnpm lint && pnpm typecheck && pnpm test && pnpm build` before opening the PR, then `pnpm check:package` and `pnpm check:consumer`; run `pnpm test:e2e` too when the change touches a user flow (CI runs all of it)
+5. Add a changeset (`pnpm changeset`) for a user-visible change to a published package
 
 ## Reporting issues
 

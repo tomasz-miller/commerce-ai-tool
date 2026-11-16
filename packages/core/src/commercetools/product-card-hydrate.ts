@@ -8,6 +8,7 @@ import {
   extractGraphQLProductResults,
   mapGraphQLProductsToCards,
   type GraphQLProductCardsData,
+  type MatchedSkus,
   type ProductCardsGraphQLVariables,
 } from "./graphql-product-cards.js";
 
@@ -24,12 +25,15 @@ export interface ProductCardHydrateTransport {
     locale: string;
     currency: string;
     country?: string;
+    /** Product id -> matched variant sku; the card uses that variant instead of the master. */
+    matchedSkus?: MatchedSkus;
   }): Promise<ProductCard[]>;
 }
 
 /**
  * Hydrate ProductCards via GraphQL, falling back to REST on hard failures.
  * Field-level GraphQL errors with a usable `products.results` payload do not trigger fallback.
+ * `matchedSkus` (from Product Search `matchingVariants`) selects the variant each card shows.
  */
 export async function hydrateProductCards(
   transport: ProductCardHydrateTransport,
@@ -37,13 +41,21 @@ export async function hydrateProductCards(
   locale: string,
   currency: string,
   country?: string,
+  matchedSkus: MatchedSkus = {},
 ): Promise<ProductCard[]> {
   if (productIds.length === 0) {
     return [];
   }
 
   try {
-    return await hydrateProductCardsViaGraphQL(transport, productIds, locale, currency, country);
+    return await hydrateProductCardsViaGraphQL(
+      transport,
+      productIds,
+      locale,
+      currency,
+      country,
+      matchedSkus,
+    );
   } catch (error) {
     if (process.env.NODE_ENV !== "production") {
       console.warn(
@@ -51,7 +63,7 @@ export async function hydrateProductCards(
         error instanceof Error ? error.message : error,
       );
     }
-    return transport.rest({ productIds, locale, currency, country });
+    return transport.rest({ productIds, locale, currency, country, matchedSkus });
   }
 }
 
@@ -60,12 +72,19 @@ async function hydrateProductCardsViaGraphQL(
   productIds: string[],
   locale: string,
   currency: string,
-  country?: string,
+  country: string | undefined,
+  matchedSkus: MatchedSkus,
 ): Promise<ProductCard[]> {
   const cards: ProductCard[] = [];
 
   for (const chunk of chunkProductIds(productIds)) {
-    const variables = buildProductCardsGraphQLVariables(chunk, locale, currency, country);
+    const variables = buildProductCardsGraphQLVariables(
+      chunk,
+      locale,
+      currency,
+      country,
+      matchedSkus,
+    );
     logSearchTrace("commercetools", {
       api: "graphql.products",
       productIds: chunk,
@@ -92,7 +111,7 @@ async function hydrateProductCardsViaGraphQL(
     }
 
     const results = extractGraphQLProductResults(decision.data);
-    cards.push(...mapGraphQLProductsToCards(results, chunk, locale));
+    cards.push(...mapGraphQLProductsToCards(results, chunk, locale, matchedSkus));
   }
 
   const orderMap = new Map(productIds.map((id, index) => [id, index]));

@@ -11,8 +11,11 @@ import {
   executeSetCartAddresses,
   executeSetShippingMethod,
 } from "./checkout-actions.js";
-import { ValidationError } from "./route-actions.js";
+import { ValidationError } from "./errors.js";
+import { InvalidCartSessionError, signCartSession } from "./cart-session.js";
 import type { CommerceAIServer } from "./server.js";
+
+const VALID_ORDER_NUMBER = "cat-3f2b8c1e-9d4a-4e6b-8a1c-2b7d9e0f1a3c";
 
 const cart: CartSnapshot = {
   id: "cart-1",
@@ -113,7 +116,7 @@ describe("checkout-actions", () => {
     await expect(
       executeCreateOrder(commerceServer, {
         anonymousId: "anon-1",
-        orderNumber: "cat-request-1",
+        orderNumber: VALID_ORDER_NUMBER,
       }),
     ).resolves.toEqual({ order });
     expect(commerceServer.commercetools.createOrder).toHaveBeenCalledWith({
@@ -121,7 +124,97 @@ describe("checkout-actions", () => {
       customerId: undefined,
       cartId: undefined,
       catalogLocale: "en",
-      orderNumber: "cat-request-1",
+      orderNumber: VALID_ORDER_NUMBER,
     });
+  });
+
+  it("an invalid catalogLocale never turns a successful order into a 500", async () => {
+    const commerceServer = server();
+
+    await expect(
+      executeCreateOrder(commerceServer, {
+        anonymousId: "anon-1",
+        orderNumber: VALID_ORDER_NUMBER,
+        catalogLocale: "en_GB!!",
+      }),
+    ).resolves.toEqual({ order });
+    expect(commerceServer.commercetools.createOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ catalogLocale: "en" }),
+    );
+  });
+
+  it("restricts checkout locales to the configured allowlist", async () => {
+    const commerceServer = { ...server(), supportedLocales: ["en", "de-DE"] };
+
+    await executeGetShippingMethods(commerceServer, {
+      anonymousId: "anon-1",
+      catalogLocale: "de-de",
+    });
+    await executeGetShippingMethods(commerceServer, {
+      anonymousId: "anon-1",
+      catalogLocale: "fr-FR",
+    });
+
+    const calls = vi.mocked(commerceServer.commercetools.getShippingMethods).mock.calls;
+    expect(calls.map(([input]) => input.catalogLocale)).toEqual(["de-DE", "en"]);
+  });
+
+  it('rejects orderNumber \'x" or 1=1\'', async () => {
+    const commerceServer = server();
+
+    for (const orderNumber of ['x" or 1=1', "cat-1", `${VALID_ORDER_NUMBER}x`, "CAT-" + VALID_ORDER_NUMBER.slice(4)]) {
+      await expect(
+        executeCreateOrder(commerceServer, { anonymousId: "anon-1", orderNumber }),
+      ).rejects.toMatchObject({ status: 400, code: "VALIDATION" });
+    }
+    expect(commerceServer.commercetools.createOrder).not.toHaveBeenCalled();
+  });
+
+  it("lets the core generate the order number when none is sent", async () => {
+    const commerceServer = server();
+
+    await executeCreateOrder(commerceServer, { anonymousId: "anon-1", orderNumber: "  " });
+
+    expect(commerceServer.commercetools.createOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ orderNumber: undefined }),
+    );
+  });
+
+  it("rejects a shipping country outside cartPolicy.allowedCountries", async () => {
+    const commerceServer = { ...server(), cartPolicy: { allowedCountries: ["AT"] } };
+
+    await expect(
+      executeSetCartAddresses(commerceServer, { anonymousId: "anon-1", shippingAddress: address }),
+    ).rejects.toMatchObject({ status: 400, code: "VALIDATION" });
+    expect(commerceServer.commercetools.setCartAddresses).not.toHaveBeenCalled();
+
+    await executeSetCartAddresses(
+      { ...server(), cartPolicy: { allowedCountries: ["DE"] } },
+      { anonymousId: "anon-1", shippingAddress: address },
+    );
+  });
+
+  it("passes the session customer and rejects a revoked session on every checkout step", async () => {
+    const sessionToken = signCartSession({ customerId: "cust-1" }, "test-secret");
+    const live = server();
+    await executeCreateOrder(live, { sessionToken, orderNumber: VALID_ORDER_NUMBER });
+    expect(live.commercetools.createOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ customerId: "cust-1" }),
+    );
+
+    const revoked = { ...server(), cartSessionHooks: { isRevoked: async () => true } };
+    await expect(
+      executeSetCartAddresses(revoked, { sessionToken, shippingAddress: address }),
+    ).rejects.toBeInstanceOf(InvalidCartSessionError);
+    await expect(executeGetShippingMethods(revoked, { sessionToken })).rejects.toBeInstanceOf(
+      InvalidCartSessionError,
+    );
+    await expect(
+      executeSetShippingMethod(revoked, { sessionToken, shippingMethodId: "shipping-1" }),
+    ).rejects.toBeInstanceOf(InvalidCartSessionError);
+    await expect(
+      executeCreateOrder(revoked, { sessionToken, orderNumber: VALID_ORDER_NUMBER }),
+    ).rejects.toBeInstanceOf(InvalidCartSessionError);
+    expect(revoked.commercetools.createOrder).not.toHaveBeenCalled();
   });
 });

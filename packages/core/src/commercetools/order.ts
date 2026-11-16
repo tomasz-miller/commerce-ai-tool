@@ -1,4 +1,4 @@
-import type { Order, PaymentReference } from "@commercetools/platform-sdk";
+import type { Order, OrderFromCartDraft, PaymentState } from "@commercetools/platform-sdk";
 import type {
   DeliverySnapshot,
   GetOrderRequest,
@@ -24,6 +24,21 @@ export interface OrderGateway {
 export interface OrderOperations {
   getOrder(input: GetOrderRequest): Promise<OrderSnapshot>;
   listOrders(input: ListOrdersRequest): Promise<OrderSnapshot[]>;
+}
+
+/** Body of `POST /orders`. `paymentState` is only sent when a payment state was derived. */
+export function buildOrderFromCartDraft(input: {
+  cartId: string;
+  version: number;
+  orderNumber: string;
+  paymentState?: PaymentState;
+}): OrderFromCartDraft {
+  return {
+    cart: { typeId: "cart", id: input.cartId },
+    version: input.version,
+    orderNumber: input.orderNumber,
+    ...(input.paymentState ? { paymentState: input.paymentState } : {}),
+  };
 }
 
 export class OrderNotFoundError extends Error {
@@ -111,7 +126,7 @@ function mapDeliveries(order: Order): DeliverySnapshot[] | undefined {
 }
 
 function mapOrderPayments(order: Order, locale: string): OrderSnapshot["payments"] {
-  const refs = (order.paymentInfo?.payments ?? []) as PaymentReference[];
+  const refs = order.paymentInfo?.payments ?? [];
   const mapped = refs.flatMap((ref) => {
     const payment = resolveExpandedPayment(ref);
     return payment ? [mapPaymentToSnapshot(payment, locale)] : [];

@@ -1,0 +1,167 @@
+@let t = store.resolvedMessages();
+<div
+  class="cat-root cat-wrapper"
+  [class.cat-root--mission]="store.showMissionVisible()"
+  [class.cat-root--mission-lanes-1]="store.missionLaneCount() === 1"
+  [class.cat-root--mission-lanes-2]="store.missionLaneCount() === 2"
+  [class.cat-root--mission-lanes-3]="store.missionLaneCount() === 3"
+  [class.cat-root--mission-lanes-4]="store.missionLaneCount() === 4"
+  [class.cat-root--mission-lanes-5]="store.missionLaneCount() >= 5"
+  [attr.data-theme]="store.theme()"
+  role="search"
+  [attr.aria-label]="t.productSearchAriaLabel"
+  (dragover)="onDragOver($event)"
+  (dragleave)="store.isDragging.set(false)"
+  (drop)="onDrop($event)"
+>
+  <div class="cat-visually-hidden" role="status" aria-live="polite" aria-atomic="true">
+    {{ store.announcement() }}
+  </div>
+
+  @if (store.isDragging() && store.enableImageSearch()) {
+    <div class="cat-drag-overlay" aria-hidden="true">{{ t.dropImageToSearch }}</div>
+  }
+
+  <div class="cat-search-shell">
+    <form
+      commerce-ai-search-bar
+      [messages]="t"
+      [query]="store.query()"
+      [enableAutocomplete]="store.enableAutocomplete()"
+      [expanded]="store.suggestionsExpanded()"
+      [listboxId]="store.listboxId"
+      [activeDescendantId]="store.activeSuggestionId()"
+      [enableVoice]="store.enableVoice()"
+      [isRecording]="store.isRecording()"
+      [isProcessing]="store.isProcessing()"
+      [showVoiceReplay]="store.showVoiceReplay()"
+      [enableCameraSearch]="store.enableCameraSearch()"
+      [cameraFacingMode]="store.cameraFacingMode()"
+      [enableImageSearch]="store.enableImageSearch()"
+      [isLoading]="store.isLoading()"
+      [enableCart]="store.enableCart()"
+      [cartOpen]="cart.isCartOpen()"
+      [cartLabel]="store.cartAriaLabel()"
+      [cartQuantity]="store.cartQuantity()"
+      [cartBadgeLabel]="store.cartBadgeLabel()"
+      (queryChange)="onQueryChange($event)"
+      (inputKeyDown)="onInputKeyDown($event)"
+      (submitted)="onSubmit()"
+      (voiceToggle)="toggleRecording()"
+      (cameraClick)="openCamera()"
+      (imageSelected)="onFileSelected($event)"
+      (cameraFileSelected)="onCameraFileSelected($event)"
+      (replay)="replayVoiceSummary()"
+      (cartToggle)="cart.toggleCart()"
+    >
+      @if (store.showSuggestions()) {
+        <div
+          commerce-ai-suggestions
+          [messages]="t"
+          [listboxId]="store.listboxId"
+          [suggestions]="store.suggestions()"
+          [activeIndex]="store.activeSuggestionIndex()"
+          [isLoading]="store.isLoadingSuggestions()"
+          [error]="store.suggestionsError()"
+          [ready]="store.suggestionsReady()"
+          (suggestionSelect)="onSuggestionSelect($event)"
+        ></div>
+      }
+    </form>
+  </div>
+
+  @if (store.showVoiceBanner()) {
+    <commerce-ai-voice-banner
+      [isRecording]="store.isRecording()"
+      [isProcessing]="store.isProcessing()"
+      [isLoadingTts]="store.isLoadingTts()"
+      [error]="store.voiceError()"
+      [durationSeconds]="store.recordingDuration()"
+      [messages]="t"
+      (dismissError)="clearVoiceError()"
+    />
+  }
+
+  @if (store.enableCameraSearch() && (store.isCameraOpen() || store.cameraError())) {
+    <dialog
+      commerce-ai-camera-overlay
+      [messages]="t"
+      [error]="store.cameraError()"
+      [returnFocusTo]="cameraTrigger()"
+      [fallbackFocusTo]="searchField()"
+      (closed)="closeCamera()"
+      (captured)="capturePhoto()"
+      (errorDismissed)="clearCameraError()"
+      (videoChange)="store.attachCameraVideo($event)"
+    ></dialog>
+  }
+
+  @if (store.enableCart() && cart.isCartOpen()) {
+    <commerce-ai-cart-panel
+      [cart]="cart.cart()"
+      [customer]="cart.customer()"
+      [isLoading]="cart.isLoading() || cart.isMutating()"
+      [isLoggingIn]="cart.isLoggingIn()"
+      [error]="cart.error()"
+      [messages]="t"
+      [catalogLocale]="store.catalogLocale()"
+      [showCheckout]="checkout.observed"
+      [returnFocusTo]="cartToggle()"
+      (close)="cart.closeCart()"
+      (remove)="onCartRemove($event)"
+      (quantityChange)="onCartQuantityChange($event)"
+      (login)="onCartLogin($event)"
+      (logout)="onCartLogout()"
+      (checkout)="checkout.emit($event)"
+    />
+  }
+
+  @if (store.enableFacets() && store.lastSearchMode() === "text" && store.hasSearched() && !store.showMission() && store.visibleFacets().length) {
+    <section
+      commerce-ai-facets
+      [messages]="t"
+      [facets]="store.visibleFacets()"
+      [appliedFilters]="store.meta()?.appliedFilters"
+      [hasAppliedFilters]="store.hasAppliedFilters()"
+      (toggle)="toggleFacet($event.facetId, $event.key, $event.currency)"
+      (clear)="clearFacetFilters()"
+      (newSearch)="startNewSearch()"
+    ></section>
+  }
+
+  @if (store.showResults() && store.isLoading()) {
+    <div class="cat-status">{{ t.searching }}</div>
+  }
+  @if (store.showResults() && store.error()) {
+    <div class="cat-status cat-status--error" role="alert">{{ store.error() }}</div>
+  }
+
+  @if (store.visibleMission(); as visibleMission) {
+    <commerce-ai-mission-results
+      [mission]="visibleMission"
+      [messages]="t"
+      [enableCart]="store.enableCart()"
+      [isMutating]="cart.isMutating()"
+      [addedProductIds]="store.addedProductIds()"
+      [addAllHandler]="addMissionItems"
+      (productSelect)="productSelect.emit($event)"
+      (addItem)="onAddItem($event)"
+    />
+  }
+
+  @if (store.showResults() && !store.showMission() && !store.isLoading() && !store.error()) {
+    <div
+      commerce-ai-results
+      [messages]="t"
+      [results]="store.results()"
+      [enableCart]="store.enableCart()"
+      [isMutating]="cart.isMutating()"
+      [addedProductIds]="store.addedProductIds()"
+      [hasSearched]="store.hasSearched()"
+      [query]="store.query()"
+      [queryInterpretation]="store.meta()?.queryInterpretation"
+      (productSelect)="productSelect.emit($event)"
+      (addItem)="onAddItem($event)"
+    ></div>
+  }
+</div>

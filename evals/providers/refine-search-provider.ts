@@ -7,6 +7,7 @@ import {
   loadEvalEnvFile,
   parseAttributeCatalog,
   readProviderConfig,
+  createEvalMetricsCapture,
   toEvalProviderResponse,
 } from "./eval-utils.ts";
 
@@ -75,6 +76,7 @@ export default class RefineSearchEvalProvider {
 
     try {
       const startedAt = Date.now();
+      const capture = createEvalMetricsCapture();
       const result = await this.evalProvider.ai!.interpretRefineQuery(
         refineQuery,
         {
@@ -83,9 +85,10 @@ export default class RefineSearchEvalProvider {
           attributeCatalog: parseAttributeCatalog(vars),
         },
         { queryLocale, catalogLocale },
+        capture.options,
       );
 
-      return toEvalProviderResponse(result, this.evalProvider.ai!, startedAt);
+      return toEvalProviderResponse(result, capture.get(), startedAt);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return { error: message };

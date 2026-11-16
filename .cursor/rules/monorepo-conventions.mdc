@@ -21,7 +21,7 @@ All files under `packages/` and `apps/` must be in **English** (see `english-onl
 - Entry in `tsup.config.ts`, output in `dist/` (gitignored)
 - `clean: !process.argv.includes("--watch")` — watch must not wipe dist (avoids monorepo races)
 - `dts: false` in tsup — bundle JS only; emit `.d.ts` with `scripts/emit-package-dts.mjs` (native `tsc`, TypeScript 7)
-- Library packages declare `@typescript/native` only; `typescript` (Compiler API alias) stays on root and `demo-next` until TS 7.1 tooling support
+- `core`, `server` and `react` declare `@typescript/native` only; `packages/angular` builds with ng-packagr (partial compilation, `ng-package.json`) on `typescript ~5.9` (the range `@angular/compiler-cli` peers), has no tsup config and ships `dist/` as the package (`publishConfig.directory`); `typescript` (Compiler API alias) stays on root and `demo-next` until TS 7.1 tooling support
 - Next.js 16.3+ in `demo-next` must set `experimental.useTypeScriptCli: false` — CLI mode requires `typescript/bin/tsc`, which the TS 6 alias does not ship
 
 ## Turbo
@@ -32,10 +32,11 @@ All files under `packages/` and `apps/` must be in **English** (see `english-onl
 
 ## New feature order
 
-1. `core` (+ tests) → 2. `server` (+ tests) → 3. UI (`react`/`angular`) → 4. `demo-next`
-2. Finish with: `pnpm lint && pnpm typecheck && pnpm test && pnpm build`
+1. `core` (+ tests) → 2. `server` (+ tests) → 3. UI (`react`/`angular`) → 4. `demo-next` / `demo-angular` (+ Playwright E2E for user flows)
+2. Finish with: `pnpm lint && pnpm typecheck && pnpm test && pnpm build`, then `pnpm check:package` (and `pnpm test:e2e` for user flows)
 
 ## Style
 
 - Minimal diff, English in code and public APIs
-- Public API changes → update README / CHANGELOG
+- Public API changes → update the matching page under `docs/`, plus a changeset (`pnpm changeset`)
+- Publish only through `pnpm publish` / `changeset publish` from the package root; never `npm publish` inside `packages/angular/dist`

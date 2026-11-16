@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { gotoHydrated } from "./helpers";
 
 const cart = {
   id: "cart-1",
@@ -125,9 +126,9 @@ async function mockCheckoutApi(page: Page) {
 
 test("completes the host-owned checkout flow", async ({ page }) => {
   await mockCheckoutApi(page);
-  await page.goto("/");
+  await gotoHydrated(page, "/");
 
-  await page.getByRole("button", { name: /cart/i }).click();
+  await page.getByRole("button", { name: /^Shopping cart/i }).click();
   await expect(page.getByRole("button", { name: "Sign in to sync your cart" })).toBeVisible();
   await expect(page.getByLabel("Email")).toBeHidden();
   const itemListBox = await page.locator(".cat-cart-panel__items").boundingBox();
@@ -137,6 +138,9 @@ test("completes the host-owned checkout flow", async ({ page }) => {
   expect(checkoutButtonBox!.width).toBeLessThan(panelBox!.width * 0.6);
   await page.getByRole("button", { name: "Checkout" }).click();
   await expect(page).toHaveURL(/\/checkout$/);
+  // The host page owns the one <main>; the widget is a named region inside it.
+  await expect(page.getByRole("main")).toHaveCount(1);
+  await expect(page.getByRole("main").getByRole("region", { name: "Complete your order" })).toBeVisible();
 
   await page.getByLabel("First name").fill("Ada");
   await page.getByLabel("Last name").fill("Lovelace");
@@ -161,7 +165,7 @@ test("stacks checkout sections and keeps the order action sticky on mobile", asy
 }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await mockCheckoutApi(page);
-  await page.goto("/checkout");
+  await gotoHydrated(page, "/checkout");
 
   const layout = page.locator(".cat-checkout__layout");
   await expect(layout).toBeVisible();
@@ -173,8 +177,8 @@ test("stacks checkout sections and keeps the order action sticky on mobile", asy
 test("opens the cart as a full-screen sheet on mobile", async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await mockCheckoutApi(page);
-  await page.goto("/");
-  await page.getByRole("button", { name: /cart/i }).click();
+  await gotoHydrated(page, "/");
+  await page.getByRole("button", { name: /^Shopping cart/i }).click();
 
   const panel = page.locator(".cat-cart-panel");
   await expect(panel).toHaveCSS("position", "fixed");
@@ -185,7 +189,7 @@ test("opens the cart as a full-screen sheet on mobile", async ({ page }) => {
 test("keeps the wallpaper and search layout stable when the cart opens", async ({ page }) => {
   await page.setViewportSize({ width: 968, height: 784 });
   await mockCheckoutApi(page);
-  await page.goto("/");
+  await gotoHydrated(page, "/");
 
   const hero = page.locator(".demo-hero");
   const searchBar = page.locator(".cat-search-bar");
@@ -195,7 +199,7 @@ test("keeps the wallpaper and search layout stable when the cart opens", async (
     await page.evaluate(() => getComputedStyle(document.body, "::before").position),
   ).toBe("fixed");
 
-  await page.getByRole("button", { name: /cart/i }).click();
+  await page.getByRole("button", { name: /^Shopping cart/i }).click();
 
   const searchAfter = await searchBar.boundingBox();
   const heroAfter = await hero.boundingBox();

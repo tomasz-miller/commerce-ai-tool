@@ -1,0 +1,8 @@
+---
+"@commerce-ai-tool/core": minor
+"@commerce-ai-tool/server": minor
+"@commerce-ai-tool/react": minor
+"@commerce-ai-tool/angular": minor
+---
+
+commercetools client: moved to `@commercetools/ts-client` (the v2 client is deprecated) and `@commercetools/platform-sdk` 9. Requests (and the token request) now time out after 10 s. Reads, Product Search and GraphQL are retried up to 3 times on timeouts and `500`/`502`/`504` (ts-client also retries `429` and `503`); mutations (cart, order and payment create/update, sign-in) run on a second client that retries only `429` and `503` and never re-sends after a timeout or 5xx, so a committed-but-slow cart update is not applied twice. Error objects no longer carry the request, so a failed sign-in no longer keeps the password. The client no longer requests `manage_project` by default: with no scopes configured it omits the `scope` parameter and the token gets the scopes of the API client. Set `CTP_SCOPES` (space-separated, `scope:projectKey`) or `commercetools.scopes` to pin them; docs/CONFIGURATION.md lists the least-privilege scopes. Hosts that relied on the implicit `manage_project` request must now grant the needed scopes on their API client. New `CAT_LEGACY_PRODUCT_PROJECTION_SEARCH` (`commercetools.legacyProductProjectionSearch`) gates the deprecated Product Projection Search fallback and logs a one-time deprecation warning when it is used; it is off by default since 3.0.0, so a missing Product Search fails fast. The fallback now also honours the price country. Product type listing pages by id with `withTotal=false`, and the `searchKeywords` seed script pages with the id cursor so it works beyond 10000 products.

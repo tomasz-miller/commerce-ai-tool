@@ -15,7 +15,8 @@ export class SearchCache<T> {
 
   constructor(config?: SearchCacheConfig) {
     this.ttlMs = config?.ttlMs ?? 60_000;
-    this.maxEntries = config?.maxEntries ?? 500;
+    const max = config?.maxEntries;
+    this.maxEntries = typeof max === "number" && Number.isFinite(max) && max > 0 ? max : 500;
   }
 
   get(key: string): T | undefined {

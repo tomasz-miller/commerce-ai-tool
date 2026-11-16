@@ -69,6 +69,43 @@ export function extractProductSearchIds(
     .filter((id): id is string => Boolean(id));
 }
 
+/**
+ * Product id -> sku of the first matching variant, for results where only some variants matched
+ * (`markMatchingVariants: true`). Products where every variant matched, or whose first matched
+ * variant has no sku, are left out: their card uses the master variant.
+ */
+export function extractMatchedSkus(
+  results: Array<{
+    id?: string;
+    matchingVariants?: { allMatched: boolean; matchedVariants: Array<{ id: number; sku?: string }> };
+  }>,
+): Record<string, string> {
+  const matched: Record<string, string> = {};
+  for (const result of results) {
+    const variants = result.matchingVariants;
+    if (!result.id || !variants || variants.allMatched) {
+      continue;
+    }
+    const sku = variants.matchedVariants[0]?.sku;
+    if (sku) {
+      matched[result.id] = sku;
+    }
+  }
+  return matched;
+}
+
+/**
+ * Product Search is not activated on the commercetools project and the deprecated Product
+ * Projection Search fallback is off. The message names the project and how to enable the API: it
+ * is for the operator's log, not for shoppers (the server answers 503 `UPSTREAM_UNAVAILABLE`).
+ */
+export class ProductSearchUnavailableError extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "ProductSearchUnavailableError";
+  }
+}
+
 export function isProductSearchUnavailable(error: unknown): boolean {
   const message = getErrorMessage(error);
 
@@ -79,12 +116,17 @@ export function isProductSearchUnavailable(error: unknown): boolean {
   );
 }
 
-export function productSearchUnavailableMessage(projectKey: string): string {
-  return (
+export function productSearchUnavailableMessage(
+  projectKey: string,
+  options: { legacyFallback?: boolean } = {},
+): string {
+  const enable =
     `Product Search API is not enabled for project "${projectKey}". ` +
-    "Enable it in Merchant Center (Settings → Project settings → Storefront Search) " +
-    "or the client will fall back to Product Projection Search automatically."
-  );
+    "Enable it in Merchant Center (Settings → Project settings → Storefront Search)";
+  return options.legacyFallback
+    ? `${enable} or the client will fall back to the deprecated Product Projection Search automatically.`
+    : `${enable}. The deprecated Product Projection Search fallback is off: set ` +
+        "CAT_LEGACY_PRODUCT_PROJECTION_SEARCH=true (config.commercetools.legacyProductProjectionSearch) to allow it.";
 }
 
 function getErrorMessage(error: unknown): string {
@@ -92,10 +134,16 @@ function getErrorMessage(error: unknown): string {
     return error.message;
   }
 
-  if (typeof error === "object" && error !== null && "body" in error) {
-    const body = (error as { body?: { message?: string } }).body;
-    if (body?.message) {
-      return body.message;
+  if (typeof error === "object" && error !== null) {
+    // ts-client rejects with the HttpError itself, or `{ body: null, error: HttpError }` for a
+    // network failure; the payload is `error` (`body` is its deprecated alias).
+    const candidate = error as { error?: unknown; body?: unknown };
+    const payload = candidate.error ?? candidate.body;
+    if (typeof payload === "object" && payload !== null) {
+      const message = (payload as { message?: unknown }).message;
+      if (typeof message === "string" && message) {
+        return message;
+      }
     }
   }
 

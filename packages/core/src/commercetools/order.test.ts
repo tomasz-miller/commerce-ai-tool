@@ -4,6 +4,7 @@ import {
   OrderNotFoundError,
   buildAnonymousOrderWhere,
   buildCustomerOrderWhere,
+  buildOrderFromCartDraft,
   buildOwnerOrdersWhere,
   createOrderOperations,
   mapOrderToSnapshot,
@@ -229,6 +230,12 @@ describe("createOrderOperations", () => {
     ]);
   });
 
+  it("maps an order with an invalid locale instead of throwing", () => {
+    expect(mapOrderToSnapshot(order(), "en_GB").totalPrice.formatted).toBe(
+      mapOrderToSnapshot(order(), "en").totalPrice.formatted,
+    );
+  });
+
   it("builds owner-scoped predicates", () => {
     expect(buildAnonymousOrderWhere('cat-"1"', "anon-1")).toBe(
       'orderNumber="cat-\\"1\\"" and anonymousId="anon-1"',
@@ -239,5 +246,33 @@ describe("createOrderOperations", () => {
     expect(buildOwnerOrdersWhere({ customerId: "cust-1", anonymousId: "anon-1" })).toBe(
       'customerId="cust-1" or anonymousId="anon-1"',
     );
+  });
+});
+
+describe("buildOrderFromCartDraft", () => {
+  it("includes paymentState in the order draft when one is derived", () => {
+    expect(
+      buildOrderFromCartDraft({
+        cartId: "cart-1",
+        version: 3,
+        orderNumber: "cat-1",
+        paymentState: "Paid",
+      }),
+    ).toEqual({
+      cart: { typeId: "cart", id: "cart-1" },
+      version: 3,
+      orderNumber: "cat-1",
+      paymentState: "Paid",
+    });
+  });
+
+  it("omits paymentState from the draft when none is derived", () => {
+    const draft = buildOrderFromCartDraft({ cartId: "cart-1", version: 3, orderNumber: "cat-1" });
+    expect(draft).toEqual({
+      cart: { typeId: "cart", id: "cart-1" },
+      version: 3,
+      orderNumber: "cat-1",
+    });
+    expect(draft).not.toHaveProperty("paymentState");
   });
 });

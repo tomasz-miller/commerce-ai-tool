@@ -1,11 +1,22 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CART_SESSION_HEADER } from "@commerce-ai-tool/core/client";
+import { provideZonelessChangeDetection } from "@angular/core";
+import { TestBed } from "@angular/core/testing";
+import { BrowserTestingModule, platformBrowserTesting } from "@angular/platform-browser/testing";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  ANONYMOUS_ID_HEADER,
   ANONYMOUS_ID_STORAGE_KEY,
+  CART_SESSION_HEADER,
   CUSTOMER_SESSION_STORAGE_KEY,
   CUSTOMER_STORAGE_KEY,
-  CommerceAiCartService,
-} from "./commerce-ai-cart.service.js";
+  ORDER_NUMBER_PATTERN,
+  createRandomUuid,
+} from "@commerce-ai-tool/core/client";
+import { CommerceAiCartService } from "./commerce-ai-cart.service";
+import { COMMERCE_AI_FETCH } from "./commerce-ai-fetch.token";
+
+beforeAll(() => {
+  TestBed.initTestEnvironment(BrowserTestingModule, platformBrowserTesting());
+});
 
 const sampleCart = {
   id: "cart-1",
@@ -18,8 +29,12 @@ const sampleCart = {
 
 const createdServices: CommerceAiCartService[] = [];
 
+function newService(): CommerceAiCartService {
+  return TestBed.runInInjectionContext(() => new CommerceAiCartService());
+}
+
 function createService(enabled = true): CommerceAiCartService {
-  const service = new CommerceAiCartService();
+  const service = newService();
   createdServices.push(service);
   service.configure({ apiBaseUrl: "/api/commerce-ai", currency: "EUR", enabled });
   return service;
@@ -27,6 +42,7 @@ function createService(enabled = true): CommerceAiCartService {
 
 describe("CommerceAiCartService", () => {
   beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
     window.localStorage.clear();
     window.localStorage.setItem(ANONYMOUS_ID_STORAGE_KEY, "anon-1");
   });
@@ -35,8 +51,27 @@ describe("CommerceAiCartService", () => {
     for (const service of createdServices.splice(0)) {
       service.ngOnDestroy();
     }
+    TestBed.resetTestingModule();
     vi.restoreAllMocks();
     window.localStorage.clear();
+  });
+
+  it("sends cart requests through the provided COMMERCE_AI_FETCH", async () => {
+    const provided = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ cart: sampleCart }) });
+    const globalFetch = vi.fn();
+    vi.stubGlobal("fetch", globalFetch);
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [provideZonelessChangeDetection(), { provide: COMMERCE_AI_FETCH, useValue: provided }],
+    });
+
+    const service = newService();
+    createdServices.push(service);
+    service.configure({ apiBaseUrl: "/api/commerce-ai", currency: "EUR" });
+    await vi.waitFor(() => expect(service.cart()).toEqual(sampleCart));
+
+    expect(provided).toHaveBeenCalledWith("/api/commerce-ai/cart", expect.anything());
+    expect(globalFetch).not.toHaveBeenCalled();
   });
 
   it("does not fetch when disabled", async () => {
@@ -58,7 +93,47 @@ describe("CommerceAiCartService", () => {
     await vi.waitFor(() => {
       expect(service.cart()).toEqual(sampleCart);
     });
-    expect(fetchMock).toHaveBeenCalledWith("/api/commerce-ai/cart?anonymousId=anon-1");
+    expect(fetchMock).toHaveBeenCalledWith("/api/commerce-ai/cart", {
+      headers: { [ANONYMOUS_ID_HEADER]: "anon-1" },
+    });
+  });
+
+  it("order and cart reads send the anonymous id header, not a query parameter", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ cart: sampleCart }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const service = createService();
+    await vi.waitFor(() => expect(service.cart()).toEqual(sampleCart));
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit | undefined];
+    expect(url).not.toContain("anonymousId");
+    expect(new Headers(init?.headers).get(ANONYMOUS_ID_HEADER)).toBe("anon-1");
+  });
+
+  it("fallback anonymousId uses crypto.getRandomValues", () => {
+    const getRandomValues = vi.fn(<T extends ArrayBufferView>(array: T): T => {
+      const bytes = new Uint8Array(array.buffer, array.byteOffset, array.byteLength);
+      bytes.forEach((_, index) => {
+        bytes[index] = (index * 53 + 7) % 256;
+      });
+      return array;
+    });
+    const mathRandom = vi.spyOn(Math, "random");
+    vi.stubGlobal("crypto", { getRandomValues });
+
+    try {
+      const id = createRandomUuid();
+
+      expect(getRandomValues).toHaveBeenCalled();
+      expect(mathRandom).not.toHaveBeenCalled();
+      expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+      expect(`cat-${id}`).toMatch(ORDER_NUMBER_PATTERN);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("syncs cart snapshots across service instances in the same tab", async () => {
@@ -248,5 +323,167 @@ describe("CommerceAiCartService", () => {
     expect(service.isAuthenticated()).toBe(false);
     expect(service.anonymousId()).not.toBe("anon-1");
     expect(window.localStorage.getItem(ANONYMOUS_ID_STORAGE_KEY)).toBe(service.anonymousId());
+  });
+
+  it("sends the session token header on logout, then clears the session", async () => {
+    window.localStorage.setItem(CUSTOMER_SESSION_STORAGE_KEY, "sess-1");
+    window.localStorage.setItem(
+      CUSTOMER_STORAGE_KEY,
+      JSON.stringify({ id: "cust-1", email: "shopper@example.test" }),
+    );
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => ({
+      ok: true,
+      json: async () => ({ cart: null, customer: null }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const service = createService();
+    expect(service.isAuthenticated()).toBe(true);
+
+    await service.logout();
+
+    const logoutCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/cart/logout"));
+    expect(new Headers(logoutCall?.[1]?.headers).get(CART_SESSION_HEADER)).toBe("sess-1");
+    expect(window.localStorage.getItem(CUSTOMER_SESSION_STORAGE_KEY)).toBeNull();
+    expect(service.isAuthenticated()).toBe(false);
+  });
+
+  it("shows a localized message, not the server text, when an add fails", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).includes("/cart/add")) {
+        return { ok: false, status: 500, json: async () => ({ error: "commercetools exploded", code: "INTERNAL" }) };
+      }
+      return { ok: true, json: async () => ({ cart: sampleCart }) };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const service = newService();
+    createdServices.push(service);
+    service.configure({
+      apiBaseUrl: "/api/commerce-ai",
+      messages: { unableToAddToCart: "Nie można dodać do koszyka" },
+    });
+    await vi.waitFor(() => expect(service.cart()).toEqual(sampleCart));
+
+    const result = await service.addToCart({ sku: "GLASS-RED" });
+
+    expect(result).toBeNull();
+    expect(service.error()).toBe("Nie można dodać do koszyka");
+  });
+
+  it("sends the cart id and version a remove acts on, and not the guest id twice", async () => {
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => ({
+      ok: true,
+      json: async () => ({ cart: sampleCart }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const service = createService();
+    await vi.waitFor(() => expect(service.cart()).toEqual(sampleCart));
+
+    await service.removeFromCart("line-1");
+
+    const call = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/cart/remove"));
+    expect(JSON.parse(String(call?.[1]?.body))).toEqual({
+      anonymousId: "anon-1",
+      lineItemId: "line-1",
+      cartId: "cart-1",
+    });
+  });
+
+  it("signs in: stores the session and reports the customer as authenticated", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).endsWith("/cart/login")) {
+        return {
+          ok: true,
+          json: async () => ({
+            cart: sampleCart,
+            customer: { id: "cust-1", email: "shopper@example.test" },
+            sessionToken: "sess-new",
+          }),
+        };
+      }
+      return { ok: true, json: async () => ({ cart: null }) };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const service = createService();
+    expect(service.isAuthenticated()).toBe(false);
+
+    await service.login({ email: "shopper@example.test", password: "not-a-real-password" });
+
+    expect(service.isAuthenticated()).toBe(true);
+    expect(service.sessionToken()).toBe("sess-new");
+    expect(window.localStorage.getItem(CUSTOMER_SESSION_STORAGE_KEY)).toBe("sess-new");
+  });
+
+  it("stops following other instances once destroyed", async () => {
+    const updated = { ...sampleCart, version: 2, totalQuantity: 3 };
+    const fetchMock = vi.fn(async (url: string) => ({
+      ok: true,
+      json: async () => ({ cart: String(url).includes("/cart/add") ? updated : sampleCart }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const widget = createService();
+    const sheet = createService();
+    await vi.waitFor(() => expect(widget.cart()).toEqual(sampleCart));
+    widget.ngOnDestroy();
+
+    await sheet.addToCart({ sku: "GLASS-RED" });
+
+    expect(sheet.cart()).toEqual(updated);
+    expect(widget.cart()).toEqual(sampleCart);
+  });
+
+  it("resets to a new guest when a mutation is rejected for an expired session", async () => {
+    window.localStorage.setItem(CUSTOMER_SESSION_STORAGE_KEY, "sess-expired");
+    window.localStorage.setItem(
+      CUSTOMER_STORAGE_KEY,
+      JSON.stringify({ id: "cust-1", email: "shopper@example.test" }),
+    );
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).endsWith("/cart/add")) {
+        return {
+          ok: false,
+          status: 401,
+          json: async () => ({ error: "Invalid cart session", code: "SESSION_INVALID" }),
+        };
+      }
+      return { ok: true, json: async () => ({ cart: init ? null : sampleCart }) };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const service = createService();
+    await vi.waitFor(() => expect(service.isLoading()).toBe(false));
+    // The refresh above sent the token and was accepted; the add is what the server rejects.
+    expect(service.isAuthenticated()).toBe(true);
+
+    await service.addToCart({ sku: "GLASS-RED" });
+
+    expect(service.isAuthenticated()).toBe(false);
+    expect(window.localStorage.getItem(CUSTOMER_SESSION_STORAGE_KEY)).toBeNull();
+    expect(service.anonymousId()).not.toBe("anon-1");
+  });
+
+  it("openCart refreshes the cart and toggleCart opens through it", async () => {
+    const updated = { ...sampleCart, version: 2, totalQuantity: 3 };
+    let served: typeof sampleCart = sampleCart;
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => ({
+      ok: true,
+      json: async () => ({ cart: served }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const service = createService();
+    await vi.waitFor(() => expect(service.cart()).toEqual(sampleCart));
+    const reads = () => fetchMock.mock.calls.length;
+    const before = reads();
+
+    // The cart changed elsewhere (host-owned UI, another tab's request): opening must show it.
+    served = updated;
+    service.toggleCart();
+
+    expect(service.isCartOpen()).toBe(true);
+    await vi.waitFor(() => expect(service.cart()).toEqual(updated));
+    expect(reads()).toBe(before + 1);
+
+    service.toggleCart();
+    expect(service.isCartOpen()).toBe(false);
+    expect(reads()).toBe(before + 1);
   });
 });

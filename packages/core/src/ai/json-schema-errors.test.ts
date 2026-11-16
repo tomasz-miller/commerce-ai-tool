@@ -15,6 +15,10 @@ describe("isJsonSchemaUnsupportedMessage", () => {
     ).toBe(true);
   });
 
+  it("does not treat a json_schema mention without an unsupported phrase as schema fallback", () => {
+    expect(isJsonSchemaUnsupportedMessage("json_schema: invalid schema at /properties")).toBe(false);
+  });
+
   it("does not treat unrelated response_format errors as schema fallback", () => {
     expect(isJsonSchemaUnsupportedMessage("Invalid response_format payload")).toBe(false);
     expect(isJsonSchemaUnsupportedMessage("temperature must be between 0 and 2")).toBe(false);

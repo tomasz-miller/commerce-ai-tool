@@ -14,7 +14,7 @@
         "default": "./dist/index.js"
       },
       "require": {
-        "types": "./dist/index.d.cts",
+        "types": "./dist/cjs/index.d.ts",
         "default": "./dist/index.cjs"
       }
     },
@@ -24,7 +24,7 @@
         "default": "./dist/next.js"
       },
       "require": {
-        "types": "./dist/next.d.cts",
+        "types": "./dist/cjs/next.d.ts",
         "default": "./dist/next.cjs"
       }
     },
@@ -34,7 +34,7 @@
         "default": "./dist/express.js"
       },
       "require": {
-        "types": "./dist/express.d.cts",
+        "types": "./dist/cjs/express.d.ts",
         "default": "./dist/express.cjs"
       }
     },
@@ -44,9 +44,22 @@
         "default": "./dist/flush.js"
       },
       "require": {
-        "types": "./dist/flush.d.cts",
+        "types": "./dist/cjs/flush.d.ts",
         "default": "./dist/flush.cjs"
       }
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "next": [
+        "./dist/next.d.ts"
+      ],
+      "express": [
+        "./dist/express.d.ts"
+      ],
+      "flush": [
+        "./dist/flush.d.ts"
+      ]
     }
   },
   "files": [
@@ -58,40 +71,37 @@
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
+    "check:package": "attw --pack . && publint",
     "test": "vitest run",
     "clean": "rm -rf dist"
   },
   "dependencies": {
     "@commerce-ai-tool/core": "workspace:*",
-    "@elevenlabs/elevenlabs-js": "^2.5.0",
+    "@elevenlabs/elevenlabs-js": "^2.77.0",
     "busboy": "^1.6.0",
     "cors": "^2.8.5",
-    "express-rate-limit": "^8.6.2"
+    "express-rate-limit": "^8.7.4"
   },
   "peerDependencies": {
-    "express": "^5.0.0",
-    "next": ">=14.0.0"
+    "express": "^5.0.0"
   },
   "peerDependenciesMeta": {
     "express": {
       "optional": true
-    },
-    "next": {
-      "optional": true
     }
   },
   "devDependencies": {
-    "@types/busboy": "^1.5.4",
+    "@types/busboy": "^1.5.5",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
-    "@types/node": "^24.0.0",
+    "@types/node": "catalog:",
     "@types/supertest": "^6.0.3",
     "@typescript/native": "catalog:",
-    "express": "^5.0.1",
-    "next": "^16.3.1",
-    "supertest": "^7.1.0",
-    "tsup": "^8.4.0",
-    "vitest": "^3.0.9"
+    "express": "catalog:",
+    "supertest": "^7.3.2",
+    "tsup": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
   },
   "publishConfig": {
     "access": "public"

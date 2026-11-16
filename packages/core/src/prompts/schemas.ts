@@ -64,6 +64,25 @@ export const VOICE_AUDIO_JSON_SCHEMA = {
   },
 } as const;
 
+/** STT transcript path: `VOICE_AUDIO_JSON_SCHEMA` without the echoed transcript (the host already has it). */
+export const VOICE_TRANSCRIPT_JSON_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "enhancedQuery",
+    "primaryTerm",
+    "searchTerms",
+    "filters",
+    "suggestedFacets",
+    "sort",
+    "interpretation",
+  ],
+  properties: {
+    enhancedQuery: { type: "string" },
+    ...interpretedSearchProperties,
+  },
+} as const;
+
 export const SUGGEST_SEARCH_TERMS_JSON_SCHEMA = {
   type: "object",
   additionalProperties: false,

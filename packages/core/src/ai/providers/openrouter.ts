@@ -1,6 +1,21 @@
 import { OpenRouter } from "@openrouter/sdk";
+import type { RetryConfig } from "@openrouter/sdk/lib/retries.js";
+import type { ChatMessages, ChatRequest, ChatResult } from "@openrouter/sdk/models";
+import {
+  ConnectionError,
+  OpenRouterError,
+  RequestTimeoutError,
+} from "@openrouter/sdk/models/errors";
 import type { FacetAttributeDefinition, OpenRouterConfig, SearchLocaleContext } from "../../types/index.js";
-import type { AIProvider, GenerationMetrics } from "../types.js";
+import type { AICallMetrics, AICallOptions, AIProvider } from "../types.js";
+import {
+  DEFAULT_OPENROUTER_MODEL,
+  DEFAULT_OPENROUTER_VISION_MODEL,
+  DEFAULT_OPENROUTER_VOICE_MODEL,
+  MAX_TOKENS,
+  type AITask,
+} from "../defaults.js";
+import { AIOutputTruncatedError, AIRateLimitedError, AIUpstreamError } from "../errors.js";
 import {
   buildRefineQueryUserMessage,
   buildSchemaAwareTextQueryUserMessage,
@@ -8,63 +23,93 @@ import {
   buildTextQueryUserMessage,
   buildVoiceAudioUserMessage,
   buildVoiceEnhanceUserMessage,
+  buildVoiceTranscriptUserMessage,
   buildSuggestSearchTermsUserMessage,
   buildMissionQueryUserMessage,
   parseInterpretedQuery,
   parseVoiceAudioInterpretation,
+  parseVoiceTranscriptInterpretation,
   parseSuggestSearchTerms,
   parseDecomposedMission,
   INTERPRETED_SEARCH_JSON_SCHEMA,
   MISSION_JSON_SCHEMA,
   SUGGEST_SEARCH_TERMS_JSON_SCHEMA,
   VOICE_AUDIO_JSON_SCHEMA,
+  VOICE_TRANSCRIPT_JSON_SCHEMA,
   jsonSchemaResponseFormat,
   structuredOutputInstruction,
 } from "../../prompts/index.js";
-import { isJsonSchemaUnsupportedError, isJsonSchemaUnsupportedMessage } from "../json-schema-errors.js";
+import { isJsonSchemaUnsupportedError } from "../json-schema-errors.js";
 import { SYSTEM_PROMPT_NAMES } from "../../prompts/catalog.js";
 import { resolveAndLinkSystemPrompt } from "../../prompts/resolve.js";
 import { mimeTypeToAudioFormat, uint8ArrayToBase64 } from "../../utils/audio.js";
+import { SearchTimeoutError } from "../../utils/with-timeout.js";
 import { buildTtsSummaryUserMessage } from "../../search/voice-tts.js";
 
-const DEFAULT_MODEL = "openai/gpt-5.6-luna";
-const DEFAULT_VISION_MODEL = "google/gemini-3.7-flash";
-const DEFAULT_VOICE_MODEL = "google/gemini-3.7-flash";
 const STRUCTURED_TEMPERATURE = 0;
 
-type JsonResponseFormat =
-  | { type: "json_object" }
-  | ReturnType<typeof jsonSchemaResponseFormat>;
+/**
+ * Per-attempt HTTP timeout. The SDK applies it only when the call carries no AbortSignal; the
+ * orchestrator always passes one, so there the step timeout (`config.timeouts`) bounds the call.
+ * 20 s matches the largest default step timeout (`aiVoiceAudioMs`).
+ */
+export const OPENROUTER_REQUEST_TIMEOUT_MS = 20_000;
+
+/**
+ * Small backoff that fits inside the default 15 s AI text step: retries stop being scheduled once
+ * 4 s have elapsed (an attempt in flight still runs until the step signal aborts it). Delays are
+ * `250ms * attempt^2` plus up to 1 s of SDK jitter, capped at 2 s, and a provider `Retry-After`
+ * is capped by the same 2 s. Connection resets are retried too.
+ */
+export const OPENROUTER_RETRY_CONFIG: RetryConfig = {
+  strategy: "backoff",
+  backoff: {
+    initialInterval: 250,
+    maxInterval: 2_000,
+    exponent: 2,
+    maxElapsedTime: 4_000,
+  },
+  retryConnectionErrors: true,
+};
+
+/** Status codes the SDK retries with the backoff above (its default is 5XX only). */
+const RETRY_CODES = ["429", "5XX"];
+
+/** Low reasoning effort on every call: these are short extraction tasks under a tight cap. */
+const REASONING: ChatRequest["reasoning"] = { effort: "low" };
+
+type JsonSchemaFormat = ReturnType<typeof jsonSchemaResponseFormat>;
 
 export class OpenRouterProvider implements AIProvider {
   private readonly client: OpenRouter;
-  private readonly apiKey: string;
   private readonly model: string;
   private readonly visionModel: string;
   private readonly voiceModel: string;
   private readonly useJsonSchema: boolean;
-  private lastMetrics: GenerationMetrics | undefined;
+  /** Models that rejected `json_schema` once: later calls go straight to `json_object`. */
+  private readonly jsonSchemaUnsupportedModels = new Set<string>();
 
   constructor(config: OpenRouterConfig) {
-    this.apiKey = config.apiKey;
-    this.client = new OpenRouter({ apiKey: config.apiKey });
-    this.model = config.model ?? DEFAULT_MODEL;
-    this.visionModel = config.visionModel ?? config.model ?? DEFAULT_VISION_MODEL;
-    this.voiceModel = config.voiceModel ?? DEFAULT_VOICE_MODEL;
+    this.client = new OpenRouter({
+      apiKey: config.apiKey,
+      timeoutMs: OPENROUTER_REQUEST_TIMEOUT_MS,
+      retryConfig: OPENROUTER_RETRY_CONFIG,
+    });
+    this.model = config.model ?? DEFAULT_OPENROUTER_MODEL;
+    this.visionModel = config.visionModel ?? DEFAULT_OPENROUTER_VISION_MODEL;
+    this.voiceModel = config.voiceModel ?? DEFAULT_OPENROUTER_VOICE_MODEL;
     this.useJsonSchema = config.jsonSchema !== false;
-  }
-
-  getLastGenerationMetrics(): GenerationMetrics | undefined {
-    return this.lastMetrics;
   }
 
   async interpretTextQuery(
     text: string,
     locales: SearchLocaleContext,
     attributeCatalog: FacetAttributeDefinition[] = [],
+    options?: AICallOptions,
   ) {
     const system = await resolveAndLinkSystemPrompt(SYSTEM_PROMPT_NAMES.TEXT_QUERY);
     const content = await this.sendStructured(
+      "interpret",
       this.model,
       [
         { role: "system", content: system },
@@ -76,6 +121,7 @@ export class OpenRouterProvider implements AIProvider {
         },
       ],
       jsonSchemaResponseFormat("interpreted_search", INTERPRETED_SEARCH_JSON_SCHEMA),
+      options,
     );
     return parseInterpretedQuery(content);
   }
@@ -84,15 +130,18 @@ export class OpenRouterProvider implements AIProvider {
     text: string,
     context: Parameters<AIProvider["interpretRefineQuery"]>[1],
     locales: SearchLocaleContext,
+    options?: AICallOptions,
   ) {
     const system = await resolveAndLinkSystemPrompt(SYSTEM_PROMPT_NAMES.REFINE_QUERY);
     const content = await this.sendStructured(
+      "refine",
       this.model,
       [
         { role: "system", content: system },
         { role: "user", content: buildRefineQueryUserMessage(text, locales, context) },
       ],
       jsonSchemaResponseFormat("interpreted_search", INTERPRETED_SEARCH_JSON_SCHEMA),
+      options,
     );
     return parseInterpretedQuery(content);
   }
@@ -102,6 +151,7 @@ export class OpenRouterProvider implements AIProvider {
     mimeType: string,
     locales: SearchLocaleContext,
     attributeCatalog: FacetAttributeDefinition[] = [],
+    options?: AICallOptions,
   ) {
     const dataUrl = imageBase64.startsWith("data:")
       ? imageBase64
@@ -109,6 +159,7 @@ export class OpenRouterProvider implements AIProvider {
 
     const system = await resolveAndLinkSystemPrompt(SYSTEM_PROMPT_NAMES.IMAGE_QUERY);
     const content = await this.sendStructured(
+      "image",
       this.visionModel,
       [
         { role: "system", content: system },
@@ -121,6 +172,7 @@ export class OpenRouterProvider implements AIProvider {
         },
       ],
       jsonSchemaResponseFormat("interpreted_search", INTERPRETED_SEARCH_JSON_SCHEMA),
+      options,
     );
     return parseInterpretedQuery(content);
   }
@@ -130,65 +182,82 @@ export class OpenRouterProvider implements AIProvider {
     mimeType: string,
     locales: SearchLocaleContext,
     attributeCatalog: FacetAttributeDefinition[] = [],
+    options?: AICallOptions,
   ) {
     const format = mimeTypeToAudioFormat(mimeType);
-    const base64Audio = uint8ArrayToBase64(audio);
-
     const system = await resolveAndLinkSystemPrompt(SYSTEM_PROMPT_NAMES.VOICE_AUDIO_INTERPRET);
-    const messages = [
-      { role: "system", content: system },
-      {
-        role: "user",
-        content: [
-          { type: "text", text: buildVoiceAudioUserMessage(locales, attributeCatalog) },
-          {
-            type: "input_audio",
-            input_audio: {
-              data: base64Audio,
-              format,
-            },
-          },
-        ],
-      },
-    ];
-    const response = await this.sendChatCompletion({
-      model: this.voiceModel,
-      messages: this.useJsonSchema
-        ? messages
-        : appendStructuredOutputHint(messages, VOICE_AUDIO_JSON_SCHEMA),
-      response_format: this.toApiResponseFormat(
-        jsonSchemaResponseFormat("voice_audio_interpretation", VOICE_AUDIO_JSON_SCHEMA),
-      ),
-      max_tokens: 4096,
-      reasoning: { effort: "low" },
-      temperature: STRUCTURED_TEMPERATURE,
-    });
-
-    const content = this.extractContent(response);
-    this.captureUsage(response);
-    return parseVoiceAudioInterpretation(content);
-  }
-
-  async enhanceVoiceTranscript(transcript: string, locales: SearchLocaleContext) {
-    const system = await resolveAndLinkSystemPrompt(SYSTEM_PROMPT_NAMES.VOICE_ENHANCE);
-    const response = await this.client.chat.send({
-      model: this.model,
-      messages: [
+    const content = await this.sendStructured(
+      "voiceAudio",
+      this.voiceModel,
+      [
         { role: "system", content: system },
         {
           role: "user",
-          content: buildVoiceEnhanceUserMessage(transcript, locales),
+          content: [
+            { type: "text", text: buildVoiceAudioUserMessage(locales, attributeCatalog) },
+            { type: "input_audio", inputAudio: { data: uint8ArrayToBase64(audio), format } },
+          ],
         },
       ],
-    });
-
-    this.captureUsage(response);
-    return this.extractContent(response).trim();
+      jsonSchemaResponseFormat("voice_audio_interpretation", VOICE_AUDIO_JSON_SCHEMA),
+      options,
+    );
+    return parseVoiceAudioInterpretation(content);
   }
 
-  async suggestSearchTerms(query: string, locales: SearchLocaleContext, limit = 8) {
+  async enhanceVoiceTranscript(
+    transcript: string,
+    locales: SearchLocaleContext,
+    options?: AICallOptions,
+  ) {
+    const system = await resolveAndLinkSystemPrompt(SYSTEM_PROMPT_NAMES.VOICE_ENHANCE);
+    const content = await this.send(
+      "enhance",
+      {
+        model: this.model,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: buildVoiceEnhanceUserMessage(transcript, locales) },
+        ],
+        temperature: STRUCTURED_TEMPERATURE,
+      },
+      options,
+    );
+    return content.trim();
+  }
+
+  async interpretVoiceTranscript(
+    transcript: string,
+    locales: SearchLocaleContext,
+    attributeCatalog: FacetAttributeDefinition[] = [],
+    options?: AICallOptions,
+  ) {
+    const system = await resolveAndLinkSystemPrompt(SYSTEM_PROMPT_NAMES.VOICE_TRANSCRIPT_INTERPRET);
+    const content = await this.sendStructured(
+      "voiceTranscript",
+      this.model,
+      [
+        { role: "system", content: system },
+        {
+          role: "user",
+          content: buildVoiceTranscriptUserMessage(transcript, locales, attributeCatalog),
+        },
+      ],
+      jsonSchemaResponseFormat("voice_transcript_interpretation", VOICE_TRANSCRIPT_JSON_SCHEMA),
+      options,
+    );
+    return parseVoiceTranscriptInterpretation(content);
+  }
+
+  async suggestSearchTerms(
+    query: string,
+    locales: SearchLocaleContext,
+    limit = 8,
+    options?: AICallOptions,
+  ) {
     const system = await resolveAndLinkSystemPrompt(SYSTEM_PROMPT_NAMES.SUGGEST_SEARCH_TERMS);
     const content = await this.sendStructured(
+      "suggest",
       this.model,
       [
         { role: "system", content: system },
@@ -198,6 +267,7 @@ export class OpenRouterProvider implements AIProvider {
         },
       ],
       jsonSchemaResponseFormat("suggest_search_terms", SUGGEST_SEARCH_TERMS_JSON_SCHEMA),
+      options,
     );
     return parseSuggestSearchTerms(content, limit);
   }
@@ -206,30 +276,35 @@ export class OpenRouterProvider implements AIProvider {
     count: number,
     topProductName: string | undefined,
     locales: SearchLocaleContext,
+    options?: AICallOptions,
   ) {
     const system = await resolveAndLinkSystemPrompt(SYSTEM_PROMPT_NAMES.TTS_SUMMARY);
-    const response = await this.client.chat.send({
-      model: this.model,
-      messages: [
-        { role: "system", content: system },
-        {
-          role: "user",
-          content: buildTtsSummaryUserMessage(count, topProductName, locales),
-        },
-      ],
-    });
-
-    this.captureUsage(response);
-    return this.extractContent(response).trim();
+    const content = await this.send(
+      "ttsSummary",
+      {
+        model: this.model,
+        messages: [
+          { role: "system", content: system },
+          {
+            role: "user",
+            content: buildTtsSummaryUserMessage(count, topProductName, locales),
+          },
+        ],
+      },
+      options,
+    );
+    return content.trim();
   }
 
   async decomposeShoppingMission(
     text: string,
     locales: SearchLocaleContext,
     attributeCatalog: FacetAttributeDefinition[] = [],
+    options?: AICallOptions,
   ) {
     const system = await resolveAndLinkSystemPrompt(SYSTEM_PROMPT_NAMES.MISSION_QUERY);
     const content = await this.sendStructured(
+      "mission",
       this.model,
       [
         { role: "system", content: system },
@@ -239,171 +314,197 @@ export class OpenRouterProvider implements AIProvider {
         },
       ],
       jsonSchemaResponseFormat("shopping_mission", MISSION_JSON_SCHEMA),
+      options,
     );
     return parseDecomposedMission(content);
   }
 
+  /**
+   * Sends `json_schema` structured output, or `json_object` plus a schema hint when json_schema
+   * is disabled or the model rejected it before. A 400 that says json_schema is unsupported is
+   * retried once as `json_object` and remembered for that model.
+   */
   private async sendStructured(
+    task: AITask,
     model: string,
-    messages: Array<{ role: string; content: unknown }>,
-    schemaFormat: ReturnType<typeof jsonSchemaResponseFormat>,
+    messages: ChatMessages[],
+    schemaFormat: JsonSchemaFormat,
+    options?: AICallOptions,
   ): Promise<string> {
-    const preferred: JsonResponseFormat = this.useJsonSchema
-      ? schemaFormat
-      : { type: "json_object" };
-    const requestMessages =
-      preferred.type === "json_object"
-        ? appendStructuredOutputHint(messages, schemaFormat.jsonSchema.schema)
-        : messages;
+    const jsonObjectRequest: Omit<ChatRequest, "maxCompletionTokens"> = {
+      model,
+      messages: appendStructuredOutputHint(messages, schemaFormat.jsonSchema.schema),
+      responseFormat: { type: "json_object" },
+      temperature: STRUCTURED_TEMPERATURE,
+    };
+    if (!this.useJsonSchema || this.jsonSchemaUnsupportedModels.has(model)) {
+      return this.send(task, jsonObjectRequest, options);
+    }
 
     try {
-      const response = await this.client.chat.send({
-        model,
-        messages: requestMessages as never,
-        responseFormat: preferred as never,
-        temperature: STRUCTURED_TEMPERATURE,
-      });
-      this.captureUsage(response);
-      return this.extractContent(response);
+      return await this.send(
+        task,
+        { model, messages, responseFormat: schemaFormat, temperature: STRUCTURED_TEMPERATURE },
+        options,
+      );
     } catch (error) {
-      if (!this.useJsonSchema || !isJsonSchemaUnsupportedError(error) || preferred.type === "json_object") {
+      if (!isJsonSchemaUnsupportedError(error)) {
         throw error;
       }
-
-      const response = await this.client.chat.send({
-        model,
-        messages: appendStructuredOutputHint(messages, schemaFormat.jsonSchema.schema) as never,
-        responseFormat: { type: "json_object" },
-        temperature: STRUCTURED_TEMPERATURE,
-      });
-      this.captureUsage(response);
-      return this.extractContent(response);
+      this.jsonSchemaUnsupportedModels.add(model);
+      return this.send(task, jsonObjectRequest, options);
     }
   }
 
-  private toApiResponseFormat(format: JsonResponseFormat): Record<string, unknown> {
-    if (format.type === "json_object" || !this.useJsonSchema) {
-      return { type: "json_object" };
-    }
-    return {
-      type: "json_schema",
-      json_schema: {
-        name: format.jsonSchema.name,
-        strict: format.jsonSchema.strict,
-        schema: format.jsonSchema.schema,
-      },
-    };
-  }
-
-  private async sendChatCompletion(body: Record<string, unknown>) {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      const errorBody = await response.text();
-      if (this.useJsonSchema && isJsonSchemaUnsupportedMessage(errorBody)) {
-        const retryBody = {
-          ...body,
-          messages: appendStructuredOutputHint(
-            (body.messages as Array<{ role: string; content: unknown }>) ?? [],
-            VOICE_AUDIO_JSON_SCHEMA,
-          ),
-          response_format: { type: "json_object" },
-        };
-        const retry = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${this.apiKey}`,
-            "Content-Type": "application/json",
+  /**
+   * One `chat.send` call with the task's token cap, low reasoning effort, the caller's signal and
+   * the retry codes. Reports metrics for every completed response (truncated ones included),
+   * then rejects truncated output. Provider errors are classified here; only the json_schema 400
+   * passes through raw so `sendStructured` can fall back.
+   */
+  private async send(
+    task: AITask,
+    request: Omit<ChatRequest, "maxCompletionTokens">,
+    options?: AICallOptions,
+  ): Promise<string> {
+    const model = request.model ?? this.model;
+    let response: ChatResult;
+    try {
+      response = await this.client.chat.send(
+        {
+          chatRequest: {
+            ...request,
+            maxCompletionTokens: MAX_TOKENS[task],
+            reasoning: REASONING,
+            stream: false,
           },
-          body: JSON.stringify(retryBody),
-        });
-        if (!retry.ok) {
-          throw new Error(`OpenRouter API error ${retry.status}: ${await retry.text()}`);
-        }
-        return (await retry.json()) as OpenRouterChatResponse;
+        },
+        {
+          ...(options?.signal ? { signal: options.signal } : {}),
+          retryCodes: RETRY_CODES,
+        },
+      );
+    } catch (error) {
+      if (options?.signal?.aborted) {
+        throw abortReason(options.signal);
       }
-      throw new Error(`OpenRouter API error ${response.status}: ${errorBody}`);
+      if (isJsonSchemaUnsupportedError(error)) {
+        throw error;
+      }
+      throw classifyProviderError(error, task);
     }
 
-    return (await response.json()) as OpenRouterChatResponse;
-  }
-
-  private captureUsage(response: unknown): void {
-    this.lastMetrics = extractGenerationMetrics(response);
-  }
-
-  private extractContent(response: { choices?: Array<{ message?: { content?: unknown } }> }): string {
-    const content = response.choices?.[0]?.message?.content;
-
-    if (typeof content === "string") {
-      return content;
+    reportMetrics(options, response, model);
+    if (response.choices[0]?.finishReason === "length") {
+      throw new AIOutputTruncatedError(task, response.model || model);
     }
-
-    if (Array.isArray(content)) {
-      return content
-        .map((part) => {
-          if (typeof part === "string") return part;
-          if (part && typeof part === "object" && "text" in part) {
-            return String((part as { text: string }).text);
-          }
-          return "";
-        })
-        .join("");
-    }
-
-    throw new Error("Empty response from OpenRouter");
+    return extractContent(response);
   }
 }
 
-interface OpenRouterChatResponse {
-  choices?: Array<{ message?: { content?: unknown } }>;
-  usage?: {
-    prompt_tokens?: number;
-    completion_tokens?: number;
-    total_tokens?: number;
-    promptTokens?: number;
-    completionTokens?: number;
-    totalTokens?: number;
-    cost?: number;
-  };
-}
-
-function extractGenerationMetrics(response: unknown): GenerationMetrics | undefined {
-  if (!response || typeof response !== "object") {
-    return undefined;
-  }
-
-  const record = response as Record<string, unknown>;
-  const usage = record.usage;
-  if (!usage || typeof usage !== "object") {
-    return undefined;
-  }
-
-  const usageRecord = usage as Record<string, unknown>;
-  const promptTokens = asFiniteNumber(usageRecord.prompt_tokens ?? usageRecord.promptTokens);
-  const completionTokens = asFiniteNumber(
-    usageRecord.completion_tokens ?? usageRecord.completionTokens,
-  );
-  const totalTokens = asFiniteNumber(usageRecord.total_tokens ?? usageRecord.totalTokens);
-  const cost = asFiniteNumber(usageRecord.cost ?? usageRecord.total_cost ?? usageRecord.totalCost);
-
+/**
+ * Maps SDK errors to typed core errors with fixed messages. Errors that are not provider
+ * availability problems (400/401/403/422, parse errors) pass through for the host's generic 500.
+ */
+function classifyProviderError(error: unknown, task: AITask): unknown {
   if (
-    promptTokens === undefined &&
-    completionTokens === undefined &&
-    totalTokens === undefined &&
-    cost === undefined
+    error instanceof AIRateLimitedError ||
+    error instanceof AIUpstreamError ||
+    error instanceof SearchTimeoutError
   ) {
-    return undefined;
+    return error;
+  }
+  if (error instanceof OpenRouterError) {
+    if (error.statusCode === 429) {
+      return new AIRateLimitedError({ cause: error });
+    }
+    if (error.statusCode === 402 || error.statusCode >= 500) {
+      return new AIUpstreamError(error.statusCode, { cause: error });
+    }
+    return error;
+  }
+  if (error instanceof RequestTimeoutError) {
+    return new SearchTimeoutError(`openrouter_${task}`, OPENROUTER_REQUEST_TIMEOUT_MS);
+  }
+  if (error instanceof ConnectionError) {
+    return new AIUpstreamError(undefined, { cause: error });
+  }
+  return error;
+}
+
+function abortReason(signal: AbortSignal): Error {
+  const reason: unknown = signal.reason;
+  return reason instanceof Error ? reason : new DOMException("The operation was aborted", "AbortError");
+}
+
+function extractContent(response: ChatResult): string {
+  const content = response.choices[0]?.message.content;
+
+  if (typeof content === "string") {
+    return content;
   }
 
-  return { promptTokens, completionTokens, totalTokens, cost };
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => ("text" in part && typeof part.text === "string" ? part.text : ""))
+      .join("");
+  }
+
+  throw new Error("Empty response from OpenRouter");
+}
+
+/**
+ * Maps an SDK chat result to per-call metrics. `fallbackModel` is the model that was requested;
+ * the response's own `model` wins because it reflects provider-side fallbacks.
+ */
+function extractCallMetrics(response: ChatResult, fallbackModel: string): AICallMetrics {
+  const model =
+    typeof response.model === "string" && response.model.length > 0 ? response.model : fallbackModel;
+  const metrics: AICallMetrics = { model };
+
+  const usage = response.usage;
+  if (usage) {
+    const input = asFiniteNumber(usage.promptTokens);
+    const output = asFiniteNumber(usage.completionTokens);
+    const reportedTotal = asFiniteNumber(usage.totalTokens);
+    if (input !== undefined || output !== undefined || reportedTotal !== undefined) {
+      const inputTokens = input ?? 0;
+      const outputTokens = output ?? 0;
+      const cacheRead = asFiniteNumber(usage.promptTokensDetails?.cachedTokens);
+      metrics.usage = {
+        input: inputTokens,
+        output: outputTokens,
+        total: reportedTotal ?? inputTokens + outputTokens,
+        ...(cacheRead ? { cacheRead } : {}),
+      };
+    }
+    const cost = asFiniteNumber(usage.cost);
+    if (cost !== undefined) {
+      metrics.costUsd = cost;
+    }
+  }
+
+  const finishReason = response.choices[0]?.finishReason;
+  if (typeof finishReason === "string") {
+    metrics.finishReason = finishReason;
+  }
+
+  return metrics;
+}
+
+function reportMetrics(
+  options: AICallOptions | undefined,
+  response: ChatResult,
+  fallbackModel: string,
+): void {
+  if (!options?.onMetrics) {
+    return;
+  }
+  try {
+    options.onMetrics(extractCallMetrics(response, fallbackModel));
+  } catch {
+    // A failing metrics callback must never fail the AI call itself.
+  }
 }
 
 function asFiniteNumber(value: unknown): number | undefined {
@@ -411,11 +512,8 @@ function asFiniteNumber(value: unknown): number | undefined {
 }
 
 function appendStructuredOutputHint(
-  messages: Array<{ role: string; content: unknown }>,
-  schema: Record<string, unknown>,
-): Array<{ role: string; content: unknown }> {
-  return [
-    ...messages,
-    { role: "user", content: structuredOutputInstruction(schema) },
-  ];
+  messages: ChatMessages[],
+  schema: Record<string, unknown> | undefined,
+): ChatMessages[] {
+  return [...messages, { role: "user", content: structuredOutputInstruction(schema ?? {}) }];
 }

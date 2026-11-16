@@ -6,6 +6,7 @@ import {
   loadEvalEnvFile,
   parseAttributeCatalog,
   readProviderConfig,
+  createEvalMetricsCapture,
   toEvalProviderResponse,
 } from "./eval-utils.ts";
 
@@ -40,13 +41,15 @@ export default class MissionSearchEvalProvider {
 
     try {
       const startedAt = Date.now();
+      const capture = createEvalMetricsCapture();
       const result = await this.evalProvider.ai!.decomposeShoppingMission(
         query,
         { queryLocale, catalogLocale },
         parseAttributeCatalog(vars),
+        capture.options,
       );
 
-      return toEvalProviderResponse(result, this.evalProvider.ai!, startedAt);
+      return toEvalProviderResponse(result, capture.get(), startedAt);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return { error: message };

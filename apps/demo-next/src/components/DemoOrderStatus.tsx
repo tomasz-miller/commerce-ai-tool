@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { CommerceAIOrderStatus } from "@commerce-ai-tool/react";
 import {
@@ -21,6 +22,12 @@ function OrderStatusView() {
       catalogLocale={demoCatalogLocale}
       currency={demoCurrency}
       country={demoCountry}
+      headingLevel={1}
+      renderLink={({ href, className, children }) => (
+        <Link href={href} className={className}>
+          {children}
+        </Link>
+      )}
     />
   );
 }

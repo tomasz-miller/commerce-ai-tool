@@ -5,22 +5,46 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Weekly run of the angular-consumer job only (the other jobs are skipped, see their `if`):
+  # it installs the newest Angular patch of each supported line with npm, so patch drift
+  # shows up outside pull requests.
+  schedule:
+    - cron: "0 5 * * 1"
+  # Reused by release.yml as its `verify` job.
+  workflow_call:
+
+permissions:
+  contents: read
+
+# `github.workflow` is the caller's name when this file runs through
+# workflow_call, so the group differs from the caller's own concurrency group
+# (a shared group would deadlock the caller). Only pull requests are cancelled:
+# a newer push must never cancel the verification a release is waiting for.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  build:
+  ci:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Audit production dependencies
+        run: pnpm audit --prod --audit-level high
 
       - name: Lint
         run: pnpm lint
@@ -35,3 +59,74 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Check packaged output (attw + publint)
+        run: pnpm check:package
+
+      - name: Check packed declarations from a node16 consumer
+        run: pnpm check:consumer
+
+  e2e:
+    # Playwright suites for both demo apps. Every backend call is mocked in the
+    # specs (page.route) and the Angular dev server uses the empty proxy
+    # config apps/demo-angular/proxy.e2e.json, so this job needs no secrets.
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build workspace libraries
+        # The demo apps consume the built dist/ of the library packages.
+        run: pnpm exec turbo run build --filter="./packages/*"
+
+      - name: Install Playwright browser
+        run: pnpm --filter demo-next exec playwright install --with-deps chromium
+
+      - name: E2E
+        run: pnpm test:e2e
+
+  angular-consumer:
+    # Builds a fresh standalone Angular app (scripts/fixtures/angular-consumer) against the
+    # packed @commerce-ai-tool/angular and @commerce-ai-tool/core tarballs: AOT, strict
+    # templates, no workspace links. Covers the oldest supported Angular line (the one the
+    # library is compiled on) and the line the demo app runs on. No secrets needed.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        angular: ["20.3", "21.2"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the Angular package
+        # Turbo builds @commerce-ai-tool/core first (^build); the APF check runs inside the build.
+        run: pnpm exec turbo run build --filter=@commerce-ai-tool/angular
+
+      - name: Build a consumer app against the packed tarballs
+        run: node scripts/check-angular-consumer.mjs --angular ${{ matrix.angular }}

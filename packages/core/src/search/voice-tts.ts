@@ -1,7 +1,45 @@
 import type { SearchLocaleContext } from "../types/index.js";
 
-/** @deprecated Import from `../prompts/index.js` — re-exported for compatibility. */
-export { TTS_SUMMARY_PROMPT } from "../prompts/index.js";
+/**
+ * Max characters of spoken summary text. The server's `/tts` route rejects longer text, so
+ * server-issued `ttsText` is truncated to this length before it reaches the widget.
+ */
+export const MAX_TTS_CHARS = 500;
+
+/**
+ * Trims `text` and cuts it to at most `max` characters: at the last sentence end
+ * (`.`, `!`, `?`, `…`) within the cap, else at the last word boundary, else hard.
+ */
+export function truncateTtsText(text: string, max: number = MAX_TTS_CHARS): string {
+  const trimmed = text.trim();
+  if (trimmed.length <= max) {
+    return trimmed;
+  }
+
+  const window = trimmed.slice(0, max);
+  const sentenceEnd = Math.max(
+    window.lastIndexOf(". "),
+    window.lastIndexOf("! "),
+    window.lastIndexOf("? "),
+    window.lastIndexOf("… "),
+  );
+  if (sentenceEnd > 0) {
+    return window.slice(0, sentenceEnd + 1);
+  }
+  // The cut may land exactly on a sentence end followed by a space beyond the window.
+  if (/[.!?…]$/.test(window) && /\s/.test(trimmed.charAt(max))) {
+    return window;
+  }
+
+  const wordEnd = window.search(/\s\S*$/);
+  if (wordEnd > 0) {
+    return window.slice(0, wordEnd).trimEnd();
+  }
+
+  // Do not split a surrogate pair (for example an emoji) on a hard cut.
+  const lastCode = window.charCodeAt(window.length - 1);
+  return lastCode >= 0xd800 && lastCode <= 0xdbff ? window.slice(0, -1) : window;
+}
 
 export function buildTtsSummaryUserMessage(
   count: number,

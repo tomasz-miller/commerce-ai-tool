@@ -14,7 +14,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildSearchKeywordsFromProductCopy } from "@commerce-ai-tool/core";
+import { buildSearchKeywordsFromProductCopy } from "@commerce-ai-tool/core/internal";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
@@ -143,11 +143,21 @@ function productLabel(product) {
   return product.key || product.id;
 }
 
-async function fetchProductPage(apiUrl, token, offset) {
+/**
+ * One page of products in id order. Pages after the first filter on `id > lastId` instead of
+ * using `offset`: offset is capped at 10000, and a product inserted while iterating would shift
+ * the next offset. Sorting by id and omitting the total follows the documented "Iterate over all
+ * elements" pattern (api/general-concepts#iterate-over-all-elements).
+ */
+async function fetchProductPage(apiUrl, token, lastId) {
   const params = new URLSearchParams({
     limit: String(PAGE_SIZE),
-    offset: String(offset),
+    sort: "id asc",
+    withTotal: "false",
   });
+  if (lastId) {
+    params.set("where", `id > "${lastId}"`);
+  }
   const result = await ctFetch(apiUrl, token, `/products?${params}`);
   if (!result.ok) {
     throw new Error(`List products failed: HTTP ${result.status}`);
@@ -238,16 +248,18 @@ async function main() {
     } | project=${projectKey}`,
   );
 
-  let offset = 0;
-  let total = Infinity;
+  let lastId;
+  let hasMore = true;
 
-  while (summary.scanned < options.limit && offset < total) {
-    const page = await fetchProductPage(apiUrl, token, offset);
-    total = page.total ?? 0;
+  while (summary.scanned < options.limit && hasMore) {
+    const page = await fetchProductPage(apiUrl, token, lastId);
     const results = page.results ?? [];
     if (results.length === 0) {
       break;
     }
+    // A full page means there may be more; a short page is the last one.
+    hasMore = results.length === PAGE_SIZE;
+    lastId = results[results.length - 1].id;
 
     for (const product of results) {
       if (summary.scanned >= options.limit) {
@@ -301,8 +313,6 @@ async function main() {
 
       summary.updated += 1;
     }
-
-    offset += results.length;
   }
 
   console.log(

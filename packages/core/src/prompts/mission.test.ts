@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { MAX_LINE_ITEM_QUANTITY } from "../types/index.js";
+import {
+  MAX_LINE_ITEM_QUANTITY,
+} from "../config/defaults.js";
 import {
   MAX_MISSION_INTENTS,
   MISSION_QUERY_SYSTEM_PROMPT,
@@ -126,7 +128,7 @@ describe("buildMissionQueryUserMessage", () => {
       [{ name: "color", label: "Color", kind: "distinct", attributeType: "enum", field: "color" }],
     );
 
-    expect(message).toContain("Query: a racket and two balls");
+    expect(message).toContain('<user_query>"a racket and two balls"</user_query>');
     expect(message).toContain("catalog language: no");
     expect(message).toContain("Filterable attribute catalog");
   });

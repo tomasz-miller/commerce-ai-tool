@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { gotoHydrated } from "./helpers";
 
 test("refines AI-suggested facets without a second AI search", async ({ page }) => {
   let refined = false;
@@ -48,7 +49,7 @@ test("refines AI-suggested facets without a second AI search", async ({ page }) 
     });
   });
 
-  await page.goto("/");
+  await gotoHydrated(page, "/");
   const searchInput = page.getByRole("combobox", { name: "Search query" });
   await searchInput.fill("glasses");
   await searchInput.press("Enter");
@@ -56,7 +57,7 @@ test("refines AI-suggested facets without a second AI search", async ({ page }) 
   await expect(page.getByRole("group", { name: "Color" })).toBeVisible();
   await page.getByRole("button", { name: "red" }).click();
 
-  await expect(page.getByRole("button", { name: "Red Glass" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Red Glass/ })).toBeVisible();
   expect(refined).toBe(true);
   expect(sentSuggestedFacets).toBe(true);
   await expect(page.getByRole("button", { name: "New search" })).toBeVisible();

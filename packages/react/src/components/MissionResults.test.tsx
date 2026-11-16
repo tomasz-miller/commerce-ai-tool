@@ -83,13 +83,44 @@ describe("MissionResults", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Club Racket/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Club Racket/i }));
     expect(onProductSelect).toHaveBeenCalledWith(
       expect.objectContaining({ id: "p2", sku: "RACKET-2" }),
     );
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Add to cart" })[1]!);
+    fireEvent.click(screen.getByRole("button", { name: "Add Club Racket to cart" }));
     expect(onAddItem).toHaveBeenCalledWith(expect.objectContaining({ id: "p2", sku: "RACKET-2" }));
+  });
+
+  it("add-to-cart button name includes the product name", () => {
+    render(
+      <MissionResults mission={mission} messages={messages} enableCart isMutating={false} onAddAll={vi.fn()} />,
+    );
+
+    expect(screen.getByRole("button", { name: "Add Pro Racket to cart" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Add Tour Balls to cart" })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Add to cart" })).toBeNull();
+  });
+
+  it("leaves the empty-lane state to the widget's live region", () => {
+    const { container } = render(
+      <MissionResults
+        mission={{
+          interpretation: "partial",
+          intents: [
+            { intent: { id: "i0", label: "x", quantity: 1, searchTerms: ["x"] }, products: [], total: 0 },
+            { intent: { id: "i1", label: "y", quantity: 1, searchTerms: ["y"] }, products: [], total: 0, failed: true },
+          ],
+        }}
+        messages={messages}
+        enableCart={false}
+        isMutating={false}
+        onAddAll={vi.fn()}
+      />,
+    );
+
+    expect(container.querySelector(".cat-status--empty")).not.toBeNull();
+    expect(container.querySelector('[role="status"]')).toBeNull();
   });
 
   it("renders empty and failed intent states", () => {
@@ -186,5 +217,20 @@ describe("MissionResults", () => {
 
     expect(screen.queryByRole("button", { name: /Pro Racket/i })).toBeNull();
     expect(screen.getByText("Pro Racket")).toBeTruthy();
+  });
+
+  it("renders with a messages object that lacks the keys added after 2.5.0", () => {
+    const { rateLimited: _rateLimited, resultsCount: _resultsCount, ...legacyMessages } = messages;
+    render(
+      <MissionResults
+        mission={mission}
+        messages={legacyMessages}
+        enableCart
+        isMutating={false}
+        onAddAll={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(messages.missionTitle)).toBeTruthy();
   });
 });

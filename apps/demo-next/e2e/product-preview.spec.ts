@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { gotoHydrated } from "./helpers";
 
 async function openRedGlassPreview(page: Page) {
   await page.route("**/api/commerce-ai/search", async (route) => {
@@ -29,11 +30,11 @@ async function openRedGlassPreview(page: Page) {
     });
   });
 
-  await page.goto("/");
+  await gotoHydrated(page, "/");
   const searchInput = page.getByRole("combobox", { name: "Search query" });
   await searchInput.fill("glasses");
   await searchInput.press("Enter");
-  await page.getByRole("button", { name: "Red Glass" }).click();
+  await page.getByRole("button", { name: /^Red Glass/ }).click();
   return page.getByRole("dialog", { name: "Red Glass" });
 }
 
@@ -46,7 +47,7 @@ test("opens a product preview sheet from a search result", async ({ page }) => {
 
   await preview.getByRole("button", { name: "Close" }).click();
   await expect(preview).toBeHidden();
-  await expect(page.getByRole("button", { name: "Red Glass" })).toBeFocused();
+  await expect(page.getByRole("button", { name: /^Red Glass/ })).toBeFocused();
 });
 
 test("adds the previewed product to the cart with a chosen quantity", async ({ page }) => {
@@ -126,7 +127,7 @@ test("closes the product preview with Escape and restores focus", async ({ page 
 
   await page.keyboard.press("Escape");
   await expect(preview).toBeHidden();
-  await expect(page.getByRole("button", { name: "Red Glass" })).toBeFocused();
+  await expect(page.getByRole("button", { name: /^Red Glass/ })).toBeFocused();
 });
 
 test("closes the product preview from the backdrop", async ({ page }) => {

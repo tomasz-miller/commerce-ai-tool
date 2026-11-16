@@ -21,6 +21,7 @@ Browser Widget  →  Host /api/commerce-ai/*  →  AI + ElevenLabs + commercetoo
 | [Search pipeline](./docs/SEARCH-PIPELINE.md) | LLM interpretation and Product Search |
 | [Cart and checkout](./docs/CART-AND-CHECKOUT.md) | Cart, payments, orders |
 | [Observability](./docs/OBSERVABILITY.md) | `CAT_DEBUG`, Langfuse |
+| [Migrating to 3.0.0](./docs/MIGRATION-3.0.md) | Breaking changes in 3.0.0 and what to do about each |
 | [Development](./docs/DEVELOPMENT.md) | Commands, evals, publishing |
 | [Roadmap](./docs/ROADMAP.md) | Shipped versions and current work |
 

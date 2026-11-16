@@ -24,6 +24,22 @@ export interface CommerceAISearchMessages {
   searchFailed: string;
   imageSearchFailed: string;
   couldNotCapturePhoto: string;
+  /** Microphone permission was refused. Say how to re-enable it. Optional: the English default applies when omitted. */
+  microphoneDenied?: string;
+  /** No microphone, or it is in use by another app. Optional: the English default applies when omitted. */
+  microphoneUnavailable?: string;
+  /** Camera permission was refused. Say how to re-enable it. Optional: the English default applies when omitted. */
+  cameraDenied?: string;
+  /** Optional: the English default applies when omitted. */
+  cameraNotFound?: string;
+  /** Optional: the English default applies when omitted. */
+  cameraInUse?: string;
+  /** Optional: the English default applies when omitted. */
+  cameraUnavailable?: string;
+  /** The host API answered 429 (`RATE_LIMITED`). Optional: the English default applies when omitted. */
+  rateLimited?: string;
+  /** Result count announcement. Use `{count}` for the number of products. Optional: the English default applies when omitted. */
+  resultsCount?: string;
   suggestionsAriaLabel: string;
   loadingSuggestions: string;
   noSuggestions: string;
@@ -32,17 +48,36 @@ export interface CommerceAISearchMessages {
   narrowResults: string;
   newSearch: string;
   addToCart: string;
+  /**
+   * Accessible name of a product's add-to-cart button. Use `{name}` for the product name.
+   * Optional: when omitted it is built from `addToCart` (`"<addToCart>: <name>"`), or the English
+   * default when `addToCart` is not overridden either.
+   */
+  addToCartNamed?: string;
   cart: string;
   emptyCart: string;
   removeItem: string;
+  /**
+   * Accessible name of a cart line's remove button. Use `{name}` for the product name.
+   * Optional: when omitted it is built from `removeItem` (`"<removeItem>: <name>"`), or the English
+   * default when `removeItem` is not overridden either.
+   */
+  removeItemNamed?: string;
   total: string;
   each: string;
   cartAriaLabel: string;
   itemAdded: string;
   increaseQuantity: string;
   decreaseQuantity: string;
+  /**
+   * Accessible name of the quantity controls of one cart line. Use `{name}` for the product name.
+   * Optional: the English default applies when omitted.
+   */
+  quantityFor?: string;
   closeCart: string;
   unableToAddToCart: string;
+  /** The cart could not be loaded or refreshed. Optional: the English default applies when omitted. */
+  cartLoadFailed?: string;
   missionTitle: string;
   missionQuantity: string;
   /** Adds the first (recommended) product from each filled lane. Use `{count}` for the number of picks. */
@@ -106,7 +141,14 @@ export interface CommerceAISearchMessages {
   country: string;
 }
 
-export const DEFAULT_COMMERCE_AI_SEARCH_MESSAGES: CommerceAISearchMessages = {
+/**
+ * `CommerceAISearchMessages` with every key present: what the widgets read. Keys added after 2.5.0
+ * are optional in `CommerceAISearchMessages`, so a host's full object written against 2.5.0 still
+ * type-checks; `resolveCommerceAISearchMessages` fills them from the English defaults.
+ */
+export type ResolvedCommerceAISearchMessages = Required<CommerceAISearchMessages>;
+
+export const DEFAULT_COMMERCE_AI_SEARCH_MESSAGES: ResolvedCommerceAISearchMessages = {
   placeholder: "What are you looking for?",
   searchAriaLabel: "Search query",
   productSearchAriaLabel: "Product search",
@@ -132,6 +174,14 @@ export const DEFAULT_COMMERCE_AI_SEARCH_MESSAGES: CommerceAISearchMessages = {
   searchFailed: "Search failed",
   imageSearchFailed: "Image search failed",
   couldNotCapturePhoto: "Could not capture photo",
+  microphoneDenied: "Microphone access denied. Allow the microphone in your browser settings to search by voice.",
+  microphoneUnavailable: "No microphone available. Check that one is connected and not in use by another app.",
+  cameraDenied: "Camera access denied. Allow the camera in your browser settings to search by camera.",
+  cameraNotFound: "No camera found",
+  cameraInUse: "Camera is already in use",
+  cameraUnavailable: "Camera unavailable",
+  rateLimited: "Too many requests. Please wait a moment and try again.",
+  resultsCount: "Results: {count}",
   suggestionsAriaLabel: "Search suggestions",
   loadingSuggestions: "Loading suggestions...",
   noSuggestions: "No suggestions",
@@ -140,17 +190,21 @@ export const DEFAULT_COMMERCE_AI_SEARCH_MESSAGES: CommerceAISearchMessages = {
   narrowResults: "Narrow your results",
   newSearch: "New search",
   addToCart: "Add to cart",
+  addToCartNamed: "Add {name} to cart",
   cart: "Cart",
   emptyCart: "Your cart is empty",
   removeItem: "Remove item",
+  removeItemNamed: "Remove {name} from cart",
   total: "Total",
   each: "each",
   cartAriaLabel: "Shopping cart",
   itemAdded: "Added to cart",
   increaseQuantity: "Increase quantity",
   decreaseQuantity: "Decrease quantity",
+  quantityFor: "Quantity of {name}",
   closeCart: "Close cart",
   unableToAddToCart: "This product cannot be added to the cart",
+  cartLoadFailed: "Couldn't load your cart. Please try again.",
   missionTitle: "Shopping list",
   missionQuantity: "Looking for",
   missionAddAll: "Add {count} top picks to cart",
@@ -215,9 +269,36 @@ export const DEFAULT_COMMERCE_AI_SEARCH_MESSAGES: CommerceAISearchMessages = {
 
 export function resolveCommerceAISearchMessages(
   overrides?: Partial<CommerceAISearchMessages>,
-): CommerceAISearchMessages {
-  return {
-    ...DEFAULT_COMMERCE_AI_SEARCH_MESSAGES,
-    ...overrides,
-  };
+): ResolvedCommerceAISearchMessages {
+  const resolved: ResolvedCommerceAISearchMessages = { ...DEFAULT_COMMERCE_AI_SEARCH_MESSAGES };
+  // An entry set to `undefined` (`cond ? text : undefined`) or `null` (JSON config, JS callers)
+  // means "not overridden", not "no text".
+  for (const [key, value] of Object.entries(overrides ?? {})) {
+    if (value != null) {
+      (resolved as Record<string, string>)[key] = value;
+    }
+  }
+  // A host that translated `addToCart` / `removeItem` but predates the `{name}` keys keeps its own
+  // wording ("Dodaj do koszyka: Buty") instead of getting the English default.
+  if (overrides?.addToCart != null && overrides.addToCartNamed == null) {
+    resolved.addToCartNamed = `${overrides.addToCart}: {name}`;
+  }
+  if (overrides?.removeItem != null && overrides.removeItemNamed == null) {
+    resolved.removeItemNamed = `${overrides.removeItem}: {name}`;
+  }
+  return resolved;
+}
+
+/**
+ * Fills the `{name}` placeholder of a message template with a product name. A template without the
+ * placeholder gets the name appended, and an empty name leaves the template as it is.
+ */
+export function formatNamedMessage(template: string, name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    return template.replaceAll("{name}", "").replace(/\s+/g, " ").trim();
+  }
+  return template.includes("{name}")
+    ? template.replaceAll("{name}", trimmed)
+    : `${template}: ${trimmed}`;
 }

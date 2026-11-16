@@ -1,6 +1,6 @@
 import { startActiveObservation } from "@langfuse/tracing";
 import type { AIProviderName } from "../types/index.js";
-import type { AIProvider } from "../ai/types.js";
+import type { AICallMetrics, AICallOptions, AIProvider } from "../ai/types.js";
 import { isLangfuseEnabled } from "./enabled.js";
 import { redactBase64ImageInput, redactBinaryInput } from "./redact.js";
 
@@ -21,7 +21,7 @@ export function wrapAIProvider(provider: AIProvider, meta: AIProviderTraceMeta):
   }
 
   return {
-    interpretTextQuery(text, locales, attributeCatalog = []) {
+    interpretTextQuery(text, locales, attributeCatalog = [], options) {
       return startActiveObservation(
         "ai.interpretTextQuery",
         async (generation) => {
@@ -35,7 +35,12 @@ export function wrapAIProvider(provider: AIProvider, meta: AIProviderTraceMeta):
             },
           });
           try {
-            const result = await provider.interpretTextQuery(text, locales, attributeCatalog);
+            const result = await provider.interpretTextQuery(
+              text,
+              locales,
+              attributeCatalog,
+              withGenerationMetrics(generation, options),
+            );
             generation.update({ output: result });
             return result;
           } catch (error) {
@@ -47,7 +52,7 @@ export function wrapAIProvider(provider: AIProvider, meta: AIProviderTraceMeta):
       );
     },
 
-    interpretRefineQuery(text, context, locales) {
+    interpretRefineQuery(text, context, locales, options) {
       return startActiveObservation(
         "ai.interpretRefineQuery",
         async (generation) => {
@@ -62,7 +67,12 @@ export function wrapAIProvider(provider: AIProvider, meta: AIProviderTraceMeta):
             },
           });
           try {
-            const result = await provider.interpretRefineQuery(text, context, locales);
+            const result = await provider.interpretRefineQuery(
+              text,
+              context,
+              locales,
+              withGenerationMetrics(generation, options),
+            );
             generation.update({ output: result });
             return result;
           } catch (error) {
@@ -74,7 +84,7 @@ export function wrapAIProvider(provider: AIProvider, meta: AIProviderTraceMeta):
       );
     },
 
-    interpretImageQuery(imageBase64, mimeType, locales, attributeCatalog = []) {
+    interpretImageQuery(imageBase64, mimeType, locales, attributeCatalog = [], options) {
       return startActiveObservation(
         "ai.interpretImageQuery",
         async (generation) => {
@@ -92,6 +102,7 @@ export function wrapAIProvider(provider: AIProvider, meta: AIProviderTraceMeta):
               mimeType,
               locales,
               attributeCatalog,
+              withGenerationMetrics(generation, options),
             );
             generation.update({ output: result });
             return result;
@@ -104,7 +115,7 @@ export function wrapAIProvider(provider: AIProvider, meta: AIProviderTraceMeta):
       );
     },
 
-    interpretVoiceAudio(audio, mimeType, locales, attributeCatalog = []) {
+    interpretVoiceAudio(audio, mimeType, locales, attributeCatalog = [], options) {
       return startActiveObservation(
         "ai.interpretVoiceAudio",
         async (generation) => {
@@ -122,6 +133,7 @@ export function wrapAIProvider(provider: AIProvider, meta: AIProviderTraceMeta):
               mimeType,
               locales,
               attributeCatalog,
+              withGenerationMetrics(generation, options),
             );
             generation.update({
               output: {
@@ -141,7 +153,7 @@ export function wrapAIProvider(provider: AIProvider, meta: AIProviderTraceMeta):
       );
     },
 
-    enhanceVoiceTranscript(transcript, locales) {
+    enhanceVoiceTranscript(transcript, locales, options) {
       return startActiveObservation(
         "ai.enhanceVoiceTranscript",
         async (generation) => {
@@ -151,7 +163,11 @@ export function wrapAIProvider(provider: AIProvider, meta: AIProviderTraceMeta):
             input: { transcript, locales },
           });
           try {
-            const result = await provider.enhanceVoiceTranscript(transcript, locales);
+            const result = await provider.enhanceVoiceTranscript(
+              transcript,
+              locales,
+              withGenerationMetrics(generation, options),
+            );
             generation.update({ output: result });
             return result;
           } catch (error) {
@@ -163,7 +179,7 @@ export function wrapAIProvider(provider: AIProvider, meta: AIProviderTraceMeta):
       );
     },
 
-    suggestSearchTerms(query, locales, limit = 8) {
+    suggestSearchTerms(query, locales, limit = 8, options) {
       return startActiveObservation(
         "ai.suggestSearchTerms",
         async (generation) => {
@@ -173,7 +189,12 @@ export function wrapAIProvider(provider: AIProvider, meta: AIProviderTraceMeta):
             input: { query, locales, limit },
           });
           try {
-            const result = await provider.suggestSearchTerms(query, locales, limit);
+            const result = await provider.suggestSearchTerms(
+              query,
+              locales,
+              limit,
+              withGenerationMetrics(generation, options),
+            );
             generation.update({ output: result });
             return result;
           } catch (error) {
@@ -185,7 +206,7 @@ export function wrapAIProvider(provider: AIProvider, meta: AIProviderTraceMeta):
       );
     },
 
-    summarizeVoiceResults(count, topProductName, locales) {
+    summarizeVoiceResults(count, topProductName, locales, options) {
       return startActiveObservation(
         "ai.summarizeVoiceResults",
         async (generation) => {
@@ -195,7 +216,12 @@ export function wrapAIProvider(provider: AIProvider, meta: AIProviderTraceMeta):
             input: { count, topProductName, locales },
           });
           try {
-            const result = await provider.summarizeVoiceResults(count, topProductName, locales);
+            const result = await provider.summarizeVoiceResults(
+              count,
+              topProductName,
+              locales,
+              withGenerationMetrics(generation, options),
+            );
             generation.update({ output: result });
             return result;
           } catch (error) {
@@ -207,7 +233,7 @@ export function wrapAIProvider(provider: AIProvider, meta: AIProviderTraceMeta):
       );
     },
 
-    decomposeShoppingMission(text, locales, attributeCatalog = []) {
+    decomposeShoppingMission(text, locales, attributeCatalog = [], options) {
       return startActiveObservation(
         "ai.decomposeShoppingMission",
         async (generation) => {
@@ -221,7 +247,12 @@ export function wrapAIProvider(provider: AIProvider, meta: AIProviderTraceMeta):
             },
           });
           try {
-            const result = await provider.decomposeShoppingMission(text, locales, attributeCatalog);
+            const result = await provider.decomposeShoppingMission(
+              text,
+              locales,
+              attributeCatalog,
+              withGenerationMetrics(generation, options),
+            );
             generation.update({ output: result });
             return result;
           } catch (error) {
@@ -233,8 +264,91 @@ export function wrapAIProvider(provider: AIProvider, meta: AIProviderTraceMeta):
       );
     },
 
-    getLastGenerationMetrics: provider.getLastGenerationMetrics?.bind(provider),
+    // Optional method: only exposed when the wrapped provider implements it, so the orchestrator's
+    // enhance-then-interpret fallback still applies to custom providers.
+    ...(provider.interpretVoiceTranscript
+      ? {
+          interpretVoiceTranscript(
+            transcript: string,
+            locales: Parameters<NonNullable<AIProvider["interpretVoiceTranscript"]>>[1],
+            attributeCatalog: NonNullable<Parameters<NonNullable<AIProvider["interpretVoiceTranscript"]>>[2]> = [],
+            options?: AICallOptions,
+          ) {
+            return startActiveObservation(
+              "ai.interpretVoiceTranscript",
+              async (generation) => {
+                generation.update({
+                  model: meta.textModel,
+                  metadata: { provider: meta.provider },
+                  input: {
+                    transcript,
+                    locales,
+                    attributeCatalogSize: attributeCatalog.length,
+                  },
+                });
+                try {
+                  const result = await provider.interpretVoiceTranscript!(
+                    transcript,
+                    locales,
+                    attributeCatalog,
+                    withGenerationMetrics(generation, options),
+                  );
+                  generation.update({ output: result });
+                  return result;
+                } catch (error) {
+                  markGenerationError(generation, error);
+                  throw error;
+                }
+              },
+              { asType: "generation" },
+            );
+          },
+        }
+      : {}),
   };
+}
+
+type GenerationHandle = {
+  update: (attrs: {
+    model?: string;
+    usageDetails?: Record<string, number>;
+    costDetails?: Record<string, number>;
+  }) => unknown;
+};
+
+/**
+ * Per-call options whose `onMetrics` writes this call's model, usage and cost to its own
+ * generation (and still forwards to the caller's callback). No state is shared between calls.
+ */
+function withGenerationMetrics(
+  generation: GenerationHandle,
+  options: AICallOptions | undefined,
+): AICallOptions {
+  return {
+    ...options,
+    onMetrics: (metrics) => {
+      applyGenerationMetrics(generation, metrics);
+      options?.onMetrics?.(metrics);
+    },
+  };
+}
+
+function applyGenerationMetrics(generation: GenerationHandle, metrics: AICallMetrics): void {
+  const { usage, costUsd } = metrics;
+  generation.update({
+    model: metrics.model,
+    ...(usage
+      ? {
+          usageDetails: {
+            input: usage.input,
+            output: usage.output,
+            total: usage.total,
+            ...(usage.cacheRead ? { cache_read_input_tokens: usage.cacheRead } : {}),
+          },
+        }
+      : {}),
+    costDetails: costUsd !== undefined ? { total: costUsd } : undefined,
+  });
 }
 
 function markGenerationError(

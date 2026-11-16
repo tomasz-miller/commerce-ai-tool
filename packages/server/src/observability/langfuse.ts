@@ -3,25 +3,33 @@ import {
   redactBinaryInput,
   shouldTraceSuggestions,
   withPipelineSpan,
-} from "@commerce-ai-tool/core";
-import { flushLangfuse } from "./flush.js";
+} from "@commerce-ai-tool/core/internal";
+import { scheduleFlush, type FlushDefer } from "./flush.js";
 
-export { flushLangfuse, registerLangfuseFlush } from "./flush.js";
+export { flushLangfuse, registerLangfuseFlush, scheduleFlush } from "./flush.js";
+export type { FlushDefer } from "./flush.js";
 
+/**
+ * Run `fn` inside the request span, then schedule the Langfuse flush. The flush is scheduled
+ * after the span has ended (so the root span is exported with its children) and is never
+ * awaited: the response does not wait for the export, and a failing export cannot fail it.
+ * Pass `defer` to run the flush after the response is sent (Next `after`, Express `finish`).
+ */
 export async function withRequestSpan<T>(
   name: string,
   attributes: { input?: unknown; metadata?: Record<string, unknown> },
   fn: () => Promise<T>,
+  defer?: FlushDefer,
 ): Promise<T> {
-  return withPipelineSpan(name, attributes, async (span) => {
-    try {
+  try {
+    return await withPipelineSpan(name, attributes, async (span) => {
       const result = await fn();
       span?.update({ output: summarizeResult(result) });
       return result;
-    } finally {
-      await flushLangfuse();
-    }
-  });
+    });
+  } finally {
+    scheduleFlush(defer);
+  }
 }
 
 /**
@@ -33,11 +41,12 @@ export async function withOptionalRequestSpan<T>(
   name: string,
   attributes: { input?: unknown; metadata?: Record<string, unknown> },
   fn: () => Promise<T>,
+  defer?: FlushDefer,
 ): Promise<T> {
   if (!enabled) {
     return fn();
   }
-  return withRequestSpan(name, attributes, fn);
+  return withRequestSpan(name, attributes, fn, defer);
 }
 
 export { shouldTraceSuggestions };

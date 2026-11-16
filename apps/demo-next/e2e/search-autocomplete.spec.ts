@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { gotoHydrated } from "./helpers";
 
 test("autocomplete selects a suggestion and shows search results", async ({ page }) => {
   await page.route("**/api/commerce-ai/search/suggestions", async (route) => {
@@ -44,7 +45,7 @@ test("autocomplete selects a suggestion and shows search results", async ({ page
     });
   });
 
-  await page.goto("/");
+  await gotoHydrated(page, "/");
 
   const searchInput = page.getByRole("combobox", { name: "Search query" });
   await searchInput.fill("re");
@@ -57,5 +58,5 @@ test("autocomplete selects a suggestion and shows search results", async ({ page
 
   const results = page.getByRole("list", { name: "Search results" });
   await expect(results).toBeVisible();
-  await expect(results.getByRole("button", { name: "Red Shoes" })).toBeVisible();
+  await expect(results.getByRole("button", { name: /^Red Shoes/ })).toBeVisible();
 });

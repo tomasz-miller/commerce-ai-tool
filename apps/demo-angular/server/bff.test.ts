@@ -4,8 +4,11 @@ import {
   DEMO_BFF_BASE_PATH,
   DEMO_BFF_DEFAULT_HOST,
   DEMO_BFF_DEFAULT_PORT,
+  DEMO_SECURITY_HEADERS,
+  isMockPaymentsEnabled,
   resolveBffHost,
   resolveBffPort,
+  securityHeaders,
 } from "./bff.js";
 
 describe("mock-payment-provider", () => {
@@ -63,5 +66,34 @@ describe("demo BFF wiring", () => {
     expect(resolveBffHost({} as NodeJS.ProcessEnv)).toBe(DEMO_BFF_DEFAULT_HOST);
     expect(resolveBffHost({ BFF_HOST: "  " } as NodeJS.ProcessEnv)).toBe(DEMO_BFF_DEFAULT_HOST);
     expect(resolveBffHost({ BFF_HOST: "0.0.0.0" } as NodeJS.ProcessEnv)).toBe("0.0.0.0");
+  });
+});
+
+describe("demo BFF hardening", () => {
+  it("enables the mock payment provider only for CAT_DEMO_MOCK_PAYMENTS=true", () => {
+    expect(isMockPaymentsEnabled({ CAT_DEMO_MOCK_PAYMENTS: "true" } as NodeJS.ProcessEnv)).toBe(
+      true,
+    );
+    expect(isMockPaymentsEnabled({} as NodeJS.ProcessEnv)).toBe(false);
+    expect(isMockPaymentsEnabled({ CAT_DEMO_MOCK_PAYMENTS: "1" } as NodeJS.ProcessEnv)).toBe(false);
+    expect(isMockPaymentsEnabled({ CAT_DEMO_MOCK_PAYMENTS: "false" } as NodeJS.ProcessEnv)).toBe(
+      false,
+    );
+  });
+
+  it("sets the security headers on every response", () => {
+    const set: Record<string, string> = {};
+    let called = false;
+    securityHeaders()(
+      {} as never,
+      { setHeader: (k: string, v: string) => void (set[k] = v) } as never,
+      () => {
+        called = true;
+      },
+    );
+    expect(called).toBe(true);
+    expect(set).toEqual(DEMO_SECURITY_HEADERS);
+    expect(set["Content-Security-Policy"]).toContain("frame-ancestors 'none'");
+    expect(set["Permissions-Policy"]).toBe("microphone=(self), camera=(self)");
   });
 });
