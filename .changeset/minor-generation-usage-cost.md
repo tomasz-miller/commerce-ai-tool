@@ -1,5 +1,0 @@
----
-"@commerce-ai-tool/core": minor
----
-
-Langfuse generations now carry token usage, cost and the model that actually served the call. Every `AIProvider` method takes a trailing optional `options?: AICallOptions` whose `onMetrics(m: AICallMetrics)` callback receives that call's own `model`, `usage` (`input`, `output`, `total`, `cacheRead`), `costUsd` and `finishReason`; `wrapAIProvider` writes them to the generation as `model`, `usageDetails` and `costDetails`. The OpenRouter model is the response's `model` (so fallbacks are visible); Bedrock reports `response.usage` and the model id it called. OpenRouter cost is reported only when the response includes `usage.cost` (the raw audio path does; the 0.1.x SDK drops it). Trace metadata no longer shows an undefined model when defaults are used: `DEFAULT_OPENROUTER_MODEL`, `DEFAULT_OPENROUTER_VISION_MODEL`, `DEFAULT_OPENROUTER_VOICE_MODEL` and `DEFAULT_BEDROCK_MODEL` are exported from core. The racy per-instance `AIProvider.getLastGenerationMetrics()` getter and the `GenerationMetrics` type are gone: use `onMetrics` instead.
