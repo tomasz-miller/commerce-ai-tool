@@ -399,7 +399,7 @@ describe("CommerceAICheckout", () => {
     fillRequiredAddress();
     fireEvent.click(screen.getByRole("button", { name: "Continue to delivery" }));
     await waitFor(() => expect(actions.getShippingMethods).toHaveBeenCalled());
-    fireEvent.click(await screen.findByRole("button", { name: /Standard delivery/ }));
+    fireEvent.click(await waitForEnabledButton(/Standard delivery/));
     fireEvent.click(await waitForEnabledButton("Place order"));
 
     const status = await screen.findByRole("link", { name: "View order status" });
