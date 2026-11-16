@@ -15,7 +15,7 @@
     "@commerce-ai-tool/react": "workspace:*",
     "@commerce-ai-tool/server": "workspace:*",
     "@langfuse/otel": "catalog:",
-    "@opentelemetry/sdk-node": "^0.223.1",
+    "@opentelemetry/sdk-node": "^0.301.2",
     "next": "^16.4.6",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
