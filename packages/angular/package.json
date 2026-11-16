@@ -33,7 +33,7 @@
     "@angular/common": "^20.3.35",
     "@angular/compiler": "^20.3.35",
     "@angular/compiler-cli": "^20.3.35",
-    "@angular/core": "^20.3.35",
+    "@angular/core": "^22.2.6",
     "@angular/forms": "^20.3.35",
     "@angular/platform-browser": "^20.3.35",
     "@commerce-ai-tool/styles": "workspace:*",
