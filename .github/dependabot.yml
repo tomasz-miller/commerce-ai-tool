@@ -4,6 +4,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # New releases wait 3 days before Dependabot proposes them (cooldown does not apply to security updates).
+    cooldown:
+      default-days: 3
     groups:
       minor-and-patch:
         update-types:
