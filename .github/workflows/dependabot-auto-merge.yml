@@ -1,0 +1,52 @@
+name: Dependabot auto-merge
+
+# Runs on `pull_request` (not `pull_request_target`): the workflow file comes from
+# the PR's merge commit and never checks out or runs the PR's code.
+# Only the npm minor/patch group (`minor-and-patch` in dependabot.yml) is queued
+# for auto-merge. GitHub Actions bumps (they run in release.yml with npm publish
+# rights), majors and security updates stay manual. Auto-merge waits for the
+# required checks, which come from the ruleset `main-required-checks` (this job
+# is not a required check).
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  auto-merge:
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.repository == 'tomasz-miller/commerce-ai-tool'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+
+      # `gh pr merge --auto` merges immediately when no checks are required, so
+      # without the ruleset a PR would land before CI finishes. Fail closed.
+      - name: Require the CI checks on main
+        if: steps.metadata.outputs.dependency-group == 'minor-and-patch' && (steps.metadata.outputs.update-type == 'version-update:semver-minor' || steps.metadata.outputs.update-type == 'version-update:semver-patch')
+        run: |
+          set -euo pipefail
+          rules=$(gh api "repos/${GITHUB_REPOSITORY}/rules/branches/main")
+          missing=$(jq -r --argjson need '["ci","e2e","angular-consumer (20.3)","angular-consumer (21.2)"]' '
+            [.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context] as $have
+            | $need - $have | join(", ")' <<< "$rules")
+          if [ -n "$missing" ]; then
+            echo "::error::Branch rules for main do not require these checks: $missing. Refusing to enable auto-merge."
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Enable auto-merge
+        if: steps.metadata.outputs.dependency-group == 'minor-and-patch' && (steps.metadata.outputs.update-type == 'version-update:semver-minor' || steps.metadata.outputs.update-type == 'version-update:semver-patch')
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ github.token }}

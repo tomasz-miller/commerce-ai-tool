@@ -24,6 +24,9 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# The job names `ci`, `e2e`, `angular-consumer (20.3)` and `angular-consumer (21.2)` are
+# required status checks in the ruleset `main-required-checks` and are listed in the guard of
+# dependabot-auto-merge.yml; renaming a job or a matrix value means updating both.
 jobs:
   ci:
     if: github.event_name != 'schedule'
