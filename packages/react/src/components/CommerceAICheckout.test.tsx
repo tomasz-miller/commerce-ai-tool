@@ -97,12 +97,17 @@ function fillRequiredAddress() {
   fireEvent.change(screen.getByLabelText("City"), { target: { value: "Berlin" } });
 }
 
+// The button enables only after the mocked shipping-method update settles and
+// React re-renders; on shared CI runners that chain can exceed waitFor's 1 s default.
 async function waitForEnabledButton(name: string | RegExp) {
-  return waitFor(() => {
-    const button = screen.getByRole("button", { name });
-    expect(button.hasAttribute("disabled")).toBe(false);
-    return button;
-  });
+  return waitFor(
+    () => {
+      const button = screen.getByRole("button", { name });
+      expect(button.hasAttribute("disabled")).toBe(false);
+      return button;
+    },
+    { timeout: 3000 },
+  );
 }
 
 describe("CommerceAICheckout", () => {
