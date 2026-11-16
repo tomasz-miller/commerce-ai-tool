@@ -5,9 +5,9 @@ export default function CheckoutPage() {
   return (
     <>
       <DemoNav current="checkout" />
-      <div id="main">
+      <main id="main">
         <DemoCheckout />
-      </div>
+      </main>
     </>
   );
 }

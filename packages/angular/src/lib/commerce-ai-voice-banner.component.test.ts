@@ -1,10 +1,9 @@
-import "zone.js";
-import "zone.js/testing";
+import { provideZonelessChangeDetection } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import { BrowserTestingModule, platformBrowserTesting } from "@angular/platform-browser/testing";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { DEFAULT_COMMERCE_AI_SEARCH_MESSAGES } from "@commerce-ai-tool/core/client";
-import { CommerceAiVoiceBannerComponent } from "./commerce-ai-voice-banner.component.js";
+import { CommerceAiVoiceBannerComponent } from "./commerce-ai-voice-banner.component";
 
 beforeAll(() => {
   TestBed.initTestEnvironment(BrowserTestingModule, platformBrowserTesting());
@@ -20,6 +19,7 @@ describe("CommerceAiVoiceBannerComponent", () => {
   it("shows listening state with waveform and timer", async () => {
     await TestBed.configureTestingModule({
       imports: [CommerceAiVoiceBannerComponent],
+      providers: [provideZonelessChangeDetection()],
     }).compileComponents();
 
     const fixture = TestBed.createComponent(CommerceAiVoiceBannerComponent);
@@ -28,16 +28,19 @@ describe("CommerceAiVoiceBannerComponent", () => {
     fixture.componentInstance.messages = messages;
     fixture.detectChanges();
 
-    const status = fixture.nativeElement.querySelector('[role="status"]') as HTMLElement;
-    expect(status.textContent).toContain("Listening…");
-    expect(status.textContent).toContain("0:08");
-    expect(status.textContent).toContain("Tap mic to stop");
-    expect(status.querySelector(".cat-voice-waveform")).not.toBeNull();
+    const banner = fixture.nativeElement.querySelector(".cat-voice-banner") as HTMLElement;
+    expect(banner.textContent).toContain("Listening…");
+    expect(banner.textContent).toContain("0:08");
+    expect(banner.textContent).toContain("Tap mic to stop");
+    expect(banner.querySelector(".cat-voice-waveform")).not.toBeNull();
+    expect(banner.querySelector('[role="timer"]')?.textContent?.trim()).toBe("0:08");
+    expect(banner.querySelector("[aria-live], [role=status], [role=alert]")).toBeNull();
   });
 
   it("shows processing state", async () => {
     await TestBed.configureTestingModule({
       imports: [CommerceAiVoiceBannerComponent],
+      providers: [provideZonelessChangeDetection()],
     }).compileComponents();
 
     const fixture = TestBed.createComponent(CommerceAiVoiceBannerComponent);
@@ -45,14 +48,15 @@ describe("CommerceAiVoiceBannerComponent", () => {
     fixture.componentInstance.messages = messages;
     fixture.detectChanges();
 
-    const status = fixture.nativeElement.querySelector('[role="status"]') as HTMLElement;
-    expect(status.textContent).toContain("Understanding your query…");
-    expect(status.querySelector(".cat-voice-spinner")).not.toBeNull();
+    const banner = fixture.nativeElement.querySelector(".cat-voice-banner") as HTMLElement;
+    expect(banner.textContent).toContain("Understanding your query…");
+    expect(banner.querySelector(".cat-voice-spinner")).not.toBeNull();
   });
 
   it("shows TTS loading state", async () => {
     await TestBed.configureTestingModule({
       imports: [CommerceAiVoiceBannerComponent],
+      providers: [provideZonelessChangeDetection()],
     }).compileComponents();
 
     const fixture = TestBed.createComponent(CommerceAiVoiceBannerComponent);
@@ -60,7 +64,7 @@ describe("CommerceAiVoiceBannerComponent", () => {
     fixture.componentInstance.messages = messages;
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.querySelector('[role="status"]')?.textContent).toContain(
+    expect(fixture.nativeElement.querySelector(".cat-voice-banner")?.textContent).toContain(
       "Preparing audio summary…",
     );
   });
@@ -68,6 +72,7 @@ describe("CommerceAiVoiceBannerComponent", () => {
   it("shows error state", async () => {
     await TestBed.configureTestingModule({
       imports: [CommerceAiVoiceBannerComponent],
+      providers: [provideZonelessChangeDetection()],
     }).compileComponents();
 
     const fixture = TestBed.createComponent(CommerceAiVoiceBannerComponent);
@@ -75,14 +80,15 @@ describe("CommerceAiVoiceBannerComponent", () => {
     fixture.componentInstance.messages = messages;
     fixture.detectChanges();
 
-    const status = fixture.nativeElement.querySelector('[role="status"]') as HTMLElement;
-    expect(status.textContent).toContain("Microphone access denied");
-    expect(status.className).toContain("cat-voice-banner--error");
+    const alert = fixture.nativeElement.querySelector('[role="alert"]') as HTMLElement;
+    expect(alert.textContent).toContain("Microphone access denied");
+    expect(alert.closest(".cat-voice-banner")?.className).toContain("cat-voice-banner--error");
   });
 
   it("dismisses error when close is clicked", async () => {
     await TestBed.configureTestingModule({
       imports: [CommerceAiVoiceBannerComponent],
+      providers: [provideZonelessChangeDetection()],
     }).compileComponents();
 
     const fixture = TestBed.createComponent(CommerceAiVoiceBannerComponent);

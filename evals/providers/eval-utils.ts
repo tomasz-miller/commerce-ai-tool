@@ -2,11 +2,17 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  configureLangfusePrompts,
   createAIProvider,
   createCommercetoolsClient,
 } from "@commerce-ai-tool/core";
-import type { AIProvider, CommercetoolsClient, FacetAttributeDefinition } from "@commerce-ai-tool/core";
+import { configureLangfusePrompts } from "@commerce-ai-tool/core/internal";
+import type {
+  AICallMetrics,
+  AICallOptions,
+  AIProvider,
+  CommercetoolsClient,
+  FacetAttributeDefinition,
+} from "@commerce-ai-tool/core";
 import type { ProviderOptions, ProviderResponse } from "promptfoo";
 
 export const DEFAULT_CATALOG_LOCALE = "no";
@@ -290,20 +296,37 @@ export function createEvalCommercetoolsClient(): CommercetoolsClient {
   });
 }
 
+/** Per-call metrics capture for one eval call: pass `options` to the AI call, read `get()` after. */
+export interface EvalMetricsCapture {
+  options: AICallOptions;
+  get(): AICallMetrics | undefined;
+}
+
+export function createEvalMetricsCapture(): EvalMetricsCapture {
+  let captured: AICallMetrics | undefined;
+  return {
+    options: {
+      onMetrics: (metrics) => {
+        captured = metrics;
+      },
+    },
+    get: () => captured,
+  };
+}
+
 export function toEvalProviderResponse(
   output: unknown,
-  ai: AIProvider,
+  metrics: AICallMetrics | undefined,
   startedAt: number,
 ): ProviderResponse {
-  const metrics = ai.getLastGenerationMetrics?.();
   return {
     output: typeof output === "string" ? output : JSON.stringify(output, null, 2),
     tokenUsage: {
-      prompt: metrics?.promptTokens,
-      completion: metrics?.completionTokens,
-      total: metrics?.totalTokens,
+      prompt: metrics?.usage?.input,
+      completion: metrics?.usage?.output,
+      total: metrics?.usage?.total,
     },
-    cost: metrics?.cost,
+    cost: metrics?.costUsd,
     metadata: {
       latencyMs: Date.now() - startedAt,
     },

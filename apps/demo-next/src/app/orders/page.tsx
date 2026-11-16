@@ -5,9 +5,9 @@ export default function OrdersPage() {
   return (
     <>
       <DemoNav current="orders" />
-      <div id="main">
+      <main id="main">
         <DemoOrderStatus />
-      </div>
+      </main>
     </>
   );
 }

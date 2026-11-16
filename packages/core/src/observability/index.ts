@@ -9,6 +9,7 @@ export type { RedactedBinaryInput } from "./redact.js";
 export {
   withPipelineSpan,
   withPropagatedAttributes,
+  withTraceSession,
   getCurrentTraceId,
   withTraceIdMeta,
 } from "./spans.js";

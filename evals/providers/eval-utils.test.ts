@@ -15,7 +15,7 @@ import {
   resolveSystemPrompt,
   SYSTEM_PROMPT_NAMES,
   getLocalSystemPrompt,
-} from "@commerce-ai-tool/core";
+} from "@commerce-ai-tool/core/internal";
 
 describe("readImageFixture", () => {
   it("reads compressed red-shoes fixture with jpeg mime type", () => {

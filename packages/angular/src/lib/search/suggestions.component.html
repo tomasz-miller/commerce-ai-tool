@@ -1,0 +1,37 @@
+@let t = messages();
+@if (isLoading() && suggestions().length === 0 && !error()) {
+  <div class="cat-suggestions__status">{{ t.loadingSuggestions }}</div>
+}
+
+@if (error()) {
+  <div class="cat-suggestions__status cat-suggestions__status--error" role="alert">
+    {{ error() }}
+  </div>
+}
+
+@if (!isLoading() && !error() && ready() && suggestions().length === 0) {
+  <div class="cat-suggestions__status">{{ t.noSuggestions }}</div>
+}
+
+@if (suggestions().length > 0) {
+  <ul
+    class="cat-suggestions__list"
+    role="listbox"
+    [attr.id]="listboxId()"
+    [attr.aria-label]="t.suggestionsAriaLabel"
+  >
+    @for (suggestion of suggestions(); track $index; let index = $index) {
+      <li
+        class="cat-suggestions__item"
+        [class.cat-suggestions__item--active]="index === activeIndex()"
+        role="option"
+        [attr.id]="optionId(index)"
+        [attr.aria-selected]="index === activeIndex()"
+        (mousedown)="$event.preventDefault()"
+        (click)="suggestionSelect.emit(suggestion)"
+      >
+        {{ suggestion }}
+      </li>
+    }
+  </ul>
+}

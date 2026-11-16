@@ -25,9 +25,9 @@ describe("handler-response", () => {
   });
 
   it("toWebErrorResponse returns JSON error payload", async () => {
-    const response = toWebErrorResponse("Search failed", 500);
+    const response = toWebErrorResponse("Search failed", 500, "INTERNAL");
 
     expect(response.status).toBe(500);
-    await expect(response.json()).resolves.toEqual({ error: "Search failed" });
+    await expect(response.json()).resolves.toEqual({ error: "Search failed", code: "INTERNAL" });
   });
 });

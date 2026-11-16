@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatRecordingDuration } from "./recording-duration.js";
+import { formatRecordingDuration } from "./recording-duration";
 
 describe("formatRecordingDuration", () => {
   it("formats seconds as mm:ss", () => {

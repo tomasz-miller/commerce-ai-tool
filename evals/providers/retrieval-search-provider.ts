@@ -1,5 +1,5 @@
 import type { CallApiContextParams, ProviderOptions, ProviderResponse } from "promptfoo";
-import { buildProductSearchRequest } from "@commerce-ai-tool/core";
+import { buildProductSearchRequest } from "@commerce-ai-tool/core/internal";
 import {
   createEvalAIProvider,
   createEvalCommercetoolsClient,
@@ -8,6 +8,7 @@ import {
   loadCommercetoolsEvalEnv,
   parseAttributeCatalog,
   readProviderConfig,
+  createEvalMetricsCapture,
   toEvalProviderResponse,
 } from "./eval-utils.ts";
 
@@ -49,10 +50,12 @@ export default class RetrievalSearchEvalProvider {
 
     try {
       const startedAt = Date.now();
+      const capture = createEvalMetricsCapture();
       const interpreted = await this.evalProvider.ai!.interpretTextQuery(
         query,
         { queryLocale, catalogLocale },
         parseAttributeCatalog(vars),
+        capture.options,
       );
 
       const ct = createEvalCommercetoolsClient();
@@ -104,7 +107,7 @@ export default class RetrievalSearchEvalProvider {
           precisionAtK,
           recallAtK,
         },
-        this.evalProvider.ai!,
+        capture.get(),
         startedAt,
       );
     } catch (error) {

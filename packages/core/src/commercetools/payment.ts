@@ -15,7 +15,13 @@ import {
   mapCartToSnapshot,
   resolveCartLocale,
 } from "./cart.js";
-import { CheckoutIncompleteError, type CheckoutGateway } from "./checkout.js";
+import {
+  CheckoutIncompleteError,
+  createCheckoutOrderNumber,
+  createShippingScope,
+  type CheckoutGateway,
+  type ShippingScopeOptions,
+} from "./checkout.js";
 import {
   isAnonymousIdAlreadyUsed,
   isDuplicateField,
@@ -65,9 +71,10 @@ export function createPaymentKey(
   cartId?: string,
   attempt = 1,
 ): string {
+  const safeOrder = orderNumber.replaceAll(/[^A-Za-z0-9_-]/g, "") || "order";
   const safeInterface = paymentInterface.replaceAll(/[^A-Za-z0-9_-]/g, "") || "psp";
   const safeCart = (cartId ?? "cart").replaceAll(/[^A-Za-z0-9_-]/g, "") || "cart";
-  const base = `${orderNumber}-${safeCart}-${safeInterface}`;
+  const base = `${safeOrder}-${safeCart}-${safeInterface}`;
   const key = attempt > 1 ? `${base}-${attempt}` : base;
   return key.slice(0, 256);
 }
@@ -107,7 +114,10 @@ function isReusablePayment(payment: Payment, cart: Cart): boolean {
 export function createPaymentOperations(
   gateway: PaymentGateway,
   provider?: PaymentProvider,
+  scopeOptions: ShippingScopeOptions = {},
 ): PaymentOperations {
+  const scope = createShippingScope(gateway, scopeOptions);
+
   async function requireActiveCart(input: AuthorizePaymentRequest): Promise<Cart> {
     let cart: Cart | undefined;
 
@@ -234,13 +244,19 @@ export function createPaymentOperations(
         throw new PaymentNotConfiguredError();
       }
 
-      const cart = await requireActiveCart(input);
+      let cart = await requireActiveCart(input);
       if (cart.lineItems.length === 0) {
         throw new CheckoutIncompleteError("Cart is empty");
       }
+      // The amount is fixed below: re-apply the shipping country first (an add after the
+      // address step may have switched cart.country back) so the order sees the same total.
+      cart = await scope.reconcile(cart);
+      if (cart.shippingAddress) {
+        scope.assertReconciled(cart);
+      }
 
       const locale = resolveCartLocale(input.catalogLocale);
-      const orderNumber = input.orderNumber?.trim() || `cat-${globalThis.crypto.randomUUID()}`;
+      const orderNumber = input.orderNumber?.trim() || createCheckoutOrderNumber();
       const method = input.method.trim();
 
       const reusable = await findReusableOnCart(cart);

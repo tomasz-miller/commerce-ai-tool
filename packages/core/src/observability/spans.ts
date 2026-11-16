@@ -64,6 +64,23 @@ export async function withPropagatedAttributes<T>(
   return propagateAttributes({ metadata }, fn);
 }
 
+/**
+ * Group the traces created inside `fn` into one Langfuse session. Call it around the request
+ * span: attributes propagated after a span has started are not applied to that span.
+ * `sessionId` must be a string of at most 200 characters (Langfuse drops longer ones); without
+ * one, `fn` simply runs.
+ */
+export async function withTraceSession<T>(
+  sessionId: string | undefined,
+  fn: () => Promise<T>,
+): Promise<T> {
+  if (!sessionId || !isLangfuseEnabled()) {
+    return fn();
+  }
+
+  return propagateAttributes({ sessionId }, fn);
+}
+
 export function getCurrentTraceId(): string | undefined {
   if (!shouldExposeTraceId()) {
     return undefined;

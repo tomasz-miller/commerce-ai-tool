@@ -12,14 +12,15 @@ export interface ResolvedMissionOptions {
   minConfidence: number;
 }
 
-export { looksLikeCompoundShoppingList } from "./compound-shopping-list.js";
+export { looksLikeCompoundShoppingList, looksLikeShoppingList } from "./compound-shopping-list.js";
 
 export function resolveMissionOptions(
   config: MissionsConfig | undefined,
   enableMissions?: boolean,
 ): ResolvedMissionOptions {
   return {
-    enabled: enableMissions ?? config?.enabled === true,
+    // `missions.enabled: false` is a host opt-out that a request cannot override.
+    enabled: config?.enabled === false ? false : (enableMissions ?? config?.enabled === true),
     maxIntents: clampPositiveInt(config?.maxIntents, DEFAULT_MISSION_MAX_INTENTS, MAX_MISSION_INTENTS),
     perIntentLimit: clampPositiveInt(config?.perIntentLimit, DEFAULT_MISSION_PER_INTENT_LIMIT, 20),
     minConfidence: clampConfidence(config?.minConfidence),

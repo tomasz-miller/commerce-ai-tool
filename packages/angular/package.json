@@ -4,59 +4,50 @@
   "description": "Angular component for Commerce AI Tool — glass morphism product search widget",
   "license": "MIT",
   "type": "module",
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
   "exports": {
-    ".": {
-      "import": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
-      },
-      "require": {
-        "types": "./dist/index.d.cts",
-        "default": "./dist/index.cjs"
-      }
-    },
-    "./styles.css": "./dist/index.css"
+    "./styles.css": "./commerce-ai-search.css"
   },
-  "files": [
-    "dist",
-    "CHANGELOG.md"
-  ],
   "sideEffects": [
     "**/*.css"
   ],
   "scripts": {
-    "build": "tsup && node ../../scripts/emit-package-dts.mjs dist/index.d.ts && node ../../scripts/inline-core-client-dts.mjs",
-    "dev": "tsup --watch",
+    "build": "ng-packagr -p ng-package.json -c tsconfig.lib.prod.json && node ../../scripts/check-angular-apf.mjs",
+    "dev": "ng-packagr -p ng-package.json -c tsconfig.lib.prod.json --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
+    "check:package": "attw --pack dist --profile esm-only --exclude-entrypoints ./styles.css && publint",
     "test": "vitest run",
     "clean": "rm -rf dist"
   },
+  "dependencies": {
+    "@commerce-ai-tool/core": "workspace:*",
+    "tslib": "^2.8.1"
+  },
   "peerDependencies": {
-    "@angular/common": ">=17",
-    "@angular/core": ">=17",
-    "@angular/forms": ">=17",
+    "@angular/common": "^20.3.0 || ^21.0.0 || ^22.0.0",
+    "@angular/core": "^20.3.0 || ^21.0.0 || ^22.0.0",
+    "@angular/forms": "^20.3.0 || ^21.0.0 || ^22.0.0",
     "rxjs": ">=7"
   },
   "devDependencies": {
-    "@commerce-ai-tool/core": "workspace:*",
+    "@angular/common": "^20.3.35",
+    "@angular/compiler": "^20.3.35",
+    "@angular/compiler-cli": "^20.3.35",
+    "@angular/core": "^20.3.35",
+    "@angular/forms": "^20.3.35",
+    "@angular/platform-browser": "^20.3.35",
     "@commerce-ai-tool/styles": "workspace:*",
-    "@angular/common": "^20.3.27",
-    "@angular/compiler": "^20.3.27",
-    "@angular/core": "^20.3.27",
-    "@angular/forms": "^20.3.27",
-    "@angular/platform-browser": "^20.3.27",
+    "jsdom": "catalog:",
+    "ng-packagr": "^20.3.2",
     "rxjs": "^7.8.2",
-    "tsup": "^8.4.0",
-    "@typescript/native": "catalog:",
-    "vitest": "^3.0.9",
-    "zone.js": "^0.15.0"
+    "typescript": "~5.9.3",
+    "vite": "catalog:",
+    "vitest": "catalog:"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "directory": "dist",
+    "linkDirectory": true
   },
   "author": {
     "name": "Tomasz Miller",

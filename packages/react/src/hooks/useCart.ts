@@ -1,18 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  CART_SESSION_HEADER,
+  ANONYMOUS_ID_STORAGE_KEY,
+  CommerceAIApiError,
+  CUSTOMER_SESSION_STORAGE_KEY,
+  CUSTOMER_STORAGE_KEY,
+  createCommerceAIApiClient,
+  createRandomUuid,
+  getSharedCartSessionStore,
+  messageForError,
   type CartSnapshot,
+  type CartSyncMember,
   type CheckoutAddress,
+  type CommerceAISearchMessages,
   type CustomerSnapshot,
   type OrderSnapshot,
   type PaymentMethodOption,
   type PaymentSnapshot,
   type ShippingMethodSnapshot,
 } from "@commerce-ai-tool/core/client";
+import { useLatestRef, useMessagesRef } from "./useLatestRef.js";
 
-export const ANONYMOUS_ID_STORAGE_KEY = "commerce-ai-tool:anonymousId";
-export const CUSTOMER_SESSION_STORAGE_KEY = "commerce-ai-tool:customerSession";
-export const CUSTOMER_STORAGE_KEY = "commerce-ai-tool:customer";
+export { ANONYMOUS_ID_STORAGE_KEY, CUSTOMER_SESSION_STORAGE_KEY, CUSTOMER_STORAGE_KEY };
 
 export interface AddToCartItem {
   sku?: string;
@@ -28,6 +36,8 @@ export interface UseCartOptions {
   catalogLocale?: string;
   /** When false, skip network calls. Default true for standalone hook usage. */
   enabled?: boolean;
+  /** Host message overrides. `error` is always taken from these, never from the server's text. */
+  messages?: Partial<CommerceAISearchMessages>;
   onCartChange?: (cart: CartSnapshot | null) => void;
 }
 
@@ -66,130 +76,28 @@ export interface UseCartReturn {
   refresh: () => Promise<void>;
 }
 
-interface CartApiBody {
-  cart?: CartSnapshot | null;
-  customer?: CustomerSnapshot | null;
-  sessionToken?: string;
-  shippingMethods?: ShippingMethodSnapshot[];
-  paymentMethods?: PaymentMethodOption[];
-  payment?: PaymentSnapshot;
-  order?: OrderSnapshot;
-  orders?: OrderSnapshot[];
-  error?: string;
-}
-
-function readStorage(key: string): string | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  try {
-    return window.localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function writeStorage(key: string, value: string): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-  try {
-    window.localStorage.setItem(key, value);
-  } catch {
-    // Ignore quota / privacy mode failures — session still works in memory.
-  }
-}
-
-function removeStorage(key: string): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-  try {
-    window.localStorage.removeItem(key);
-  } catch {
-    // Ignore privacy mode failures.
-  }
-}
-
-function readStoredCustomer(): CustomerSnapshot | null {
-  const raw = readStorage(CUSTOMER_STORAGE_KEY);
-  if (!raw) {
-    return null;
-  }
-  try {
-    const parsed = JSON.parse(raw) as CustomerSnapshot;
-    if (typeof parsed.id === "string" && typeof parsed.email === "string") {
-      return parsed;
-    }
-  } catch {
-    return null;
-  }
-  return null;
-}
-
+/** UUID v4 from Web Crypto (`randomUUID`, else `getRandomValues` outside secure contexts). */
 export function createAnonymousId(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  return `anon-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  return createRandomUuid();
 }
 
-export function getOrCreateAnonymousId(): string {
-  const existing = readStorage(ANONYMOUS_ID_STORAGE_KEY);
-  if (existing) {
-    return existing;
-  }
-  const created = createAnonymousId();
-  writeStorage(ANONYMOUS_ID_STORAGE_KEY, created);
-  return created;
+/** The server rejected the customer session token (expired, revoked or unknown). */
+function isSessionRejected(error: unknown): boolean {
+  return error instanceof CommerceAIApiError && error.status === 401;
 }
 
-function rotateAnonymousId(): string {
-  const created = createAnonymousId();
-  writeStorage(ANONYMOUS_ID_STORAGE_KEY, created);
-  return created;
-}
+type MessageKey = keyof CommerceAISearchMessages;
 
-type CartSyncListener = (sourceId: number, cart: CartSnapshot | null) => void;
-
-const cartSyncListeners = new Set<CartSyncListener>();
-let cartSyncSeq = 0;
-
-function emitCartSync(sourceId: number, cart: CartSnapshot | null): void {
-  for (const listener of cartSyncListeners) {
-    listener(sourceId, cart);
-  }
-}
-
-/** Ignore in-flight GET/refresh responses that lost a race to a newer mutation. */
-function isStaleCartSnapshot(
-  current: CartSnapshot | null,
-  next: CartSnapshot | null,
-): boolean {
-  return Boolean(
-    next &&
-      current &&
-      next.id === current.id &&
-      next.version < current.version,
-  );
-}
-
-class CartRequestError extends Error {
-  status: number;
-
-  constructor(message: string, status: number) {
-    super(message);
-    this.name = "CartRequestError";
-    this.status = status;
-  }
-}
-
-async function parseCartApi(response: Response): Promise<CartApiBody> {
-  const body = (await response.json()) as CartApiBody;
-  if (!response.ok) {
-    throw new CartRequestError(body.error ?? "Cart request failed", response.status);
-  }
-  return body;
+/**
+ * Request fields of a cart mutation. `currency`, `country` and `catalogLocale` are captured when
+ * the mutation is queued; only `cartId` is read when it runs, from the cart its
+ * predecessor produced.
+ */
+interface CartMutationContext {
+  currency?: string;
+  country?: string;
+  catalogLocale?: string;
+  cartId?: string;
 }
 
 export function useCart(options: UseCartOptions): UseCartReturn {
@@ -199,6 +107,7 @@ export function useCart(options: UseCartOptions): UseCartReturn {
     country,
     catalogLocale,
     enabled = true,
+    messages,
     onCartChange,
   } = options;
 
@@ -211,286 +120,293 @@ export function useCart(options: UseCartOptions): UseCartReturn {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const onCartChangeRef = useRef(onCartChange);
-  onCartChangeRef.current = onCartChange;
+  const onCartChangeRef = useLatestRef(onCartChange);
+  const messagesRef = useMessagesRef(messages);
   const cartRef = useRef<CartSnapshot | null>(null);
   const sessionTokenRef = useRef<string | null>(null);
-  const mutationChainRef = useRef(Promise.resolve<unknown>(undefined));
+  const syncMemberRef = useRef<CartSyncMember | null>(null);
   const orderNumberRef = useRef<string | null>(null);
-  const [syncId] = useState(() => {
-    cartSyncSeq += 1;
-    return cartSyncSeq;
-  });
+  // One store per page in the browser: every hook and widget on it shares the guest id, the
+  // mutation queue and the cart sync bus.
+  const [store] = useState(getSharedCartSessionStore);
 
-  const applyCart = useCallback((next: CartSnapshot | null, sync = true) => {
-    if (isStaleCartSnapshot(cartRef.current, next)) {
-      return;
-    }
-    cartRef.current = next;
-    setCart(next);
-    onCartChangeRef.current?.(next);
-    if (sync) {
-      emitCartSync(syncId, next);
-    }
-  }, [syncId]);
+  // Built on demand (event handlers and effects only): the client reads the session token from
+  // a ref, which must not be touched while rendering.
+  const getClient = useCallback(
+    () =>
+      createCommerceAIApiClient({
+        baseUrl: apiBaseUrl,
+        getSessionToken: () => sessionTokenRef.current,
+        getAnonymousId: () => store.getAnonymousId(),
+      }),
+    [apiBaseUrl, store],
+  );
 
-  const persistSession = useCallback((token: string, nextCustomer: CustomerSnapshot) => {
-    sessionTokenRef.current = token;
-    setSessionToken(token);
-    setCustomer(nextCustomer);
-    writeStorage(CUSTOMER_SESSION_STORAGE_KEY, token);
-    writeStorage(CUSTOMER_STORAGE_KEY, JSON.stringify(nextCustomer));
-  }, []);
+  const failure = useCallback(
+    (err: unknown, fallback: MessageKey) =>
+      messageForError(err, messagesRef.current, { fallback }),
+    [messagesRef],
+  );
+
+  const applyCart = useCallback(
+    (next: CartSnapshot | null, sync = true) => {
+      if (store.isStaleCartSnapshot(cartRef.current, next)) {
+        return;
+      }
+      cartRef.current = next;
+      setCart(next);
+      onCartChangeRef.current?.(next);
+      if (sync) {
+        syncMemberRef.current?.emit(next);
+      }
+    },
+    [onCartChangeRef, store],
+  );
+
+  const persistSession = useCallback(
+    (token: string, nextCustomer: CustomerSnapshot) => {
+      sessionTokenRef.current = token;
+      setSessionToken(token);
+      setCustomer(nextCustomer);
+      store.saveSession(token, nextCustomer);
+    },
+    [store],
+  );
 
   const clearSession = useCallback(() => {
     sessionTokenRef.current = null;
     setSessionToken(null);
     setCustomer(null);
-    removeStorage(CUSTOMER_SESSION_STORAGE_KEY);
-    removeStorage(CUSTOMER_STORAGE_KEY);
-  }, []);
+    store.clearSession();
+  }, [store]);
+
+  /** Drops an expired customer session and starts over as a new guest. */
+  const resetToGuest = useCallback(() => {
+    clearSession();
+    setAnonymousId(store.rotateAnonymousId());
+    applyCart(null);
+  }, [applyCart, clearSession, store]);
 
   const refresh = useCallback(async () => {
     if (!enabled || !anonymousId) {
       return;
     }
 
-    const params = new URLSearchParams();
-    const headers: Record<string, string> = {};
-    const token = sessionTokenRef.current;
-    if (token) {
-      headers[CART_SESSION_HEADER] = token;
-    } else {
-      params.set("anonymousId", anonymousId);
-    }
-    if (catalogLocale) {
-      params.set("catalogLocale", catalogLocale);
-    }
-
     setIsLoading(true);
     setError(null);
     try {
-      const query = params.toString();
-      const url = `${apiBaseUrl}/cart${query ? `?${query}` : ""}`;
-      const response = await (token
-        ? fetch(url, { headers })
-        : fetch(url));
-      const body = await parseCartApi(response);
+      const body = await getClient().cart.get({ catalogLocale });
       applyCart(body.cart ?? null);
     } catch (err) {
-      if (err instanceof CartRequestError && err.status === 401 && sessionTokenRef.current) {
-        clearSession();
-        const nextAnonymousId = rotateAnonymousId();
-        setAnonymousId(nextAnonymousId);
-        applyCart(null);
+      if (isSessionRejected(err) && sessionTokenRef.current) {
+        resetToGuest();
       }
-      setError(err instanceof Error ? err.message : "Cart request failed");
+      setError(failure(err, "cartLoadFailed"));
     } finally {
       setIsLoading(false);
     }
-  }, [anonymousId, apiBaseUrl, applyCart, catalogLocale, clearSession, enabled]);
+  }, [anonymousId, applyCart, catalogLocale, getClient, enabled, failure, resetToGuest]);
 
   useEffect(() => {
     if (!enabled) {
       return;
     }
-    setAnonymousId(getOrCreateAnonymousId());
-    const storedToken = readStorage(CUSTOMER_SESSION_STORAGE_KEY);
-    const storedCustomer = readStoredCustomer();
-    if (storedToken && storedCustomer) {
-      sessionTokenRef.current = storedToken;
-      setSessionToken(storedToken);
-      setCustomer(storedCustomer);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- client-only hydration from storage; reading it during render would break SSR markup
+    setAnonymousId(store.getAnonymousId());
+    const session = store.readSession();
+    if (session) {
+      sessionTokenRef.current = session.token;
+      setSessionToken(session.token);
+      setCustomer(session.customer);
     }
-  }, [enabled]);
+  }, [enabled, store]);
 
   useEffect(() => {
     if (!enabled) {
       return;
     }
-    const listener: CartSyncListener = (sourceId, next) => {
-      if (sourceId === syncId) {
-        return;
-      }
-      applyCart(next, false);
-    };
-    cartSyncListeners.add(listener);
+    const member = store.joinSync((next) => applyCart(next, false));
+    syncMemberRef.current = member;
     return () => {
-      cartSyncListeners.delete(listener);
+      member.leave();
+      syncMemberRef.current = null;
     };
-  }, [applyCart, enabled, syncId]);
+  }, [applyCart, enabled, store]);
 
   useEffect(() => {
     if (!enabled || !anonymousId) {
       return;
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- refresh() starts a fetch and toggles loading state on mount and whenever its inputs change
     void refresh();
   }, [anonymousId, enabled, refresh]);
 
+  /**
+   * Runs one cart mutation behind the shared queue, so it sees the cart version its predecessor
+   * produced. `call` is invoked when its turn comes: the cart id and version are read then, the
+   * other context fields are the values from when the mutation was queued.
+   */
   const mutate = useCallback(
-    async (path: string, body: Record<string, unknown>): Promise<CartSnapshot | null> => {
+    async (
+      call: (context: CartMutationContext) => Promise<{ cart: CartSnapshot | null }>,
+      fallback: MessageKey = "checkoutFailed",
+    ): Promise<CartSnapshot | null> => {
       if (!enabled || !anonymousId) {
         return null;
       }
 
-      const run = async (): Promise<CartSnapshot | null> => {
+      return store.enqueueMutation(async (): Promise<CartSnapshot | null> => {
         setIsMutating(true);
         setError(null);
         try {
-          const response = await fetch(`${apiBaseUrl}${path}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              anonymousId,
-              sessionToken: sessionTokenRef.current ?? undefined,
-              currency,
-              country,
-              catalogLocale,
-              cartId: cartRef.current?.id,
-              cartVersion: cartRef.current?.version,
-              ...body,
-            }),
+          const next = await call({
+            currency,
+            country,
+            catalogLocale,
+            cartId: cartRef.current?.id,
           });
-          const next = await parseCartApi(response);
           applyCart(next.cart ?? null);
           return next.cart ?? null;
         } catch (err) {
-          if (err instanceof CartRequestError && err.status === 401 && sessionTokenRef.current) {
-            clearSession();
-            setAnonymousId(rotateAnonymousId());
-            applyCart(null);
+          if (isSessionRejected(err) && sessionTokenRef.current) {
+            resetToGuest();
           }
-          setError(err instanceof Error ? err.message : "Cart request failed");
+          setError(failure(err, fallback));
           return null;
         } finally {
           setIsMutating(false);
         }
-      };
-
-      const pending = mutationChainRef.current.then(run, run);
-      mutationChainRef.current = pending.then(
-        () => undefined,
-        () => undefined,
-      );
-      return pending;
+      });
     },
-    [anonymousId, apiBaseUrl, applyCart, catalogLocale, clearSession, country, currency, enabled],
+    [anonymousId, applyCart, catalogLocale, country, currency, enabled, failure, resetToGuest, store],
   );
 
   const addToCart = useCallback(
     async (item: AddToCartItem) =>
-      mutate("/cart/add", {
-        sku: item.sku,
-        productId: item.productId,
-        variantId: item.variantId,
-        quantity: item.quantity,
-      }),
-    [mutate],
+      mutate(
+        (context) =>
+          getClient().cart.add({
+            sku: item.sku,
+            productId: item.productId,
+            variantId: item.variantId,
+            quantity: item.quantity,
+            currency: context.currency,
+            country: context.country,
+            catalogLocale: context.catalogLocale,
+            cartId: context.cartId,
+          }),
+        "unableToAddToCart",
+      ),
+    [getClient, mutate],
   );
 
   const addItems = useCallback(
-    async (items: AddToCartItem[]) => mutate("/cart/add-items", { items }),
-    [mutate],
+    async (items: AddToCartItem[]) =>
+      mutate(
+        (context) =>
+          getClient().cart.addItems({
+            items,
+            currency: context.currency,
+            country: context.country,
+            catalogLocale: context.catalogLocale,
+            cartId: context.cartId,
+          }),
+        "unableToAddToCart",
+      ),
+    [getClient, mutate],
   );
 
   const removeFromCart = useCallback(
-    (lineItemId: string) => mutate("/cart/remove", { lineItemId }),
-    [mutate],
+    (lineItemId: string) =>
+      mutate((context) =>
+        getClient().cart.remove({
+          lineItemId,
+          catalogLocale: context.catalogLocale,
+          cartId: context.cartId,
+        }),
+      ),
+    [getClient, mutate],
   );
 
   const updateQuantity = useCallback(
     (lineItemId: string, quantity: number) =>
-      mutate("/cart/update-quantity", { lineItemId, quantity }),
-    [mutate],
+      mutate((context) =>
+        getClient().cart.updateQuantity({
+          lineItemId,
+          quantity,
+          catalogLocale: context.catalogLocale,
+          cartId: context.cartId,
+        }),
+      ),
+    [getClient, mutate],
   );
 
   const setAddresses = useCallback(
     (shippingAddress: CheckoutAddress, billingAddress?: CheckoutAddress) =>
-      mutate("/cart/addresses", { shippingAddress, billingAddress }),
-    [mutate],
+      mutate((context) =>
+        getClient().cart.addresses({
+          shippingAddress,
+          billingAddress,
+          catalogLocale: context.catalogLocale,
+          cartId: context.cartId,
+        }),
+      ),
+    [getClient, mutate],
   );
 
-  const getShippingMethods = useCallback(async (): Promise<
-    ShippingMethodSnapshot[] | null
-  > => {
+  const getShippingMethods = useCallback(async (): Promise<ShippingMethodSnapshot[] | null> => {
     if (!enabled || !anonymousId) {
       return [];
-    }
-    const params = new URLSearchParams();
-    const headers: Record<string, string> = {};
-    const token = sessionTokenRef.current;
-    if (token) {
-      headers[CART_SESSION_HEADER] = token;
-    } else {
-      params.set("anonymousId", anonymousId);
-    }
-    if (cartRef.current?.id) {
-      params.set("cartId", cartRef.current.id);
-    }
-    if (catalogLocale) {
-      params.set("catalogLocale", catalogLocale);
     }
 
     setIsMutating(true);
     setError(null);
     try {
-      const response = await fetch(
-        `${apiBaseUrl}/cart/shipping-methods?${params.toString()}`,
-        token ? { headers } : undefined,
-      );
-      const body = await parseCartApi(response);
+      const body = await getClient().cart.shippingMethods({
+        cartId: cartRef.current?.id,
+        catalogLocale,
+      });
       return body.shippingMethods ?? [];
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Shipping methods request failed");
+      setError(failure(err, "checkoutFailed"));
       return null;
     } finally {
       setIsMutating(false);
     }
-  }, [anonymousId, apiBaseUrl, catalogLocale, enabled]);
+  }, [anonymousId, catalogLocale, getClient, enabled, failure]);
 
   const setShippingMethod = useCallback(
     (shippingMethodId: string) =>
-      mutate("/cart/shipping-method", { shippingMethodId }),
-    [mutate],
+      mutate((context) =>
+        getClient().cart.setShippingMethod({
+          shippingMethodId,
+          catalogLocale: context.catalogLocale,
+          cartId: context.cartId,
+        }),
+      ),
+    [getClient, mutate],
   );
 
-  const getPaymentMethods = useCallback(async (): Promise<
-    PaymentMethodOption[] | null
-  > => {
+  const getPaymentMethods = useCallback(async (): Promise<PaymentMethodOption[] | null> => {
     if (!enabled || !anonymousId) {
       return [];
-    }
-    const params = new URLSearchParams();
-    const headers: Record<string, string> = {};
-    const token = sessionTokenRef.current;
-    if (token) {
-      headers[CART_SESSION_HEADER] = token;
-    } else {
-      params.set("anonymousId", anonymousId);
-    }
-    if (cartRef.current?.id) {
-      params.set("cartId", cartRef.current.id);
-    }
-    if (catalogLocale) {
-      params.set("catalogLocale", catalogLocale);
     }
 
     setIsMutating(true);
     setError(null);
     try {
-      const response = await fetch(
-        `${apiBaseUrl}/cart/payment-methods?${params.toString()}`,
-        token ? { headers } : undefined,
-      );
-      const body = await parseCartApi(response);
+      const body = await getClient().cart.paymentMethods({
+        cartId: cartRef.current?.id,
+        catalogLocale,
+      });
       return body.paymentMethods ?? [];
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Payment methods request failed");
+      setError(failure(err, "checkoutFailed"));
       return null;
     } finally {
       setIsMutating(false);
     }
-  }, [anonymousId, apiBaseUrl, catalogLocale, enabled]);
+  }, [anonymousId, catalogLocale, getClient, enabled, failure]);
 
   const authorizePayment = useCallback(
     async (method: string): Promise<PaymentSnapshot | null> => {
@@ -498,161 +414,108 @@ export function useCart(options: UseCartOptions): UseCartReturn {
         return null;
       }
 
-      const run = async (): Promise<PaymentSnapshot | null> => {
+      return store.enqueueMutation(async (): Promise<PaymentSnapshot | null> => {
         orderNumberRef.current ??= `cat-${createAnonymousId()}`;
         setIsMutating(true);
         setError(null);
         try {
-          const response = await fetch(`${apiBaseUrl}/cart/payment`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              anonymousId,
-              sessionToken: sessionTokenRef.current ?? undefined,
-              cartId: cartRef.current?.id,
-              catalogLocale,
-              method,
-              orderNumber: orderNumberRef.current,
-            }),
+          const body = await getClient().cart.pay({
+            cartId: cartRef.current?.id,
+            catalogLocale,
+            method,
+            orderNumber: orderNumberRef.current,
           });
-          const body = await parseCartApi(response);
           if (body.cart) {
             applyCart(body.cart);
           }
           if (!body.payment) {
-            throw new CartRequestError("Payment response is missing", response.status);
+            throw new Error("Payment response is missing");
           }
           return body.payment;
         } catch (err) {
-          setError(err instanceof Error ? err.message : "Payment failed");
+          setError(failure(err, "checkoutFailed"));
           return null;
         } finally {
           setIsMutating(false);
         }
-      };
-
-      const pending = mutationChainRef.current.then(run, run);
-      mutationChainRef.current = pending.then(
-        () => undefined,
-        () => undefined,
-      );
-      return pending;
+      });
     },
-    [anonymousId, apiBaseUrl, applyCart, catalogLocale, enabled],
+    [anonymousId, applyCart, catalogLocale, getClient, enabled, failure, store],
   );
 
   const getOrder = useCallback(
     async (orderNumber: string): Promise<OrderSnapshot | null> => {
-      if (!enabled || !anonymousId || !orderNumber.trim()) {
+      const trimmed = orderNumber.trim();
+      if (!enabled || !anonymousId || !trimmed) {
         return null;
-      }
-      const params = new URLSearchParams();
-      const headers: Record<string, string> = {};
-      const token = sessionTokenRef.current;
-      if (token) {
-        headers[CART_SESSION_HEADER] = token;
-      }
-      params.set("anonymousId", anonymousId);
-      params.set("orderNumber", orderNumber.trim());
-      if (catalogLocale) {
-        params.set("catalogLocale", catalogLocale);
       }
 
       setIsLoading(true);
       setError(null);
       try {
-        const response = await fetch(`${apiBaseUrl}/orders?${params.toString()}`, {
-          headers,
-        });
-        const body = await parseCartApi(response);
+        const body = await getClient().orders.get({ orderNumber: trimmed, catalogLocale });
         return body.order ?? null;
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Order request failed");
+        setError(failure(err, "orderNotFound"));
         return null;
       } finally {
         setIsLoading(false);
       }
     },
-    [anonymousId, apiBaseUrl, catalogLocale, enabled],
+    [anonymousId, catalogLocale, getClient, enabled, failure],
   );
 
   const listOrders = useCallback(async (): Promise<OrderSnapshot[]> => {
     if (!enabled || !anonymousId) {
       return [];
     }
-    const params = new URLSearchParams();
-    const headers: Record<string, string> = {};
-    const token = sessionTokenRef.current;
-    if (token) {
-      headers[CART_SESSION_HEADER] = token;
-    }
-    params.set("anonymousId", anonymousId);
-    if (catalogLocale) {
-      params.set("catalogLocale", catalogLocale);
-    }
 
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${apiBaseUrl}/orders?${params.toString()}`, {
-        headers,
-      });
-      const body = await parseCartApi(response);
+      const body = await getClient().orders.list({ catalogLocale });
       return body.orders ?? [];
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Order request failed");
+      setError(failure(err, "orderNotFound"));
       return [];
     } finally {
       setIsLoading(false);
     }
-  }, [anonymousId, apiBaseUrl, catalogLocale, enabled]);
+  }, [anonymousId, catalogLocale, getClient, enabled, failure]);
 
   const placeOrder = useCallback(async (): Promise<OrderSnapshot | null> => {
     if (!enabled || !anonymousId) {
       return null;
     }
 
-    const run = async (): Promise<OrderSnapshot | null> => {
-      if (!cartRef.current) {
+    return store.enqueueMutation(async (): Promise<OrderSnapshot | null> => {
+      const currentCart = cartRef.current;
+      if (!currentCart) {
         return null;
       }
       orderNumberRef.current ??= `cat-${createAnonymousId()}`;
       setIsMutating(true);
       setError(null);
       try {
-        const response = await fetch(`${apiBaseUrl}/cart/order`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            anonymousId,
-            sessionToken: sessionTokenRef.current ?? undefined,
-            cartId: cartRef.current.id,
-            catalogLocale,
-            orderNumber: orderNumberRef.current,
-          }),
+        const body = await getClient().cart.order({
+          cartId: currentCart.id,
+          catalogLocale,
+          orderNumber: orderNumberRef.current,
         });
-        const body = await parseCartApi(response);
         if (!body.order) {
-          throw new CartRequestError("Order response is missing", response.status);
+          throw new Error("Order response is missing");
         }
         orderNumberRef.current = null;
         applyCart(null);
         return body.order;
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Checkout failed");
+        setError(failure(err, "checkoutFailed"));
         return null;
       } finally {
         setIsMutating(false);
       }
-    };
-
-    const pending = mutationChainRef.current.then(run, run);
-    mutationChainRef.current = pending.then(
-      () => undefined,
-      () => undefined,
-    );
-    return pending;
-  }, [anonymousId, apiBaseUrl, applyCart, catalogLocale, enabled]);
+    });
+  }, [anonymousId, applyCart, catalogLocale, getClient, enabled, failure, store]);
 
   const login = useCallback(
     async (input: { email: string; password: string }) => {
@@ -663,48 +526,37 @@ export function useCart(options: UseCartOptions): UseCartReturn {
       setIsLoggingIn(true);
       setError(null);
       try {
-        const response = await fetch(`${apiBaseUrl}/cart/login`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: input.email,
-            password: input.password,
-            anonymousId,
-            catalogLocale,
-            cartId: cartRef.current?.id,
-          }),
+        const body = await getClient().cart.login({
+          email: input.email,
+          password: input.password,
+          catalogLocale,
+          cartId: cartRef.current?.id,
         });
-        const body = await parseCartApi(response);
         if (!body.sessionToken || !body.customer) {
-          throw new CartRequestError("Sign in failed", response.status);
+          throw new Error("Sign in response is missing");
         }
         persistSession(body.sessionToken, body.customer);
         applyCart(body.cart ?? null);
         return body.cart ?? null;
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Sign in failed");
+        setError(failure(err, "signInFailed"));
         return null;
       } finally {
         setIsLoggingIn(false);
       }
     },
-    [anonymousId, apiBaseUrl, applyCart, catalogLocale, enabled, persistSession],
+    [applyCart, catalogLocale, getClient, enabled, failure, persistSession],
   );
 
   const logout = useCallback(async () => {
     try {
-      await fetch(`${apiBaseUrl}/cart/logout`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
+      // The token lets the host run its `cartSession.onLogout` hook (for example a denylist).
+      await getClient().cart.logout();
     } catch {
       // Client-side logout still proceeds if the network call fails.
     }
-    clearSession();
-    applyCart(null);
-    setAnonymousId(rotateAnonymousId());
-  }, [apiBaseUrl, applyCart, clearSession]);
+    resetToGuest();
+  }, [getClient, resetToGuest]);
 
   const openCart = useCallback(() => {
     setIsCartOpen(true);
@@ -713,14 +565,15 @@ export function useCart(options: UseCartOptions): UseCartReturn {
     void refresh();
   }, [refresh]);
   const closeCart = useCallback(() => setIsCartOpen(false), []);
+  // Reads the current state instead of a setState updater: updaters must be pure, and React
+  // calls them twice in Strict Mode, which fired the refresh twice.
   const toggleCart = useCallback(() => {
-    setIsCartOpen((open) => {
-      if (!open) {
-        void refresh();
-      }
-      return !open;
-    });
-  }, [refresh]);
+    if (isCartOpen) {
+      closeCart();
+    } else {
+      openCart();
+    }
+  }, [closeCart, isCartOpen, openCart]);
 
   return {
     cart,

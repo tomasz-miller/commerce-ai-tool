@@ -21,11 +21,18 @@ export default defineConfig({
         url: e2eBaseUrl,
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,
+        env: { CAT_DEMO_MOCK_PAYMENTS: "true" },
       },
   projects: [
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      use: {
+        ...devices["Desktop Chrome"],
+        // A synthetic camera for the camera overlay specs; other specs never ask for one.
+        launchOptions: {
+          args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"],
+        },
+      },
     },
   ],
 });

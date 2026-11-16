@@ -1,0 +1,36 @@
+@let t = messages();
+<div class="cat-facets__header">
+  <span>{{ t.narrowResults }}</span>
+  <div class="cat-facets__actions">
+    @if (hasAppliedFilters()) {
+      <button type="button" class="cat-facets__clear" (click)="clear.emit()">
+        {{ t.clearFilters }}
+      </button>
+    }
+    <button type="button" class="cat-facets__new" (click)="newSearch.emit()">
+      {{ t.newSearch }}
+    </button>
+  </div>
+</div>
+@for (facet of facets(); track facet.id) {
+  <div class="cat-facet-group" role="group" [attr.aria-label]="facet.label">
+    <span class="cat-facet-group__label">{{ facet.label }}</span>
+    <div class="cat-facet-group__options">
+      @for (bucket of facet.buckets; track bucket.key) {
+        <button
+          type="button"
+          class="cat-facet-chip"
+          [class.cat-facet-chip--selected]="isSelected(facet.id, bucket.key, facet.currency)"
+          [attr.aria-pressed]="isSelected(facet.id, bucket.key, facet.currency)"
+          (click)="toggle.emit({ facetId: facet.id, key: bucket.key, currency: facet.currency })"
+        >
+          @if (swatch(facet.id, bucket.key); as color) {
+            <span class="cat-facet-chip__swatch" [style.background-color]="color" aria-hidden="true"></span>
+          }
+          {{ bucket.label }}
+          <span class="cat-facet-chip__count" aria-hidden="true">{{ bucket.count }}</span>
+        </button>
+      }
+    </div>
+  </div>
+}

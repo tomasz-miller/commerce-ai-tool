@@ -17,7 +17,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { LangfuseClient } from "@langfuse/client";
-import { listSystemPromptEntries } from "@commerce-ai-tool/core";
+import { listSystemPromptEntries } from "@commerce-ai-tool/core/internal";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
@@ -137,7 +137,7 @@ async function main() {
   });
 
   for (const entry of entries) {
-    await langfuse.createPrompt({
+    await langfuse.prompt.create({
       name: entry.name,
       type: "text",
       prompt: entry.prompt,

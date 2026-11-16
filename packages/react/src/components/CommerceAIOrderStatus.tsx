@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { ArrowLeft, Package, Truck } from "lucide-react";
 import {
   resolveCommerceAISearchMessages,
@@ -8,9 +8,16 @@ import {
 } from "@commerce-ai-tool/core/client";
 import { useCart } from "../hooks/useCart.js";
 import { ICON_STROKE } from "../icons.js";
+import {
+  CheckoutRoot,
+  Heading,
+  PageLink,
+  headingTags,
+  type CommerceAIPageOptions,
+} from "./checkout-shell.js";
 import "@commerce-ai-tool/styles/commerce-ai-search.css";
 
-export interface CommerceAIOrderStatusProps {
+export interface CommerceAIOrderStatusProps extends CommerceAIPageOptions {
   apiBaseUrl: string;
   orderNumber?: string;
   theme?: ThemeMode;
@@ -72,33 +79,40 @@ export function CommerceAIOrderStatus({
   messages: messageOverrides,
   continueShoppingHref = "/",
   orderStatusHref = "/orders",
+  as,
+  headingLevel = 2,
+  renderLink,
 }: CommerceAIOrderStatusProps) {
   const messages = useMemo(
     () => resolveCommerceAISearchMessages(messageOverrides),
     [messageOverrides],
   );
-  const cart = useCart({ apiBaseUrl, catalogLocale, currency, country });
+  const cart = useCart({ apiBaseUrl, catalogLocale, currency, country, messages });
+  const titleId = useId();
+  const tags = headingTags(headingLevel);
+  const { anonymousId, getOrder, listOrders } = cart;
   const trimmedNumber = orderNumber.trim();
   const [order, setOrder] = useState<OrderSnapshot | null>(null);
   const [orders, setOrders] = useState<OrderSnapshot[] | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    if (!cart.anonymousId) {
+    if (!anonymousId) {
       return;
     }
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset to the loading state whenever the order query changes
     setLoaded(false);
     setOrder(null);
     setOrders(null);
     const load = trimmedNumber
-      ? cart.getOrder(trimmedNumber).then((next) => {
+      ? getOrder(trimmedNumber).then((next) => {
           if (!cancelled) {
             setOrder(next);
             setLoaded(true);
           }
         })
-      : cart.listOrders().then((next) => {
+      : listOrders().then((next) => {
           if (!cancelled) {
             setOrders(next);
             setLoaded(true);
@@ -108,44 +122,54 @@ export function CommerceAIOrderStatus({
     return () => {
       cancelled = true;
     };
-  }, [cart.anonymousId, cart.getOrder, cart.listOrders, trimmedNumber]);
+  }, [anonymousId, getOrder, listOrders, trimmedNumber]);
 
   if (!loaded || cart.isLoading) {
     return (
-      <main className="cat-root cat-checkout" data-theme={theme}>
+      <CheckoutRoot as={as} theme={theme} titleId={titleId}>
         <section className="cat-checkout__empty cat-checkout__bezel">
           <div className="cat-checkout__core">
             <Package size={24} strokeWidth={ICON_STROKE} aria-hidden="true" />
-            <h1>{messages.searching}</h1>
+            <Heading tag={tags.title} id={titleId}>
+              {messages.searching}
+            </Heading>
           </div>
         </section>
-      </main>
+      </CheckoutRoot>
     );
   }
 
   if (!trimmedNumber) {
     if (!orders?.length) {
       return (
-        <main className="cat-root cat-checkout" data-theme={theme}>
+        <CheckoutRoot as={as} theme={theme} titleId={titleId}>
           <section className="cat-checkout__empty cat-checkout__bezel">
             <div className="cat-checkout__core">
               <Package size={24} strokeWidth={ICON_STROKE} aria-hidden="true" />
-              <h1>{messages.noOrdersYet}</h1>
-              <a className="cat-checkout__back" href={continueShoppingHref}>
+              <Heading tag={tags.title} id={titleId}>
+                {messages.noOrdersYet}
+              </Heading>
+              <PageLink
+                renderLink={renderLink}
+                className="cat-checkout__back"
+                href={continueShoppingHref}
+              >
                 <ArrowLeft size={15} strokeWidth={ICON_STROKE} aria-hidden="true" />
                 {messages.continueShopping}
-              </a>
+              </PageLink>
             </div>
           </section>
-        </main>
+        </CheckoutRoot>
       );
     }
 
     return (
-      <main className="cat-root cat-checkout" data-theme={theme}>
+      <CheckoutRoot as={as} theme={theme} titleId={titleId}>
         <header className="cat-checkout__intro">
           <p className="cat-checkout__eyebrow">{messages.orderStatus}</p>
-          <h1>{messages.yourOrders}</h1>
+          <Heading tag={tags.title} id={titleId}>
+            {messages.yourOrders}
+          </Heading>
         </header>
 
         {cart.error ? (
@@ -161,7 +185,11 @@ export function CommerceAIOrderStatus({
                 const number = item.orderNumber ?? item.id;
                 return (
                   <li key={item.id}>
-                    <a className="cat-order-status__list-link" href={orderHref(orderStatusHref, number)}>
+                    <PageLink
+                      renderLink={renderLink}
+                      className="cat-order-status__list-link"
+                      href={orderHref(orderStatusHref, number)}
+                    >
                       <span className="cat-order-status__list-copy">
                         <strong>{number}</strong>
                         {item.createdAt ? <small>{formatPlacedAt(item.createdAt)}</small> : null}
@@ -170,7 +198,7 @@ export function CommerceAIOrderStatus({
                         {item.orderState ? <small>{item.orderState}</small> : null}
                         <strong>{item.totalPrice.formatted}</strong>
                       </span>
-                    </a>
+                    </PageLink>
                   </li>
                 );
               })}
@@ -178,36 +206,48 @@ export function CommerceAIOrderStatus({
           </div>
         </section>
 
-        <a className="cat-checkout__back" href={continueShoppingHref}>
+        <PageLink
+          renderLink={renderLink}
+          className="cat-checkout__back"
+          href={continueShoppingHref}
+        >
           <ArrowLeft size={15} strokeWidth={ICON_STROKE} aria-hidden="true" />
           {messages.continueShopping}
-        </a>
-      </main>
+        </PageLink>
+      </CheckoutRoot>
     );
   }
 
   if (!order) {
     return (
-      <main className="cat-root cat-checkout" data-theme={theme}>
+      <CheckoutRoot as={as} theme={theme} titleId={titleId}>
         <section className="cat-checkout__empty cat-checkout__bezel">
           <div className="cat-checkout__core">
             <Package size={24} strokeWidth={ICON_STROKE} aria-hidden="true" />
-            <h1>{messages.orderNotFound}</h1>
-            <a className="cat-checkout__back" href={continueShoppingHref}>
+            <Heading tag={tags.title} id={titleId}>
+              {messages.orderNotFound}
+            </Heading>
+            <PageLink
+              renderLink={renderLink}
+              className="cat-checkout__back"
+              href={continueShoppingHref}
+            >
               <ArrowLeft size={15} strokeWidth={ICON_STROKE} aria-hidden="true" />
               {messages.continueShopping}
-            </a>
+            </PageLink>
           </div>
         </section>
-      </main>
+      </CheckoutRoot>
     );
   }
 
   return (
-    <main className="cat-root cat-checkout" data-theme={theme}>
+    <CheckoutRoot as={as} theme={theme} titleId={titleId}>
       <header className="cat-checkout__intro">
         <p className="cat-checkout__eyebrow">{messages.orderStatus}</p>
-        <h1>{order.orderNumber ?? order.id}</h1>
+        <Heading tag={tags.title} id={titleId}>
+          {order.orderNumber ?? order.id}
+        </Heading>
         <div className="cat-order-status__badges">
           <StatusBadge label={messages.orderStatus} value={order.orderState} />
           <StatusBadge label={messages.paymentStateLabel} value={order.paymentState} />
@@ -231,7 +271,7 @@ export function CommerceAIOrderStatus({
           <div className="cat-checkout__core">
             <div className="cat-checkout__section-heading">
               <Package size={18} strokeWidth={ICON_STROKE} aria-hidden="true" />
-              <h2>{messages.orderSummary}</h2>
+              <Heading tag={tags.section}>{messages.orderSummary}</Heading>
             </div>
             <ul className="cat-checkout__items">
               {order.lineItems.map((item) => (
@@ -264,7 +304,9 @@ export function CommerceAIOrderStatus({
           {order.shippingAddress ? (
             <section className="cat-checkout__bezel">
               <div className="cat-checkout__core">
-                <h2>{messages.shippingAddress}</h2>
+                <Heading tag={tags.section} className="cat-checkout__plain-heading">
+                  {messages.shippingAddress}
+                </Heading>
                 <p className="cat-order-status__copy">{formatAddress(order.shippingAddress)}</p>
                 {order.shippingMethod ? (
                   <p className="cat-order-status__copy">{order.shippingMethod.name}</p>
@@ -277,7 +319,7 @@ export function CommerceAIOrderStatus({
             <div className="cat-checkout__core">
               <div className="cat-checkout__section-heading">
                 <Truck size={18} strokeWidth={ICON_STROKE} aria-hidden="true" />
-                <h2>{messages.shipmentStateLabel}</h2>
+                <Heading tag={tags.section}>{messages.shipmentStateLabel}</Heading>
               </div>
               {order.deliveries?.length ? (
                 <ul className="cat-order-status__tracking">
@@ -301,10 +343,14 @@ export function CommerceAIOrderStatus({
         </div>
       </div>
 
-      <a className="cat-checkout__back" href={continueShoppingHref}>
+      <PageLink
+        renderLink={renderLink}
+        className="cat-checkout__back"
+        href={continueShoppingHref}
+      >
         <ArrowLeft size={15} strokeWidth={ICON_STROKE} aria-hidden="true" />
         {messages.continueShopping}
-      </a>
-    </main>
+      </PageLink>
+    </CheckoutRoot>
   );
 }

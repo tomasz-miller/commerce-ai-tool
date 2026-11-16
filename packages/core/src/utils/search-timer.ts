@@ -28,6 +28,7 @@ export function createSearchTimer(): SearchTimer {
   };
 }
 
+/** Per-step timings are added to search metadata only with `CAT_DEBUG=true`; `NODE_ENV` has no effect. */
 export function shouldIncludeSearchTimings(): boolean {
-  return process.env.NODE_ENV !== "production" || process.env.CAT_DEBUG === "true";
+  return process.env.CAT_DEBUG === "true";
 }

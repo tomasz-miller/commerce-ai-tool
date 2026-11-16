@@ -7,7 +7,7 @@ const messages = DEFAULT_COMMERCE_AI_SEARCH_MESSAGES;
 
 describe("VoiceStatusBanner", () => {
   it("shows listening state with waveform and timer", () => {
-    render(
+    const { container } = render(
       <VoiceStatusBanner
         isRecording
         isProcessing={false}
@@ -18,15 +18,16 @@ describe("VoiceStatusBanner", () => {
       />,
     );
 
-    const status = screen.getByRole("status");
-    expect(status.textContent).toContain("Listening…");
-    expect(status.textContent).toContain("0:08");
-    expect(status.textContent).toContain("Tap mic to stop");
-    expect(status.querySelector(".cat-voice-waveform")).not.toBeNull();
+    const banner = container.querySelector(".cat-voice-banner")!;
+    expect(banner.textContent).toContain("Listening…");
+    expect(banner.textContent).toContain("0:08");
+    expect(banner.textContent).toContain("Tap mic to stop");
+    expect(banner.querySelector(".cat-voice-waveform")).not.toBeNull();
+    expect(screen.getByRole("timer").textContent).toBe("0:08");
   });
 
   it("shows processing state", () => {
-    render(
+    const { container } = render(
       <VoiceStatusBanner
         isRecording={false}
         isProcessing
@@ -37,12 +38,13 @@ describe("VoiceStatusBanner", () => {
       />,
     );
 
-    expect(screen.getByRole("status").textContent).toContain("Understanding your query…");
-    expect(screen.getByRole("status").querySelector(".cat-voice-spinner")).not.toBeNull();
+    const banner = container.querySelector(".cat-voice-banner")!;
+    expect(banner.textContent).toContain("Understanding your query…");
+    expect(banner.querySelector(".cat-voice-spinner")).not.toBeNull();
   });
 
   it("shows TTS loading state", () => {
-    render(
+    const { container } = render(
       <VoiceStatusBanner
         isRecording={false}
         isProcessing={false}
@@ -53,7 +55,9 @@ describe("VoiceStatusBanner", () => {
       />,
     );
 
-    expect(screen.getByRole("status").textContent).toContain("Preparing audio summary…");
+    expect(container.querySelector(".cat-voice-banner")!.textContent).toContain(
+      "Preparing audio summary…",
+    );
   });
 
   it("shows error state", () => {
@@ -68,9 +72,24 @@ describe("VoiceStatusBanner", () => {
       />,
     );
 
-    const status = screen.getByRole("status");
-    expect(status.textContent).toContain("Microphone access denied");
-    expect(status.className).toContain("cat-voice-banner--error");
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toContain("Microphone access denied");
+    expect(alert.closest(".cat-voice-banner")!.className).toContain("cat-voice-banner--error");
+  });
+
+  it("is not a live region itself: the widget's single live region announces the states", () => {
+    const { container } = render(
+      <VoiceStatusBanner
+        isRecording
+        isProcessing={false}
+        isLoadingTts={false}
+        error={null}
+        durationSeconds={3}
+        messages={messages}
+      />,
+    );
+
+    expect(container.querySelector("[aria-live], [role=status], [role=alert]")).toBeNull();
   });
 
   it("dismisses error when close is clicked", () => {

@@ -1,11 +1,11 @@
 import type {
   AuthorizePaymentRequest,
-  CartSnapshot,
+  AuthorizePaymentResponse,
   CheckoutRequest,
-  PaymentMethodOption,
-  PaymentSnapshot,
+  PaymentMethodsResponse,
 } from "@commerce-ai-tool/core";
 import type { CommerceAIServer } from "./server.js";
+import { optionalOrderNumber } from "./checkout-actions.js";
 import {
   optionalString,
   requiredString,
@@ -13,21 +13,14 @@ import {
   resolveLocale,
 } from "./cart-actions.js";
 
-export interface PaymentMethodsResponse {
-  paymentMethods: PaymentMethodOption[];
-}
+export type { AuthorizePaymentResponse, PaymentMethodsResponse };
 
-export interface AuthorizePaymentResponse {
-  payment: PaymentSnapshot;
-  cart: CartSnapshot;
-}
-
-function paymentIdentity(
+async function paymentIdentity(
   server: CommerceAIServer,
   body: CheckoutRequest,
-): CheckoutRequest {
+): Promise<CheckoutRequest> {
   return {
-    ...resolveCartIdentity(server, body.sessionToken, body.anonymousId),
+    ...(await resolveCartIdentity(server, body.sessionToken, body.anonymousId)),
     cartId: optionalString(body.cartId),
     catalogLocale: resolveLocale(server, body.catalogLocale),
   };
@@ -37,7 +30,7 @@ export async function executeGetPaymentMethods(
   server: CommerceAIServer,
   body: CheckoutRequest,
 ): Promise<PaymentMethodsResponse> {
-  const identity = paymentIdentity(server, body);
+  const identity = await paymentIdentity(server, body);
   const paymentMethods = await server.commercetools.listPaymentMethods({
     locale: identity.catalogLocale,
     country: server.cartDefaults.country,
@@ -50,8 +43,8 @@ export async function executeAuthorizePayment(
   body: AuthorizePaymentRequest,
 ): Promise<AuthorizePaymentResponse> {
   return server.commercetools.authorizePayment({
-    ...paymentIdentity(server, body),
+    ...(await paymentIdentity(server, body)),
     method: requiredString(body.method, "method"),
-    orderNumber: optionalString(body.orderNumber),
+    orderNumber: optionalOrderNumber(body.orderNumber),
   });
 }

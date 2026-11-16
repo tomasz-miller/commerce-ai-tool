@@ -3,6 +3,7 @@ import type { Cart, CartUpdateAction } from "@commercetools/platform-sdk";
 import {
   buildAnonymousCartWhere,
   buildCustomerCartWhere,
+  buildCustomerSignin,
   CartAccessDeniedError,
   CartNotFoundError,
   createCartOperations,
@@ -10,6 +11,7 @@ import {
   formatMoney,
   InvalidCredentialsError,
   isConcurrentModification,
+  isInvalidCredentials,
   isMatchingPriceNotFound,
   mapCartToSnapshot,
   MissingPriceError,
@@ -114,6 +116,15 @@ describe("cart helpers", () => {
     );
   });
 
+  it("formatMoney falls back to the default locale on an invalid locale", () => {
+    const money = { centAmount: 12345, currencyCode: "EUR", fractionDigits: 2 };
+    const expected = formatMoney(money, "en");
+
+    for (const locale of ["en_GB", "x", "!!", "xx_INVALID!!"]) {
+      expect(formatMoney(money, locale)).toEqual(expected);
+    }
+  });
+
   it("maps a commercetools cart to a client snapshot", () => {
     const snapshot = mapCartToSnapshot(createCart(), "no");
 
@@ -144,6 +155,15 @@ describe("cart helpers", () => {
       isConcurrentModification({ body: { errors: [{ code: "ConcurrentModification" }] } }),
     ).toBe(true);
     expect(isConcurrentModification({ statusCode: 400 })).toBe(false);
+  });
+
+  it("treats only the InvalidCredentials error code as a failed sign-in", () => {
+    expect(
+      isInvalidCredentials({ statusCode: 400, body: { errors: [{ code: "InvalidCredentials" }] } }),
+    ).toBe(true);
+    expect(isInvalidCredentials({ statusCode: 401 })).toBe(false);
+    expect(isInvalidCredentials({ statusCode: 401, body: { errors: [{ code: "invalid_token" }] } })).toBe(false);
+    expect(isInvalidCredentials({ statusCode: 400, body: { errors: [{ code: "InvalidField" }] } })).toBe(false);
   });
 
   it("detects MatchingPriceNotFound errors", () => {
@@ -296,12 +316,74 @@ describe("createCartOperations", () => {
     ]);
   });
 
-  it("retries add without country when the scoped price is missing", async () => {
-    const existing = createCart();
-    const updated = createCart({ version: 2 });
+  it("MatchingPriceNotFound maps to MissingPriceError without country-removal retries", async () => {
     const missingPrice = {
       statusCode: 400,
       message: "The variant '1' with SKU 'CBM-03' does not contain a price for currency 'GBP' country 'DE'",
+      body: { errors: [{ code: "MatchingPriceNotFound" }] },
+    };
+
+    // Existing cart with another country: the requested country is tried, then the cart's own
+    // country is kept. The country is never unset (no setCountry action without a country).
+    const updateCart = vi.fn().mockRejectedValue(missingPrice);
+    const updateGateway = createGateway({
+      queryCarts: vi.fn().mockResolvedValue([createCart({ country: "PL" })]),
+      updateCart,
+    });
+    await expect(
+      createCartOperations(updateGateway).addToCart({
+        anonymousId: "anon-1",
+        sku: "CBM-03",
+        country: "DE",
+        catalogLocale: "en",
+      }),
+    ).rejects.toBeInstanceOf(MissingPriceError);
+    expect(updateCart).toHaveBeenCalledTimes(2);
+    expect(updateCart).toHaveBeenNthCalledWith(1, "cart-1", 1, [
+      { action: "setCountry", country: "DE" },
+      { action: "addLineItem", sku: "CBM-03", quantity: 1 },
+    ]);
+    expect(updateCart).toHaveBeenNthCalledWith(2, "cart-1", 1, [
+      { action: "addLineItem", sku: "CBM-03", quantity: 1 },
+    ]);
+    const unsetCountry = updateCart.mock.calls.some(([, , actions]) =>
+      (actions as CartUpdateAction[]).some(
+        (action) => action.action === "setCountry" && !("country" in action && action.country),
+      ),
+    );
+    expect(unsetCountry).toBe(false);
+
+    // No country change requested: a single attempt.
+    const singleUpdate = vi.fn().mockRejectedValue(missingPrice);
+    await expect(
+      createCartOperations(
+        createGateway({
+          queryCarts: vi.fn().mockResolvedValue([createCart({ country: "DE" })]),
+          updateCart: singleUpdate,
+        }),
+      ).addToCart({ anonymousId: "anon-1", sku: "CBM-03", country: "DE", catalogLocale: "en" }),
+    ).rejects.toBeInstanceOf(MissingPriceError);
+    expect(singleUpdate).toHaveBeenCalledTimes(1);
+
+    // New cart: one createCart call, never a second one with the country dropped.
+    const createCartFn = vi.fn().mockRejectedValue(missingPrice);
+    await expect(
+      createCartOperations(createGateway({ createCart: createCartFn })).addToCart({
+        anonymousId: "anon-1",
+        sku: "CBM-03",
+        currency: "EUR",
+        country: "DE",
+        catalogLocale: "en",
+      }),
+    ).rejects.toBeInstanceOf(MissingPriceError);
+    expect(createCartFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the cart country when only the requested country has no price", async () => {
+    const existing = createCart({ country: "PL" });
+    const updated = createCart({ version: 2, country: "PL" });
+    const missingPrice = {
+      statusCode: 400,
       body: { errors: [{ code: "MatchingPriceNotFound" }] },
     };
     const updateCart = vi
@@ -312,9 +394,8 @@ describe("createCartOperations", () => {
       queryCarts: vi.fn().mockResolvedValue([existing]),
       updateCart,
     });
-    const ops = createCartOperations(gateway);
 
-    await ops.addToCart({
+    await createCartOperations(gateway).addToCart({
       anonymousId: "anon-1",
       sku: "CBM-03",
       country: "DE",
@@ -328,74 +409,6 @@ describe("createCartOperations", () => {
     expect(updateCart).toHaveBeenNthCalledWith(2, "cart-1", 1, [
       { action: "addLineItem", sku: "CBM-03", quantity: 1 },
     ]);
-  });
-
-  it("clears a cart country when add still has no matching price", async () => {
-    const existing = createCart({ country: "DE" });
-    const updated = createCart({ version: 2 });
-    const missingPrice = {
-      statusCode: 400,
-      body: { errors: [{ code: "MatchingPriceNotFound" }] },
-    };
-    const updateCart = vi
-      .fn<(id: string, version: number, actions: CartUpdateAction[]) => Promise<Cart>>()
-      .mockRejectedValueOnce(missingPrice)
-      .mockResolvedValueOnce(updated);
-    const gateway = createGateway({
-      queryCarts: vi.fn().mockResolvedValue([existing]),
-      updateCart,
-    });
-    const ops = createCartOperations(gateway);
-
-    await ops.addToCart({
-      anonymousId: "anon-1",
-      sku: "CBM-03",
-      country: "DE",
-      catalogLocale: "en",
-    });
-
-    expect(updateCart).toHaveBeenNthCalledWith(1, "cart-1", 1, [
-      { action: "addLineItem", sku: "CBM-03", quantity: 1 },
-    ]);
-    expect(updateCart).toHaveBeenNthCalledWith(2, "cart-1", 1, [
-      { action: "setCountry" },
-      { action: "addLineItem", sku: "CBM-03", quantity: 1 },
-    ]);
-  });
-
-  it("creates a cart without country when the scoped price is missing", async () => {
-    const created = createCart({ version: 1 });
-    const missingPrice = {
-      statusCode: 400,
-      body: { errors: [{ code: "MatchingPriceNotFound" }] },
-    };
-    const createCartFn = vi
-      .fn()
-      .mockRejectedValueOnce(missingPrice)
-      .mockResolvedValueOnce(created);
-    const gateway = createGateway({ createCart: createCartFn });
-    const ops = createCartOperations(gateway);
-
-    await ops.addToCart({
-      anonymousId: "anon-1",
-      sku: "CBM-03",
-      currency: "EUR",
-      country: "DE",
-      catalogLocale: "en",
-    });
-
-    expect(createCartFn).toHaveBeenNthCalledWith(1, {
-      currency: "EUR",
-      country: "DE",
-      anonymousId: "anon-1",
-      lineItems: [{ sku: "CBM-03", quantity: 1 }],
-    });
-    expect(createCartFn).toHaveBeenNthCalledWith(2, {
-      currency: "EUR",
-      country: undefined,
-      anonymousId: "anon-1",
-      lineItems: [{ sku: "CBM-03", quantity: 1 }],
-    });
   });
 
   it("surfaces MissingPriceError when no price exists even without country", async () => {
@@ -474,6 +487,66 @@ describe("createCartOperations", () => {
         quantity: 3,
       }),
     ).rejects.toBeInstanceOf(CartAccessDeniedError);
+  });
+
+  it("a supplied cartId in state Ordered falls back to the active cart", async () => {
+    const ordered = createCart({ id: "cart-ordered", cartState: "Ordered" });
+    const active = createCart({ id: "cart-active", version: 4 });
+    const gateway = createGateway({
+      queryCarts: vi.fn().mockResolvedValue([active]),
+      getCartById: vi.fn().mockResolvedValue(ordered),
+      updateCart: vi.fn().mockResolvedValue(createCart({ id: "cart-active", version: 5 })),
+    });
+    const ops = createCartOperations(gateway);
+
+    const snapshot = await ops.addToCart({
+      anonymousId: "anon-1",
+      cartId: "cart-ordered",
+      sku: "SHOE-RED",
+      catalogLocale: "en",
+    });
+
+    expect(gateway.updateCart).toHaveBeenCalledTimes(1);
+    expect(gateway.updateCart).toHaveBeenCalledWith("cart-active", 4, [
+      { action: "addLineItem", sku: "SHOE-RED", quantity: 1 },
+    ]);
+    expect(gateway.createCart).not.toHaveBeenCalled();
+    expect(snapshot.id).toBe("cart-active");
+  });
+
+  it("a supplied cartId in state Merged throws CartNotFoundError without touching another cart", async () => {
+    const merged = createCart({ id: "cart-merged", cartState: "Merged" });
+    const active = createCart({ id: "cart-active", version: 4, lineItems: [] });
+    const gateway = createGateway({
+      queryCarts: vi.fn().mockResolvedValue([active]),
+      getCartById: vi.fn().mockResolvedValue(merged),
+    });
+    const ops = createCartOperations(gateway);
+
+    await expect(
+      ops.changeLineItemQuantity({
+        anonymousId: "anon-1",
+        cartId: "cart-merged",
+        lineItemId: "li-1",
+        quantity: 3,
+      }),
+    ).rejects.toBeInstanceOf(CartNotFoundError);
+    await expect(
+      ops.removeLineItem({ anonymousId: "anon-1", cartId: "cart-merged", lineItemId: "li-1" }),
+    ).rejects.toBeInstanceOf(CartNotFoundError);
+    expect(gateway.updateCart).not.toHaveBeenCalled();
+  });
+
+  it("a supplied cartId in state Frozen with no active cart throws CartNotFoundError", async () => {
+    const gateway = createGateway({
+      getCartById: vi.fn().mockResolvedValue(createCart({ cartState: "Frozen" })),
+    });
+    const ops = createCartOperations(gateway);
+
+    await expect(
+      ops.removeLineItem({ anonymousId: "anon-1", cartId: "cart-1", lineItemId: "li-1" }),
+    ).rejects.toBeInstanceOf(CartNotFoundError);
+    expect(gateway.updateCart).not.toHaveBeenCalled();
   });
 
   it("adds to the cart identified by cartId instead of the latest anonymous cart", async () => {
@@ -601,7 +674,6 @@ describe("createCartOperations", () => {
     expect(gateway.loginCustomer).toHaveBeenCalledWith({
       email: "ada@example.com",
       password: "secret",
-      anonymousId: "anon-1",
       anonymousCartId: "anon-cart",
     });
     expect(result.customer).toEqual({ id: "cust-1", email: "ada@example.com" });
@@ -630,9 +702,49 @@ describe("createCartOperations", () => {
 
     expect(gateway.getCartById).toHaveBeenCalledWith("anon-cart");
     expect(gateway.loginCustomer).toHaveBeenCalledWith(
-      expect.objectContaining({ anonymousCartId: "anon-cart", anonymousId: "anon-1" }),
+      expect.objectContaining({ anonymousCartId: "anon-cart" }),
     );
     expect(result.cart?.id).toBe("anon-cart");
+  });
+
+  it("loginCustomer sends anonymousCart but never anonymousId", async () => {
+    const owned = createCart({ id: "anon-cart", anonymousId: "anon-1" });
+    const gateway = createGateway({
+      getCartById: vi.fn().mockResolvedValue(owned),
+      loginCustomer: vi.fn().mockResolvedValue({
+        customer: { id: "cust-1", email: "ada@example.com" },
+        cart: createCart({ id: "anon-cart", customerId: "cust-1", anonymousId: undefined }),
+      }),
+    });
+    const ops = createCartOperations(gateway);
+
+    await ops.loginAndMerge({
+      email: "ada@example.com",
+      password: "secret",
+      anonymousId: "anon-1",
+      cartId: "anon-cart",
+    });
+
+    expect(vi.mocked(gateway.loginCustomer).mock.calls[0]?.[0]).not.toHaveProperty("anonymousId");
+
+    // Even if a caller smuggles anonymousId in, the CustomerSignin body never carries it:
+    // commercetools would reassign every Cart, Order and Payment with that id to the customer.
+    const body = buildCustomerSignin({
+      email: "ada@example.com",
+      password: "secret",
+      anonymousCartId: "anon-cart",
+      anonymousId: "victim-anon",
+    } as Parameters<typeof buildCustomerSignin>[0]);
+    expect(body).toEqual({
+      email: "ada@example.com",
+      password: "secret",
+      anonymousCartSignInMode: "MergeWithExistingCustomerCart",
+      anonymousCart: { typeId: "cart", id: "anon-cart" },
+    });
+    expect(body).not.toHaveProperty("anonymousId");
+    expect(buildCustomerSignin({ email: "a@b.c", password: "x" })).not.toHaveProperty(
+      "anonymousCart",
+    );
   });
 
   it("rejects a client cartId that does not belong to the anonymous session", async () => {

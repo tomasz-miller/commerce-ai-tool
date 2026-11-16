@@ -4,6 +4,12 @@ export { MissionResults } from "./components/MissionResults.js";
 export type { MissionResultsProps } from "./components/MissionResults.js";
 export { CommerceAICheckout } from "./components/CommerceAICheckout.js";
 export type { CommerceAICheckoutProps } from "./components/CommerceAICheckout.js";
+export type {
+  CommerceAIHeadingLevel,
+  CommerceAILinkProps,
+  CommerceAIPageOptions,
+  CommerceAIRootElement,
+} from "./components/checkout-shell.js";
 export { CommerceAIOrderStatus } from "./components/CommerceAIOrderStatus.js";
 export type { CommerceAIOrderStatusProps } from "./components/CommerceAIOrderStatus.js";
 export { useCommerceAISearch } from "./hooks/useCommerceAISearch.js";
@@ -22,6 +28,7 @@ export type {
   CartSnapshot,
   CheckoutAddress,
   CommerceAISearchMessages,
+  ResolvedCommerceAISearchMessages,
   CustomerSnapshot,
   OrderSnapshot,
   PaymentMethodOption,

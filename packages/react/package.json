@@ -14,7 +14,7 @@
         "default": "./dist/index.js"
       },
       "require": {
-        "types": "./dist/index.d.cts",
+        "types": "./dist/cjs/index.d.ts",
         "default": "./dist/index.cjs"
       }
     },
@@ -32,28 +32,30 @@
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
+    "check:package": "attw --pack . --exclude-entrypoints ./styles.css && publint",
     "test": "vitest run",
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "lucide-react": "^0.484.0"
+    "lucide-react": "^1.72.0"
   },
   "peerDependencies": {
-    "react": ">=18",
-    "react-dom": ">=18"
+    "react": ">=19",
+    "react-dom": ">=19"
   },
   "devDependencies": {
     "@commerce-ai-tool/core": "workspace:*",
     "@commerce-ai-tool/styles": "workspace:*",
-    "@testing-library/react": "^16.2.0",
-    "@types/react": "^19.0.12",
-    "@types/react-dom": "^19.0.4",
-    "jsdom": "^26.0.0",
+    "@testing-library/react": "^16.3.3",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "jsdom": "catalog:",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "tsup": "^8.4.0",
+    "tsup": "catalog:",
     "@typescript/native": "catalog:",
-    "vitest": "^3.0.9"
+    "vite": "catalog:",
+    "vitest": "catalog:"
   },
   "publishConfig": {
     "access": "public"

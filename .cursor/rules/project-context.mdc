@@ -9,18 +9,19 @@ AI-powered product search plugin for commercetools (text, voice, image). pnpm + 
 
 ## Packages
 
-- `packages/core` — business logic, AI (OpenRouter/Bedrock), commercetools client
-- `packages/server` — Next.js/Express handlers, ElevenLabs STT/TTS
+- `packages/core` — business logic, AI (OpenRouter/Bedrock), commercetools client (`src/search/*` pipelines, `src/browser/*` shared client logic exported as `@commerce-ai-tool/core/client`)
+- `packages/server` — Next.js/Express handlers, ElevenLabs STT/TTS (`routes.ts` is the single route table)
 - `packages/react` — React search widget (glass UI)
-- `packages/angular` — Angular component
+- `packages/angular` — Angular widget components and services (ng-packagr, partial compilation)
+- `packages/styles` — shared widget CSS (private)
 - `apps/demo-next` — Next.js 16 demo app
-- `apps/demo-angular` — Angular 20 demo app with a standalone Express BFF (`:4200` → `:3002`)
+- `apps/demo-angular` — Angular 21 demo app with a standalone Express BFF (`:4200` → `:3002`)
 
-Dependencies: `server` / `react` / `angular` → `core`. API secrets stay on the server only.
+Dependencies: `server` / `react` / `angular` → `core`. `core`, `server`, `react`, `angular` are one fixed Changesets group. API secrets stay on the server only.
 
 ## Stack
 
-TypeScript strict, tsup, Vitest, ESLint 10, Turbo 2, pnpm 11.22.0, Node ≥ 24.
+TypeScript 7 native (`packages/angular` and `demo-angular` stay on `typescript ~5.9` for the Angular compiler), tsup (ng-packagr for Angular), Vitest 5, Playwright E2E, ESLint 10, Turbo 2, Changesets, pnpm 11.22.0, Node ≥ 24.
 
 ## Architecture
 

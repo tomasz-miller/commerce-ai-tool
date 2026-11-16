@@ -66,6 +66,8 @@ describe("buildProductCardsGraphQLVariables", () => {
       limit: 1,
       locales: ["en-GB", "en-US", "en"],
       currency: "EUR",
+      matchedSkus: [],
+      includeMatched: false,
     });
     expect("country" in variables).toBe(false);
   });
@@ -277,5 +279,106 @@ describe("decideGraphQLProductCardsHydrate", () => {
       data: { products: { results: [] } },
       warnings: [],
     });
+  });
+});
+
+describe("locale fallback without the all-locale description", () => {
+  it("uses the acceptLanguage description, which already applies the locale fallback chain", () => {
+    // commercetools resolves description(acceptLanguage: [en-GB, en-US, en]) server-side,
+    // so an en-US-only description arrives in `description` for an en-GB request.
+    const card = mapGraphQLProductToCard(
+      {
+        id: "p-fallback",
+        masterData: {
+          current: {
+            name: "Lamp",
+            description: "US description",
+            slug: "lamp",
+            masterVariant: { id: 1, sku: "LAMP-1" },
+          },
+        },
+      },
+      "en-GB",
+    );
+    expect(card?.description).toBe("US description");
+  });
+
+  it("leaves description undefined when no locale in the chain has one", () => {
+    const card = mapGraphQLProductToCard(
+      {
+        id: "p-none",
+        masterData: {
+          current: { name: "Lamp", description: null, masterVariant: { id: 1, sku: "LAMP-1" } },
+        },
+      },
+      "en-GB",
+    );
+    expect(card?.description).toBeUndefined();
+  });
+
+  it("hydrate query no longer requests descriptionAllLocales", () => {
+    expect(PRODUCT_CARDS_GRAPHQL_QUERY).not.toContain("descriptionAllLocales");
+    expect(PRODUCT_CARDS_GRAPHQL_QUERY).toContain("description(acceptLanguage: $locales)");
+  });
+});
+
+describe("matching variants", () => {
+  const product: GraphQLProductCardResult = {
+    id: "sneaker",
+    key: "sneaker",
+    masterData: {
+      current: {
+        name: "Sneaker",
+        slug: "sneaker",
+        masterVariant: {
+          id: 1,
+          sku: "SNK-BLACK",
+          images: [{ url: "https://cdn.example/black.jpg" }],
+          price: { value: { centAmount: 5000, currencyCode: "EUR", fractionDigits: 2 } },
+        },
+        matchedVariants: [
+          {
+            id: 3,
+            sku: "SNK-RED",
+            images: [{ url: "https://cdn.example/red.jpg" }],
+            price: { value: { centAmount: 5500, currencyCode: "EUR", fractionDigits: 2 } },
+          },
+        ],
+      },
+    },
+  };
+
+  it("card shows the matched variant sku and image", () => {
+    const card = mapGraphQLProductToCard(product, "en", "SNK-RED");
+    expect(card).toMatchObject({
+      sku: "SNK-RED",
+      variantId: 3,
+      imageUrl: "https://cdn.example/red.jpg",
+      price: { amount: 55, currency: "EUR" },
+    });
+  });
+
+  it("uses the master variant when no sku matched or the matched variant is missing", () => {
+    expect(mapGraphQLProductToCard(product, "en")?.sku).toBe("SNK-BLACK");
+    expect(mapGraphQLProductToCard(product, "en", "SNK-GONE")?.sku).toBe("SNK-BLACK");
+  });
+
+  it("selects allVariants(skus:) only when the chunk has matched skus", () => {
+    expect(PRODUCT_CARDS_GRAPHQL_QUERY).toContain(
+      "matchedVariants: allVariants(skus: $matchedSkus) @include(if: $includeMatched)",
+    );
+    const withMatches = buildProductCardsGraphQLVariables(["sneaker", "bag"], "en", "EUR", undefined, {
+      sneaker: "SNK-RED",
+      other: "OTHER-SKU",
+    });
+    expect(withMatches).toMatchObject({ matchedSkus: ["SNK-RED"], includeMatched: true });
+
+    const none = buildProductCardsGraphQLVariables(["bag"], "en", "EUR");
+    expect(none).toMatchObject({ matchedSkus: [], includeMatched: false });
+  });
+
+  it("maps a whole chunk with each product's matched sku", () => {
+    const cards = mapGraphQLProductsToCards([product], ["sneaker"], "en", { sneaker: "SNK-RED" });
+    expect(cards[0]?.sku).toBe("SNK-RED");
   });
 });

@@ -71,3 +71,19 @@ describe("buildVoiceSearchCacheKey", () => {
     );
   });
 });
+
+describe("SearchCache maxEntries guard", () => {
+  it.each([Number.NaN, 0, -3, Number.POSITIVE_INFINITY])(
+    "non-finite or non-positive maxEntries (%s) falls back to 500",
+    (maxEntries) => {
+      const cache = new SearchCache<number>({ ttlMs: 60_000, maxEntries });
+      for (let index = 0; index < 600; index += 1) {
+        cache.set(`key-${index}`, index);
+      }
+      expect(cache.get("key-0")).toBeUndefined();
+      expect(cache.get("key-99")).toBeUndefined();
+      expect(cache.get("key-100")).toBe(100);
+      expect(cache.get("key-599")).toBe(599);
+    },
+  );
+});

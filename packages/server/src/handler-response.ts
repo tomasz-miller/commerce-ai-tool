@@ -1,19 +1,31 @@
+import type { ApiErrorBody, ApiErrorCode } from "@commerce-ai-tool/core";
+
 export interface HandlerResponse {
   status: number;
   headers?: Record<string, string>;
   body: string | Buffer;
 }
 
-export function jsonResponse(data: unknown, status = 200): HandlerResponse {
+export function jsonResponse(
+  data: unknown,
+  status = 200,
+  headers?: Record<string, string>,
+): HandlerResponse {
   return {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(data),
   };
 }
 
-export function errorResponse(message: string, status = 500): HandlerResponse {
-  return jsonResponse({ error: message }, status);
+export function errorResponse(
+  message: string,
+  status: number,
+  code: ApiErrorCode,
+  headers?: Record<string, string>,
+): HandlerResponse {
+  const body: ApiErrorBody = { error: message, code };
+  return jsonResponse(body, status, headers);
 }
 
 export function toWebResponse(handlerResponse: HandlerResponse): Response {
@@ -28,7 +40,10 @@ export function toWebResponse(handlerResponse: HandlerResponse): Response {
 
 export function toWebErrorResponse(
   message: string,
-  status = 500,
+  status: number,
+  code: ApiErrorCode,
+  headers?: Record<string, string>,
 ): Response {
-  return Response.json({ error: message }, { status });
+  const body: ApiErrorBody = { error: message, code };
+  return Response.json(body, { status, headers });
 }

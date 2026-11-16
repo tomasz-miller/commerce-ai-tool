@@ -1,15 +1,20 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Check, Package, SearchX, ShoppingCart } from "lucide-react";
-import type {
-  AddToCartLineItem,
-  CommerceAISearchMessages,
-  MissionSearchResult,
-  ProductCard,
+import {
+  addToCartLabel,
+  formatMissionAddAll,
+  resolveCommerceAISearchMessages,
+  starterBundleItems,
+  type AddToCartLineItem,
+  type CommerceAISearchMessages,
+  type MissionSearchResult,
+  type ProductCard,
 } from "@commerce-ai-tool/core/client";
 import { ICON_STROKE } from "../icons.js";
 
 export interface MissionResultsProps {
   mission: MissionSearchResult;
+  /** Missing keys fall back to the English defaults. */
   messages: CommerceAISearchMessages;
   enableCart: boolean;
   isMutating: boolean;
@@ -17,49 +22,6 @@ export interface MissionResultsProps {
   onProductSelect?: (product: ProductCard) => void;
   onAddItem?: (product: ProductCard) => void;
   onAddAll: (items: AddToCartLineItem[]) => Promise<unknown>;
-}
-
-function formatMissionAddAll(template: string, count: number): string {
-  const withPlural = count === 1 ? template.replaceAll("top picks", "top pick") : template;
-  if (withPlural.includes("{count}")) {
-    return withPlural.replaceAll("{count}", String(count));
-  }
-  return `${withPlural} (${count})`;
-}
-
-function toCartItem(product: ProductCard, quantity: number): AddToCartLineItem {
-  return product.sku
-    ? { sku: product.sku, quantity }
-    : { productId: product.id, variantId: product.variantId, quantity };
-}
-
-function lineItemKey(item: AddToCartLineItem): string {
-  if (item.sku) {
-    return `sku:${item.sku}`;
-  }
-  return `id:${item.productId ?? ""}:${item.variantId ?? ""}`;
-}
-
-function starterBundleItems(mission: MissionSearchResult): AddToCartLineItem[] {
-  const items: AddToCartLineItem[] = [];
-  const seen = new Set<string>();
-  for (const group of mission.intents) {
-    if (group.failed) {
-      continue;
-    }
-    const product = group.products[0];
-    if (!product || (!product.sku && !product.id)) {
-      continue;
-    }
-    const item = toCartItem(product, 1);
-    const key = lineItemKey(item);
-    if (seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    items.push(item);
-  }
-  return items;
 }
 
 function ProductCardBody({ product }: { product: ProductCard }) {
@@ -82,7 +44,7 @@ function ProductCardBody({ product }: { product: ProductCard }) {
 
 export function MissionResults({
   mission,
-  messages,
+  messages: messageOverrides,
   enableCart,
   isMutating,
   addedProductIds,
@@ -90,6 +52,10 @@ export function MissionResults({
   onAddItem,
   onAddAll,
 }: MissionResultsProps) {
+  const messages = useMemo(
+    () => resolveCommerceAISearchMessages(messageOverrides),
+    [messageOverrides],
+  );
   const titleId = useId();
   const [justAddedAll, setJustAddedAll] = useState(false);
   const addedAllTimeoutRef = useRef<number | null>(null);
@@ -97,6 +63,7 @@ export function MissionResults({
   const totalQuantity = bundleItems.reduce((sum, item) => sum + (item.quantity ?? 1), 0);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset the confirmation state when the mission changes
     setJustAddedAll(false);
   }, [mission]);
 
@@ -132,14 +99,14 @@ export function MissionResults({
             </div>
 
             {group.failed ? (
-              <div className="cat-status cat-status--empty" role="status">
+              <div className="cat-status cat-status--empty">
                 <SearchX size={18} strokeWidth={ICON_STROKE} aria-hidden="true" />
                 <div className="cat-status__content">
                   <div className="cat-status__title">{messages.missionIntentFailed}</div>
                 </div>
               </div>
             ) : group.products.length === 0 ? (
-              <div className="cat-status cat-status--empty" role="status">
+              <div className="cat-status cat-status--empty">
                 <SearchX size={18} strokeWidth={ICON_STROKE} aria-hidden="true" />
                 <div className="cat-status__content">
                   <div className="cat-status__title">{messages.missionIntentEmpty}</div>
@@ -172,13 +139,7 @@ export function MissionResults({
                           <button
                             type="button"
                             className={`cat-icon-btn cat-result-card__add${justAdded ? " cat-result-card__add--added" : ""}`}
-                            aria-label={
-                              justAdded
-                                ? messages.itemAdded
-                                : canAdd
-                                  ? messages.addToCart
-                                  : messages.unableToAddToCart
-                            }
+                            aria-label={addToCartLabel(messages, product, justAdded)}
                             disabled={!canAdd || isMutating}
                             onClick={() => onAddItem?.(product)}
                           >

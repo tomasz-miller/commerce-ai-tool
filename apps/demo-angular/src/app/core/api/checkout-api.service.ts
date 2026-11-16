@@ -1,5 +1,6 @@
 import { Injectable, signal } from "@angular/core";
 import {
+  ANONYMOUS_ID_HEADER,
   CART_SESSION_HEADER,
   type CartSnapshot,
   type CheckoutAddress,
@@ -68,13 +69,6 @@ export class CheckoutApiService {
       return;
     }
     const params = new URLSearchParams();
-    const headers: Record<string, string> = {};
-    const token = this.sessions.readSessionToken();
-    if (token) {
-      headers[CART_SESSION_HEADER] = token;
-    } else {
-      params.set("anonymousId", anonymousId);
-    }
     if (this.catalogLocale) {
       params.set("catalogLocale", this.catalogLocale);
     }
@@ -82,9 +76,8 @@ export class CheckoutApiService {
     this.isLoading.set(true);
     this.error.set(null);
     try {
-      const query = params.toString();
-      const response = await fetch(`${this.apiBaseUrl}/cart${query ? `?${query}` : ""}`, {
-        headers,
+      const response = await fetch(withQuery(`${this.apiBaseUrl}/cart`, params), {
+        headers: this.identityHeaders(),
       });
       const body = await parseEnvelope(response);
       this.cart.set(body.cart ?? null);
@@ -114,8 +107,8 @@ export class CheckoutApiService {
     this.isMutating.set(true);
     this.error.set(null);
     try {
-      const response = await fetch(`${this.apiBaseUrl}/cart/shipping-methods?${params.toString()}`, {
-        headers: this.sessionHeaders(),
+      const response = await fetch(withQuery(`${this.apiBaseUrl}/cart/shipping-methods`, params), {
+        headers: this.identityHeaders(),
       });
       const body = await parseEnvelope(response);
       return body.shippingMethods ?? [];
@@ -135,8 +128,8 @@ export class CheckoutApiService {
     this.isMutating.set(true);
     this.error.set(null);
     try {
-      const response = await fetch(`${this.apiBaseUrl}/cart/payment-methods?${params.toString()}`, {
-        headers: this.sessionHeaders(),
+      const response = await fetch(withQuery(`${this.apiBaseUrl}/cart/payment-methods`, params), {
+        headers: this.identityHeaders(),
       });
       const body = await parseEnvelope(response);
       return body.paymentMethods ?? [];
@@ -227,15 +220,15 @@ export class CheckoutApiService {
     if (!trimmed) {
       return null;
     }
-    const params = new URLSearchParams({ anonymousId: this.anonymousId(), orderNumber: trimmed });
+    const params = new URLSearchParams({ orderNumber: trimmed });
     if (this.catalogLocale) {
       params.set("catalogLocale", this.catalogLocale);
     }
     this.isLoading.set(true);
     this.error.set(null);
     try {
-      const response = await fetch(`${this.apiBaseUrl}/orders?${params.toString()}`, {
-        headers: this.sessionHeaders(),
+      const response = await fetch(withQuery(`${this.apiBaseUrl}/orders`, params), {
+        headers: this.identityHeaders(),
       });
       const body = await parseEnvelope(response);
       return body.order ?? null;
@@ -248,15 +241,15 @@ export class CheckoutApiService {
   }
 
   async listOrders(): Promise<OrderSnapshot[]> {
-    const params = new URLSearchParams({ anonymousId: this.anonymousId() });
+    const params = new URLSearchParams();
     if (this.catalogLocale) {
       params.set("catalogLocale", this.catalogLocale);
     }
     this.isLoading.set(true);
     this.error.set(null);
     try {
-      const response = await fetch(`${this.apiBaseUrl}/orders?${params.toString()}`, {
-        headers: this.sessionHeaders(),
+      const response = await fetch(withQuery(`${this.apiBaseUrl}/orders`, params), {
+        headers: this.identityHeaders(),
       });
       const body = await parseEnvelope(response);
       return body.orders ?? [];
@@ -287,7 +280,6 @@ export class CheckoutApiService {
             country: this.country,
             catalogLocale: this.catalogLocale,
             cartId: this.cart()?.id,
-            cartVersion: this.cart()?.version,
             ...body,
           }),
         });
@@ -313,9 +305,14 @@ export class CheckoutApiService {
     return pending;
   }
 
-  private sessionHeaders(): Record<string, string> {
+  /** Session token, else the guest id: identity travels in headers, never in the URL. */
+  private identityHeaders(): Record<string, string> {
     const token = this.sessions.readSessionToken();
-    return token ? { [CART_SESSION_HEADER]: token } : {};
+    if (token) {
+      return { [CART_SESSION_HEADER]: token };
+    }
+    const anonymousId = this.anonymousId();
+    return anonymousId ? { [ANONYMOUS_ID_HEADER]: anonymousId } : {};
   }
 
   private checkoutQueryParams(): URLSearchParams | null {
@@ -324,10 +321,6 @@ export class CheckoutApiService {
       return null;
     }
     const params = new URLSearchParams();
-    const token = this.sessions.readSessionToken();
-    if (!token) {
-      params.set("anonymousId", anonymousId);
-    }
     const cartId = this.cart()?.id;
     if (cartId) {
       params.set("cartId", cartId);
@@ -337,4 +330,9 @@ export class CheckoutApiService {
     }
     return params;
   }
+}
+
+function withQuery(url: string, params: URLSearchParams): string {
+  const query = params.toString();
+  return query ? `${url}?${query}` : url;
 }

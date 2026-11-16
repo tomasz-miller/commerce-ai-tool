@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { mimeTypeToAudioFormat, uint8ArrayToBase64 } from "./audio.js";
+import {
+  mimeTypeToAudioFormat,
+  SUPPORTED_AUDIO_MIME_TYPES,
+  UnsupportedAudioTypeError,
+  uint8ArrayToBase64,
+} from "./audio.js";
 
 describe("mimeTypeToAudioFormat", () => {
   it("maps common audio MIME types", () => {
@@ -13,6 +18,27 @@ describe("mimeTypeToAudioFormat", () => {
     expect(() => mimeTypeToAudioFormat("audio/unknown")).toThrow(
       "Unsupported audio MIME type for voice search",
     );
+  });
+});
+
+describe("UnsupportedAudioTypeError", () => {
+  it("is thrown for an unknown MIME type and keeps the MIME type for logging", () => {
+    expect(() => mimeTypeToAudioFormat("audio/unknown")).toThrow(UnsupportedAudioTypeError);
+    try {
+      mimeTypeToAudioFormat("audio/unknown");
+    } catch (error) {
+      expect((error as UnsupportedAudioTypeError).mimeType).toBe("audio/unknown");
+    }
+  });
+});
+
+describe("SUPPORTED_AUDIO_MIME_TYPES", () => {
+  it("lists every MIME type mimeTypeToAudioFormat accepts", () => {
+    expect(SUPPORTED_AUDIO_MIME_TYPES).toContain("audio/mp4");
+    expect(SUPPORTED_AUDIO_MIME_TYPES).toContain("audio/webm");
+    for (const mimeType of SUPPORTED_AUDIO_MIME_TYPES) {
+      expect(() => mimeTypeToAudioFormat(mimeType)).not.toThrow();
+    }
   });
 });
 

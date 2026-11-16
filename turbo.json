@@ -3,6 +3,12 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "../../scripts/emit-package-dts.mjs",
+        "../../scripts/inline-core-client-dts.mjs",
+        "../../scripts/check-angular-apf.mjs"
+      ],
       "outputs": ["dist/**", "dist-server/**", ".next/**", "!.next/cache/**"]
     },
     "dev": {
@@ -22,6 +28,10 @@
     },
     "lint": {
       "dependsOn": ["^build"]
+    },
+    "@commerce-ai-tool/styles#lint": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", "../../scripts/check-contrast.mjs"]
     },
     "typecheck": {
       "dependsOn": ["^build"]

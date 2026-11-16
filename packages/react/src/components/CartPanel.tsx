@@ -1,4 +1,12 @@
-import { type FormEvent, useState } from "react";
+import {
+  type FormEvent,
+  type KeyboardEvent,
+  type RefObject,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import {
   ArrowRight,
   ChevronDown,
@@ -10,11 +18,19 @@ import {
   UserRound,
   X,
 } from "lucide-react";
+import {
+  MAX_LINE_ITEM_QUANTITY,
+  focusFirstAvailable,
+  getFocusable,
+  quantityGroupLabel,
+  removeItemLabel,
+} from "@commerce-ai-tool/core/client";
 import type {
   CartSnapshot,
-  CommerceAISearchMessages,
+  ResolvedCommerceAISearchMessages,
   CustomerSnapshot,
 } from "@commerce-ai-tool/core/client";
+import { useLatestRef } from "../hooks/useLatestRef.js";
 import { ICON_STROKE } from "../icons.js";
 
 export interface CartPanelProps {
@@ -23,7 +39,7 @@ export interface CartPanelProps {
   isLoading: boolean;
   isLoggingIn: boolean;
   error: string | null;
-  messages: CommerceAISearchMessages;
+  messages: ResolvedCommerceAISearchMessages;
   /** Locale used when formatting a fallback line total. */
   catalogLocale?: string;
   onClose: () => void;
@@ -32,22 +48,31 @@ export interface CartPanelProps {
   onLogin: (input: { email: string; password: string }) => void;
   onLogout: () => void;
   onCheckout?: (cart: CartSnapshot) => void;
+  /** Where focus goes when the panel closes (the cart toggle). */
+  returnFocusTo?: RefObject<HTMLElement | null>;
 }
 
-function displayCartError(
-  error: string | null,
-  messages: CommerceAISearchMessages,
-): string | null {
-  if (!error) {
-    return null;
+/** Must match the `max-width` of the full-screen cart sheet in packages/styles. */
+const FULL_SCREEN_QUERY = "(max-width: 36rem)";
+
+function subscribeFullScreen(onChange: () => void): () => void {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return () => {};
   }
-  if (error === "Invalid credentials") {
-    return messages.invalidCredentials;
-  }
-  if (error === "Sign in failed" || error === "Login failed") {
-    return messages.signInFailed;
-  }
-  return error;
+  const query = window.matchMedia(FULL_SCREEN_QUERY);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+
+function getFullScreenSnapshot(): boolean {
+  return typeof window !== "undefined" && typeof window.matchMedia === "function"
+    ? window.matchMedia(FULL_SCREEN_QUERY).matches
+    : false;
+}
+
+/** True while the cart is the full-screen sheet. Never touches `window` during server render. */
+function useIsFullScreenSheet(): boolean {
+  return useSyncExternalStore(subscribeFullScreen, getFullScreenSnapshot, () => false);
 }
 
 function formatLineTotal(
@@ -78,12 +103,91 @@ export function CartPanel({
   onLogin,
   onLogout,
   onCheckout,
+  returnFocusTo,
 }: CartPanelProps) {
+  const isFullScreen = useIsFullScreenSheet();
+  const panelRef = useRef<HTMLElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const fullScreenRef = useLatestRef(isFullScreen);
+  const onCloseRef = useLatestRef(onClose);
+  const returnFocusRef = useLatestRef(returnFocusTo);
+  // The line whose "+" reached the maximum: that button disables itself, and focus must not leave
+  // the panel with it.
+  const maxReachedItemRef = useRef<string | null>(null);
   const isEmpty = !cart || cart.lineItems.length === 0;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isAuthExpanded, setIsAuthExpanded] = useState(false);
-  const visibleError = displayCartError(error, messages);
+
+  // Escape closes the cart at every width. A modal <dialog> on top (the camera) owns its own
+  // Escape, so keys from inside a dialog other than the one the widget itself sits in (a host may
+  // mount it in its own <dialog>) are ignored here. Escape while an IME composes belongs to the IME.
+  useEffect(() => {
+    function onKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
+      const keyDialog = event.target instanceof Element ? event.target.closest("dialog") : null;
+      if (keyDialog && keyDialog !== panelRef.current?.closest("dialog")) return;
+      onCloseRef.current();
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onCloseRef]);
+
+  // Full-screen (modal): focus moves in on open. On close it returns to the cart toggle whenever
+  // focus was lost with the panel (or inside it), so it never falls back to <body>.
+  useEffect(() => {
+    const panel = panelRef.current;
+    const opener = document.activeElement;
+    if (fullScreenRef.current) closeRef.current?.focus();
+    return () => {
+      const active = document.activeElement;
+      const lost = !active || active === document.body || Boolean(panel?.contains(active));
+      // These refs hold the latest props on purpose: they are read when the panel closes.
+      /* eslint-disable react-hooks/exhaustive-deps */
+      if (lost || fullScreenRef.current) {
+        focusFirstAvailable(returnFocusRef.current?.current, opener);
+      }
+      /* eslint-enable react-hooks/exhaustive-deps */
+    };
+  }, [fullScreenRef, returnFocusRef]);
+
+  // After the mutation that took a line to the maximum, the disabled "+" cannot keep focus: move it
+  // to that line's "-" so a keyboard user stays inside the panel.
+  useEffect(() => {
+    const itemId = maxReachedItemRef.current;
+    const panel = panelRef.current;
+    if (!itemId || !panel || isLoading) return;
+    const item = cart?.lineItems.find((line) => line.id === itemId);
+    if (!item || item.quantity < MAX_LINE_ITEM_QUANTITY) {
+      // Still waiting for the mutation, unless it failed.
+      if (!item || error) maxReachedItemRef.current = null;
+      return;
+    }
+    maxReachedItemRef.current = null;
+    const active = document.activeElement;
+    if (active && active !== document.body && !(active as HTMLButtonElement).disabled) return;
+    const row = Array.from(panel.querySelectorAll<HTMLElement>("[data-line-item-id]")).find(
+      (element) => element.dataset.lineItemId === itemId,
+    );
+    focusFirstAvailable(row?.querySelector(".cat-cart-item__qty-btn"));
+  });
+
+  // APG: while modal, Tab wraps from the last control to the first and Shift+Tab back.
+  function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.key !== "Tab" || !isFullScreen) return;
+    const controls = getFocusable(event.currentTarget);
+    const first = controls[0];
+    const last = controls[controls.length - 1];
+    if (!first || !last) return;
+    const active = document.activeElement;
+    if (event.shiftKey && (active === first || active === event.currentTarget)) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
 
   function handleLoginSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -172,12 +276,17 @@ export function CartPanel({
 
   return (
     <section
+      ref={panelRef}
       className={`cat-cart-panel${isEmpty ? "" : " cat-cart-panel--with-items"}`}
+      role={isFullScreen ? "dialog" : undefined}
+      aria-modal={isFullScreen ? true : undefined}
       aria-label={messages.cartAriaLabel}
+      onKeyDown={handleKeyDown}
     >
       <header className="cat-cart-panel__header">
         <h2 className="cat-cart-panel__title">{messages.cart}</h2>
         <button
+          ref={closeRef}
           type="button"
           className="cat-icon-btn"
           onClick={onClose}
@@ -187,9 +296,9 @@ export function CartPanel({
         </button>
       </header>
 
-      {visibleError && (
+      {error && (
         <div className="cat-status cat-status--error" role="alert">
-          {visibleError}
+          {error}
         </div>
       )}
 
@@ -201,7 +310,7 @@ export function CartPanel({
       ) : (
         <ul className="cat-cart-panel__items">
           {cart.lineItems.map((item) => (
-            <li key={item.id} className="cat-cart-item">
+            <li key={item.id} className="cat-cart-item" data-line-item-id={item.id}>
               {item.imageUrl ? (
                 <img src={item.imageUrl} alt="" className="cat-cart-item__image" />
               ) : (
@@ -220,7 +329,11 @@ export function CartPanel({
                     </strong>
                   </div>
                 ) : null}
-                <div className="cat-cart-item__qty">
+                <div
+                  className="cat-cart-item__qty"
+                  role="group"
+                  aria-label={quantityGroupLabel(messages, item.name)}
+                >
                   <button
                     type="button"
                     className="cat-cart-item__qty-btn"
@@ -230,13 +343,20 @@ export function CartPanel({
                   >
                     <Minus size={12} strokeWidth={ICON_STROKE} />
                   </button>
-                  <span className="cat-cart-item__qty-value">{item.quantity}</span>
+                  <span className="cat-cart-item__qty-value" role="status">
+                    {item.quantity}
+                  </span>
                   <button
                     type="button"
                     className="cat-cart-item__qty-btn"
                     aria-label={messages.increaseQuantity}
-                    disabled={isLoading}
-                    onClick={() => onQuantityChange(item.id, item.quantity + 1)}
+                    disabled={isLoading || item.quantity >= MAX_LINE_ITEM_QUANTITY}
+                    onClick={() => {
+                      if (item.quantity + 1 >= MAX_LINE_ITEM_QUANTITY) {
+                        maxReachedItemRef.current = item.id;
+                      }
+                      onQuantityChange(item.id, item.quantity + 1);
+                    }}
                   >
                     <Plus size={12} strokeWidth={ICON_STROKE} />
                   </button>
@@ -245,7 +365,7 @@ export function CartPanel({
               <button
                 type="button"
                 className="cat-icon-btn"
-                aria-label={messages.removeItem}
+                aria-label={removeItemLabel(messages, item.name)}
                 disabled={isLoading}
                 onClick={() => onRemove(item.id)}
               >

@@ -1,20 +1,20 @@
 import { Injectable } from "@angular/core";
+import {
+  ANONYMOUS_ID_STORAGE_KEY,
+  CUSTOMER_SESSION_STORAGE_KEY,
+  CUSTOMER_STORAGE_KEY,
+  createCartSessionStore,
+  createRandomUuid,
+  getSharedCartSessionStore,
+  type CartSessionStore as CoreCartSessionStore,
+  type CustomerSnapshot,
+  type StorageLike,
+} from "@commerce-ai-tool/core/client";
 
-/**
- * Storage keys shared with the widget cart service. The values must stay
- * identical to `CommerceAiCartService` so search and checkout share one session.
- */
-export const ANONYMOUS_ID_STORAGE_KEY = "commerce-ai-tool:anonymousId";
-export const CUSTOMER_SESSION_STORAGE_KEY = "commerce-ai-tool:customerSession";
-export const CUSTOMER_STORAGE_KEY = "commerce-ai-tool:customer";
+export { ANONYMOUS_ID_STORAGE_KEY, CUSTOMER_SESSION_STORAGE_KEY, CUSTOMER_STORAGE_KEY };
 
-export interface SessionStorageBackend {
-  getItem(key: string): string | null;
-  setItem(key: string, value: string): void;
-  removeItem(key: string): void;
-}
-
-export function createMemoryStorage(initial: Record<string, string> = {}): SessionStorageBackend {
+/** In-memory storage for unit tests. */
+export function createMemoryStorage(initial: Record<string, string> = {}): StorageLike {
   const store = new Map<string, string>(Object.entries(initial));
   return {
     getItem: (key) => (store.has(key) ? (store.get(key) as string) : null),
@@ -27,70 +27,50 @@ export function createMemoryStorage(initial: Record<string, string> = {}): Sessi
   };
 }
 
-function browserStorage(): SessionStorageBackend | null {
-  try {
-    if (typeof window !== "undefined" && window.localStorage) {
-      return window.localStorage;
-    }
-  } catch {
-    return null;
-  }
-  return null;
-}
-
+/** UUID v4 from Web Crypto (`randomUUID`, else `getRandomValues` outside secure contexts). */
 export function createAnonymousId(): string {
-  const cryptoRef = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
-  if (typeof cryptoRef?.randomUUID === "function") {
-    return cryptoRef.randomUUID();
-  }
-  return `anon-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  return createRandomUuid();
 }
 
+/**
+ * Host access to the cart session the widget uses. It delegates to the page-wide store of
+ * `@commerce-ai-tool/core/client`, so the storage keys, the guest id and the customer session are
+ * the widget's own and cannot drift apart.
+ */
 @Injectable({ providedIn: "root" })
 export class CartSessionStore {
-  private backend: SessionStorageBackend | null = null;
+  private override: CoreCartSessionStore | null = null;
 
   /** Override the storage backend (used by unit tests). */
-  useBackend(backend: SessionStorageBackend | null): void {
-    this.backend = backend;
+  useBackend(backend: StorageLike | null): void {
+    this.override = backend ? createCartSessionStore(backend) : null;
   }
 
   getOrCreateAnonymousId(): string {
-    const storage = this.storage();
-    const existing = storage?.getItem(ANONYMOUS_ID_STORAGE_KEY);
-    if (existing) {
-      return existing;
-    }
-    const created = createAnonymousId();
-    storage?.setItem(ANONYMOUS_ID_STORAGE_KEY, created);
-    return created;
+    return this.core().getAnonymousId();
   }
 
   rotateAnonymousId(): string {
-    const created = createAnonymousId();
-    this.storage()?.setItem(ANONYMOUS_ID_STORAGE_KEY, created);
-    return created;
+    return this.core().rotateAnonymousId();
   }
 
   readSessionToken(): string | null {
-    return this.storage()?.getItem(CUSTOMER_SESSION_STORAGE_KEY) ?? null;
+    return this.core().readSession()?.token ?? null;
   }
 
-  writeSession(token: string, customerJson: string): void {
-    this.storage()?.setItem(CUSTOMER_SESSION_STORAGE_KEY, token);
-    this.storage()?.setItem(CUSTOMER_STORAGE_KEY, customerJson);
+  readCustomer(): CustomerSnapshot | null {
+    return this.core().readSession()?.customer ?? null;
+  }
+
+  writeSession(token: string, customer: CustomerSnapshot): void {
+    this.core().saveSession(token, customer);
   }
 
   clearSession(): void {
-    this.storage()?.removeItem(CUSTOMER_SESSION_STORAGE_KEY);
-    this.storage()?.removeItem(CUSTOMER_STORAGE_KEY);
+    this.core().clearSession();
   }
 
-  readCustomerJson(): string | null {
-    return this.storage()?.getItem(CUSTOMER_STORAGE_KEY) ?? null;
-  }
-
-  private storage(): SessionStorageBackend | null {
-    return this.backend ?? browserStorage();
+  private core(): CoreCartSessionStore {
+    return this.override ?? getSharedCartSessionStore();
   }
 }

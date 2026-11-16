@@ -1,6 +1,6 @@
 import { X } from "lucide-react";
 import { formatRecordingDuration } from "../hooks/useRecordingDuration.js";
-import type { CommerceAISearchMessages } from "@commerce-ai-tool/core/client";
+import type { ResolvedCommerceAISearchMessages } from "@commerce-ai-tool/core/client";
 import { ICON_STROKE } from "../icons.js";
 
 export interface VoiceStatusBannerProps {
@@ -10,7 +10,7 @@ export interface VoiceStatusBannerProps {
   error: string | null;
   durationSeconds: number;
   messages: Pick<
-    CommerceAISearchMessages,
+    ResolvedCommerceAISearchMessages,
     "listening" | "tapMicToStop" | "understandingQuery" | "preparingAudioSummary" | "dismiss"
   >;
   onDismissError?: () => void;
@@ -44,13 +44,9 @@ export function VoiceStatusBanner({
   const isError = Boolean(error);
 
   return (
-    <div
-      className={`cat-voice-banner ${isError ? "cat-voice-banner--error" : ""}`}
-      role="status"
-      aria-live="polite"
-    >
+    <div className={`cat-voice-banner ${isError ? "cat-voice-banner--error" : ""}`}>
       {isError && (
-        <div className="cat-voice-banner__content">
+        <div className="cat-voice-banner__content" role="alert">
           <span className="cat-voice-banner__label">{error}</span>
           {onDismissError && (
             <button
@@ -70,7 +66,7 @@ export function VoiceStatusBanner({
           <span className="cat-voice-dot" aria-hidden="true" />
           <span className="cat-voice-banner__label">{messages.listening}</span>
           <VoiceWaveform />
-          <span className="cat-voice-banner__timer">{formatRecordingDuration(durationSeconds)}</span>
+          <span className="cat-voice-banner__timer" role="timer">{formatRecordingDuration(durationSeconds)}</span>
           <span className="cat-voice-banner__hint">{messages.tapMicToStop}</span>
         </div>
       )}

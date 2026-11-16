@@ -1,0 +1,7 @@
+---
+"@commerce-ai-tool/angular": minor
+---
+
+New `COMMERCE_AI_FETCH` injection token (default: the global `fetch`, resolved on each call). `CommerceAiApiService` and `CommerceAiCartService` send every request through it, so a host can add an auth or XSRF header, rewrite the base URL, log requests or set `redirect: "error"` without `HttpClient`, which the widget does not use. Because the services now read the token with `inject()`, `CommerceAiApiService` and `CommerceAiCartService` must be created through dependency injection: `new CommerceAiApiService()` outside an injection context throws NG0203 (create them with `inject()`, or `TestBed.runInInjectionContext` in tests).
+
+The search component is now split into a per-instance `CommerceAiSearchStore` (state and orchestration) and internal child components (search bar, suggestions, camera overlay, facets, results). The public API is unchanged: every member of `CommerceAiSearchComponent` keeps its 2.x name and type, except `audioSummary`, removed in 3.0.0 (`cameraInputRef` and `cameraVideoRef` now resolve the element from the child view; an assigned value still takes precedence). The camera overlay is a modal `<dialog>` (the page behind it is inert, Escape closes it and focus returns to the camera button), decorative icons are `aria-hidden`, the product placeholder is an icon instead of an emoji, the cart toggle exposes only `aria-expanded`, and the suggestions listbox and option ids are unique per widget instance, so two widgets on one page no longer share ids.

@@ -7,6 +7,7 @@ import {
   type CommerceAISearchProps,
 } from "@commerce-ai-tool/react";
 import { useRouter } from "next/navigation";
+import { HydrationMarker } from "./HydrationMarker";
 import {
   demoCatalogLocale,
   demoCountry,
@@ -169,6 +170,7 @@ export function DemoSearch() {
 
   return (
     <>
+      <HydrationMarker />
       <div inert={selectedProduct ? true : undefined}>
         <CommerceAISearch
           apiBaseUrl="/api/commerce-ai"

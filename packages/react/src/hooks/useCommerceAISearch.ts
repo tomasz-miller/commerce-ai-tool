@@ -1,14 +1,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import type {
-  InterpretedSearchFilters,
-  MissionSearchResult,
-  ProductCard,
-  SearchFacetGroup,
-  SearchResult,
-  SearchSessionState,
-  SuggestedFacet,
-  SuggestionsResult,
+import {
+  createCommerceAIApiClient,
+  messageForError,
+  safeStorage,
+  selectedFacetChips,
+  trackChipGroups,
+  type CommerceAISearchMessages,
+  type ImageSearchRequest,
+  type InterpretedSearchFilters,
+  type MissionSearchResult,
+  type ProductCard,
+  type SearchFacetGroup,
+  type SearchRequestBody,
+  type SearchResult,
+  type SearchSessionState,
+  type SuggestedFacet,
 } from "@commerce-ai-tool/core/client";
+import { useLatestRef, useMessagesRef } from "./useLatestRef.js";
+
+export { selectedFacetChips, trackChipGroups };
 
 export interface SearchLocaleProps {
   queryLocale?: string;
@@ -22,8 +32,10 @@ export interface SetQueryOptions {
   search?: boolean;
 }
 
-export function buildLocalePayload(options: SearchLocaleProps): Record<string, string> {
-  const payload: Record<string, string> = {};
+export function buildLocalePayload(
+  options: SearchLocaleProps,
+): Pick<SearchRequestBody, "catalogLocale" | "queryLocale"> {
+  const payload: Pick<SearchRequestBody, "catalogLocale" | "queryLocale"> = {};
   const queryLocale = options.queryLocale ?? options.locale;
 
   if (options.catalogLocale) {
@@ -37,13 +49,6 @@ export function buildLocalePayload(options: SearchLocaleProps): Record<string, s
   return payload;
 }
 
-export function appendLocaleFields(formData: FormData, options: SearchLocaleProps): void {
-  const payload = buildLocalePayload(options);
-  for (const [key, value] of Object.entries(payload)) {
-    formData.append(key, value);
-  }
-}
-
 export interface UseCommerceAISearchOptions extends SearchLocaleProps {
   apiBaseUrl: string;
   debounceMs?: number;
@@ -52,6 +57,8 @@ export interface UseCommerceAISearchOptions extends SearchLocaleProps {
   enableFacets?: boolean;
   persistSession?: boolean;
   enableMissions?: boolean;
+  /** Host message overrides. Errors are always taken from these, never from the server's text. */
+  messages?: Partial<CommerceAISearchMessages>;
 }
 
 export interface UseCommerceAISearchReturn {
@@ -76,6 +83,15 @@ export interface UseCommerceAISearchReturn {
   setError: Dispatch<SetStateAction<string | null>>;
   search: (query?: string) => Promise<void>;
   searchByImage: (file: File) => Promise<void>;
+  /**
+   * Claims the "current search" slot for a search that runs outside this hook (voice). Aborts the
+   * in-flight search, cancels pending debounced searches and forgets clicked chips, exactly like
+   * a new `search`. Pass `signal` to the request and drop its response when
+   * `isCurrentRequest(requestId)` turned false in the meantime.
+   */
+  beginExternalSearch?: () => { requestId: number; signal: AbortSignal };
+  /** True while `requestId` (from `beginExternalSearch`) is still the latest search. */
+  isCurrentRequest?: (requestId: number) => boolean;
   /** True when a facet refinement session is active (not set for mission results). */
   hasFacetSession: boolean;
   facets?: SearchFacetGroup[];
@@ -100,6 +116,7 @@ export function useCommerceAISearch(
     enableFacets = false,
     persistSession = true,
     enableMissions = false,
+    messages,
     queryLocale,
     catalogLocale,
     locale,
@@ -128,31 +145,85 @@ export function useCommerceAISearch(
   const suggestionsAbortRef = useRef<AbortController | null>(null);
   const requestIdRef = useRef(0);
   const suggestionsRequestIdRef = useRef(0);
-  const queryRef = useRef(query);
-  queryRef.current = query;
+  const queryRef = useLatestRef(query);
+  const messagesRef = useMessagesRef(messages);
+  /** Facet groups the shopper clicked a chip in; cleared whenever a new search starts. */
+  const chipGroupsRef = useRef<Set<string>>(new Set());
+  /** True while a refinement result is applied, so it does not reset the tracked chips. */
+  const keepChipGroupsRef = useRef(false);
 
   const baseUrl = apiBaseUrl.replace(/\/$/, "");
   const sessionStorageKey = `cat:search-session:${baseUrl}`;
+  // Blocked or full storage (private mode, sandboxed iframe) must not break the widget.
+  const storage = useMemo(() => safeStorage("session"), []);
+  const client = useMemo(() => createCommerceAIApiClient({ baseUrl: apiBaseUrl }), [apiBaseUrl]);
+
+  const failure = useCallback(
+    (err: unknown, fallback: keyof CommerceAISearchMessages) =>
+      messageForError(err, messagesRef.current, { fallback }),
+    [messagesRef],
+  );
 
   useEffect(() => {
-    if (!enableFacets || !persistSession || typeof window === "undefined") return;
-    const stored = window.sessionStorage.getItem(sessionStorageKey);
+    if (!enableFacets || !persistSession) return;
+    const stored = storage.getItem(sessionStorageKey);
     if (!stored) return;
     try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- client-only restore of the persisted session; sessionStorage is unavailable during SSR
       setSearchSession(JSON.parse(stored) as SearchSessionState);
     } catch {
-      window.sessionStorage.removeItem(sessionStorageKey);
+      storage.removeItem(sessionStorageKey);
     }
-  }, [enableFacets, persistSession, sessionStorageKey]);
+  }, [enableFacets, persistSession, sessionStorageKey, storage]);
 
   useEffect(() => {
-    if (!enableFacets || !persistSession || !searchSession || typeof window === "undefined") return;
-    window.sessionStorage.setItem(sessionStorageKey, JSON.stringify(searchSession));
-  }, [enableFacets, persistSession, searchSession, sessionStorageKey]);
+    if (!enableFacets || !persistSession || !searchSession) return;
+    storage.setItem(sessionStorageKey, JSON.stringify(searchSession));
+  }, [enableFacets, persistSession, searchSession, sessionStorageKey, storage]);
+
+  const clearDebounceTimers = useCallback(() => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    if (suggestionsDebounceRef.current) {
+      clearTimeout(suggestionsDebounceRef.current);
+      suggestionsDebounceRef.current = null;
+    }
+  }, []);
+
+  // Unmount (or a StrictMode probe): no timer may fire an LLM-backed search for a gone widget, and
+  // no in-flight request may write state. Bumping the ids makes late responses stale.
+  useEffect(
+    () => () => {
+      clearDebounceTimers();
+      abortRef.current?.abort();
+      abortRef.current = null;
+      suggestionsAbortRef.current?.abort();
+      suggestionsAbortRef.current = null;
+      requestIdRef.current += 1;
+      suggestionsRequestIdRef.current += 1;
+    },
+    [clearDebounceTimers],
+  );
+
+  /** Makes a new search the current one: cancels what is pending or in flight and starts fresh. */
+  const supersedeSearch = useCallback(() => {
+    clearDebounceTimers();
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const requestId = ++requestIdRef.current;
+    chipGroupsRef.current = new Set();
+    return { requestId, signal: controller.signal };
+  }, [clearDebounceTimers]);
 
   const resetResults = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
+    // Whatever was in flight (text, image, voice) is now stale: it must not show results, an
+    // error or `hasSearched` after the reset.
+    requestIdRef.current += 1;
     suggestionsAbortRef.current?.abort();
     suggestionsAbortRef.current = null;
     if (debounceRef.current) {
@@ -176,10 +247,9 @@ export function useCommerceAISearch(
     setFacets([]);
     setSuggestedFacets([]);
     setSearchSession(null);
-    if (typeof window !== "undefined") {
-      window.sessionStorage.removeItem(sessionStorageKey);
-    }
-  }, [sessionStorageKey]);
+    chipGroupsRef.current = new Set();
+    storage.removeItem(sessionStorageKey);
+  }, [sessionStorageKey, storage]);
 
   const fetchSuggestions = useCallback(
     async (searchQuery: string) => {
@@ -202,19 +272,10 @@ export function useCommerceAISearch(
       setSuggestionsReady(false);
 
       try {
-        const response = await fetch(`${baseUrl}/search/suggestions`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: trimmed, ...localePayload }),
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          const data = (await response.json()) as { error?: string };
-          throw new Error(data.error ?? "Suggestions failed");
-        }
-
-        const data = (await response.json()) as SuggestionsResult;
+        const data = await client.suggest(
+          { query: trimmed, ...localePayload },
+          { signal: controller.signal },
+        );
         if (requestId !== suggestionsRequestIdRef.current) return;
 
         setSuggestions(data.suggestions);
@@ -223,7 +284,7 @@ export function useCommerceAISearch(
         if (requestId !== suggestionsRequestIdRef.current) return;
 
         setSuggestions([]);
-        setSuggestionsError(err instanceof Error ? err.message : "Suggestions failed");
+        setSuggestionsError(failure(err, "searchFailed"));
       } finally {
         if (requestId === suggestionsRequestIdRef.current) {
           setIsLoadingSuggestions(false);
@@ -231,11 +292,15 @@ export function useCommerceAISearch(
         }
       }
     },
-    [baseUrl, enableAutocomplete, localePayload],
+    [client, enableAutocomplete, failure, localePayload],
   );
 
   const applySearchResult = useCallback(
     (data: SearchResult, sessionQuery?: string) => {
+      if (!keepChipGroupsRef.current) {
+        // A text, voice or image result starts a new facet session: no chip was clicked in it.
+        chipGroupsRef.current = new Set();
+      }
       setResults(data.products);
       setMission(data.mission ?? null);
       setMeta(data.meta);
@@ -243,9 +308,7 @@ export function useCommerceAISearch(
       setSuggestedFacets(data.suggestedFacets ?? []);
       if (data.mission) {
         setSearchSession(null);
-        if (typeof window !== "undefined") {
-          window.sessionStorage.removeItem(sessionStorageKey);
-        }
+        storage.removeItem(sessionStorageKey);
       } else if (enableFacets && data.meta.searchTerms) {
         setSearchSession({
           query: sessionQuery?.trim() || queryRef.current || data.meta.queryInterpretation || "",
@@ -257,7 +320,7 @@ export function useCommerceAISearch(
         });
       }
     },
-    [enableFacets, sessionStorageKey],
+    [enableFacets, queryRef, sessionStorageKey, storage],
   );
 
   const search = useCallback(
@@ -278,6 +341,7 @@ export function useCommerceAISearch(
       const controller = new AbortController();
       abortRef.current = controller;
       const requestId = ++requestIdRef.current;
+      chipGroupsRef.current = new Set();
 
       setIsLoading(true);
       setError(null);
@@ -288,24 +352,15 @@ export function useCommerceAISearch(
       setSuggestionsError(null);
 
       try {
-        const response = await fetch(`${baseUrl}/search`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+        const data = await client.search(
+          {
             query: q,
             includeFacets: enableFacets,
             ...(enableMissions ? { enableMissions: true } : {}),
             ...localePayload,
-          }),
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          const data = (await response.json()) as { error?: string };
-          throw new Error(data.error ?? "Search failed");
-        }
-
-        const data = (await response.json()) as SearchResult;
+          },
+          { signal: controller.signal },
+        );
         if (requestId !== requestIdRef.current) return;
 
         applySearchResult(data, q);
@@ -313,7 +368,7 @@ export function useCommerceAISearch(
         if (err instanceof DOMException && err.name === "AbortError") return;
         if (requestId !== requestIdRef.current) return;
 
-        setError(err instanceof Error ? err.message : "Search failed");
+        setError(failure(err, "searchFailed"));
         setResults([]);
         setMission(null);
         setMeta(null);
@@ -324,7 +379,7 @@ export function useCommerceAISearch(
         }
       }
     },
-    [applySearchResult, baseUrl, enableFacets, enableMissions, localePayload],
+    [applySearchResult, client, enableFacets, enableMissions, failure, localePayload, queryRef],
   );
 
   const submitRefinement = useCallback(
@@ -336,6 +391,9 @@ export function useCommerceAISearch(
     ) => {
       if (!searchSession) return;
 
+      // A debounced search for text typed before this refinement would otherwise fire after it
+      // and replace the refined results.
+      clearDebounceTimers();
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
@@ -344,31 +402,38 @@ export function useCommerceAISearch(
       setError(null);
 
       try {
-        const response = await fetch(`${baseUrl}/search`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+        const filters = body.filters ?? searchSession.appliedFilters;
+        // A chip click arrives as `body.filters`; a text refine keeps the tracked chips.
+        const chipGroups = body.filters
+          ? trackChipGroups(chipGroupsRef.current, facets, searchSession.appliedFilters, body.filters)
+          : chipGroupsRef.current;
+        // Only for clicked chips: an absent field keeps the server's categories-only default.
+        const facetSelections = selectedFacetChips(facets, filters, chipGroups);
+        const data = await client.search(
+          {
             query: searchSession.query,
             searchTerms: searchSession.searchTerms,
-            filters: body.filters ?? searchSession.appliedFilters,
+            filters,
             refineQuery: body.refineQuery,
             suggestedFacets: searchSession.suggestedFacets,
             includeFacets: true,
+            ...(facetSelections ? { facetSelections } : {}),
             ...localePayload,
-          }),
-          signal: controller.signal,
-        });
-        if (!response.ok) {
-          const data = (await response.json()) as { error?: string };
-          throw new Error(data.error ?? "Search refinement failed");
-        }
-        const data = (await response.json()) as SearchResult;
+          },
+          { signal: controller.signal },
+        );
         if (requestId !== requestIdRef.current) return;
-        applySearchResult(data, searchSession.query);
+        chipGroupsRef.current = new Set(chipGroups);
+        keepChipGroupsRef.current = true;
+        try {
+          applySearchResult(data, searchSession.query);
+        } finally {
+          keepChipGroupsRef.current = false;
+        }
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") return;
         if (requestId === requestIdRef.current) {
-          setError(err instanceof Error ? err.message : "Search refinement failed");
+          setError(failure(err, "searchFailed"));
         }
       } finally {
         if (requestId === requestIdRef.current) {
@@ -377,7 +442,7 @@ export function useCommerceAISearch(
         }
       }
     },
-    [applySearchResult, baseUrl, localePayload, searchSession],
+    [applySearchResult, clearDebounceTimers, client, facets, failure, localePayload, searchSession],
   );
 
   const refineFilters = useCallback(
@@ -399,28 +464,19 @@ export function useCommerceAISearch(
     setSearchSession(null);
     setFacets([]);
     setSuggestedFacets([]);
-    if (typeof window !== "undefined") {
-      window.sessionStorage.removeItem(sessionStorageKey);
-    }
+    chipGroupsRef.current = new Set();
+    storage.removeItem(sessionStorageKey);
     if (q) {
       if (!queryRef.current.trim() && previousQuery) {
         setQueryState(previousQuery);
       }
       await search(q);
     }
-  }, [search, searchSession?.query, sessionStorageKey]);
+  }, [queryRef, search, searchSession?.query, sessionStorageKey, storage]);
 
   const searchByImage = useCallback(
     async (file: File) => {
-      abortRef.current?.abort();
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-        debounceRef.current = null;
-      }
-      if (suggestionsDebounceRef.current) {
-        clearTimeout(suggestionsDebounceRef.current);
-        suggestionsDebounceRef.current = null;
-      }
+      const { requestId, signal } = supersedeSearch();
 
       setIsLoading(true);
       setError(null);
@@ -430,39 +486,45 @@ export function useCommerceAISearch(
       setSuggestions([]);
 
       try {
-        const formData = new FormData();
-        formData.append("image", file);
-        appendLocaleFields(formData, { queryLocale, catalogLocale, locale });
-        if (enableMissions) {
-          formData.append("enableMissions", "true");
-        }
+        const fields: ImageSearchRequest = {
+          ...localePayload,
+          ...(enableMissions ? { enableMissions: "true" } : {}),
+        };
+        const data = await client.searchByImage(file, fields, { signal });
+        if (requestId !== requestIdRef.current) return;
 
-        const response = await fetch(`${baseUrl}/search/image`, {
-          method: "POST",
-          body: formData,
-        });
-
-        if (!response.ok) {
-          const data = (await response.json()) as { error?: string };
-          throw new Error(data.error ?? "Image search failed");
-        }
-
-        const data = (await response.json()) as SearchResult & { interpretation?: string };
         applySearchResult(data, data.interpretation);
         if (data.interpretation) {
           setQueryState(data.interpretation);
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Image search failed");
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        if (requestId !== requestIdRef.current) return;
+
+        setError(failure(err, "imageSearchFailed"));
         setResults([]);
         setMission(null);
         setMeta(null);
       } finally {
-        setIsLoading(false);
-        setHasSearched(true);
+        if (requestId === requestIdRef.current) {
+          setIsLoading(false);
+          setHasSearched(true);
+        }
       }
     },
-    [applySearchResult, baseUrl, catalogLocale, enableMissions, locale, queryLocale],
+    [applySearchResult, client, enableMissions, failure, localePayload, supersedeSearch],
+  );
+
+  const beginExternalSearch = useCallback(() => {
+    const request = supersedeSearch();
+    // The search this one replaced may have left the spinner on (a debounced or aborted search).
+    setIsLoading(false);
+    return request;
+  }, [supersedeSearch]);
+
+  const isCurrentRequest = useCallback(
+    (requestId: number) => requestId === requestIdRef.current,
+    [],
   );
 
   const setQuery = useCallback(
@@ -555,6 +617,8 @@ export function useCommerceAISearch(
     setError,
     search,
     searchByImage,
+    beginExternalSearch,
+    isCurrentRequest,
     facets,
     suggestedFacets,
     hasFacetSession: searchSession !== null,

@@ -1,12 +1,21 @@
 import { Readable } from "node:stream";
 import type { IncomingMessage } from "node:http";
 import {
+  AIOutputTruncatedError,
+  AIRateLimitedError,
+  AIUpstreamError,
+  ANONYMOUS_ID_HEADER,
   CART_SESSION_HEADER,
   CartAccessDeniedError,
   CartNotFoundError,
+  CountryNotAllowedError,
+  CurrencyMismatchError,
   InvalidCredentialsError,
   SearchTimeoutError,
   MissingPriceError,
+  PaymentDeclinedError,
+  UnsupportedAudioTypeError,
+  VoiceNotConfiguredError,
 } from "@commerce-ai-tool/core";
 import type { CartSnapshot, CommercetoolsClient, SearchOrchestrator } from "@commerce-ai-tool/core";
 import express from "express";
@@ -14,7 +23,7 @@ import request from "supertest";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHandlers } from "./handlers.js";
 import { signCartSession } from "./cart-session.js";
-import { LOGIN_RATE_LIMIT_MESSAGE, TooManyRequestsError } from "./login-rate-limit.js";
+import { LOGIN_RATE_LIMIT_MESSAGE, TooManyRequestsError } from "./rate-limit.js";
 import type { CommerceAIServer } from "./server.js";
 import {
   executeSearch,
@@ -22,8 +31,8 @@ import {
   executeSearchVoice,
   executeTts,
   mapRouteError,
-  ValidationError,
 } from "./route-actions.js";
+import { HttpError, ValidationError } from "./errors.js";
 
 const sampleCart: CartSnapshot = {
   id: "cart-1",
@@ -64,6 +73,7 @@ function createMockServer(overrides: Partial<CommerceAIServer> = {}): CommerceAI
     suggestByText: vi.fn().mockResolvedValue({
       suggestions: ["Red Shoes", "Running Shoes"],
     }),
+    getFacetSchema: vi.fn().mockResolvedValue({ attributes: [], systemFacets: [], etag: "e", resolvedAt: "2026-01-01T00:00:00.000Z" }),
   } satisfies Partial<SearchOrchestrator>;
 
   return {
@@ -253,11 +263,25 @@ describe("route-actions", () => {
     expect(server.orchestrator.suggestByText).toHaveBeenCalledWith({
       query: "red",
       catalogLocale: "en",
-      queryLocale: undefined,
-      locale: undefined,
+      queryLocale: "en",
       limit: 5,
     });
     expect(result).toEqual({ suggestions: ["Red Shoes", "Running Shoes"] });
+  });
+
+  it("executeSearchSuggestions replaces invalid and unsupported catalog locales but keeps the query locale", async () => {
+    const server = { ...createMockServer(), supportedLocales: ["en", "de-DE"] };
+
+    await executeSearchSuggestions(server, {
+      query: "red",
+      catalogLocale: "xx_INVALID!!",
+      queryLocale: "fr-FR",
+    });
+    await executeSearchSuggestions(server, { query: "red", catalogLocale: "de-de" });
+
+    const calls = vi.mocked(server.orchestrator.suggestByText).mock.calls;
+    expect(calls[0]?.[0]).toMatchObject({ catalogLocale: "en", queryLocale: "fr-FR" });
+    expect(calls[1]?.[0]).toMatchObject({ catalogLocale: "de-DE", queryLocale: "de-DE" });
   });
 
   it("executeTts rejects empty text", async () => {
@@ -280,41 +304,222 @@ describe("route-actions", () => {
     expect(result.ttsPending).toBe(false);
   });
 
+  it("mapRouteError maps an unsupported audio type to 415 without echoing the MIME type", () => {
+    expect(
+      mapRouteError(new UnsupportedAudioTypeError("audio/<script>"), "searchVoice", "fail"),
+    ).toEqual({
+      message: "Unsupported audio type",
+      status: 415,
+      code: "UNSUPPORTED_MEDIA_TYPE",
+    });
+  });
+
+  it("mapRouteError maps an unconfigured voice backend to 503 without config details", () => {
+    expect(mapRouteError(new VoiceNotConfiguredError(), "searchVoice", "fail")).toEqual({
+      message: "Voice service is not configured",
+      status: 503,
+      code: "UPSTREAM_UNAVAILABLE",
+    });
+  });
+
+  it("mapRouteError maps classified AI provider errors to fixed messages", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    expect(mapRouteError(new AIRateLimitedError(), "search", "fail")).toEqual({
+      message: "The AI service is busy, try again shortly",
+      status: 429,
+      code: "RATE_LIMITED",
+    });
+    expect(mapRouteError(new AIUpstreamError(402), "search", "fail")).toEqual({
+      message: "The AI service is unavailable",
+      status: 503,
+      code: "UPSTREAM_UNAVAILABLE",
+    });
+    expect(mapRouteError(new AIUpstreamError(503), "search", "fail")).toEqual({
+      message: "The AI service is unavailable",
+      status: 503,
+      code: "UPSTREAM_UNAVAILABLE",
+    });
+    expect(
+      mapRouteError(new AIOutputTruncatedError("interpret", "some/model"), "search", "fail"),
+    ).toEqual({
+      message: "The AI service returned an incomplete answer",
+      status: 503,
+      code: "UPSTREAM_UNAVAILABLE",
+    });
+  });
+
+  it("mapRouteError maps a client abort to 499 without logging an error", () => {
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    expect(
+      mapRouteError(new DOMException("This operation was aborted", "AbortError"), "search", "fail"),
+    ).toEqual({ message: "Request aborted", status: 499, code: "INTERNAL" });
+    expect(errorLog).not.toHaveBeenCalled();
+  });
+
   it("mapRouteError maps timeout and validation errors", () => {
     expect(mapRouteError(new SearchTimeoutError("voice", 20_000), "searchVoice", "fail")).toEqual({
       message: "Search timed out after 20000ms at step: voice",
       status: 504,
+      code: "TIMEOUT",
     });
 
     expect(mapRouteError(new ValidationError("bad input"), "search", "fail")).toEqual({
       message: "bad input",
       status: 400,
+      code: "VALIDATION",
+    });
+
+    expect(mapRouteError(new CountryNotAllowedError(), "setCartAddresses", "fail")).toEqual({
+      message: "Shipping country is not allowed",
+      status: 400,
+      code: "VALIDATION",
+    });
+    expect(
+      mapRouteError(new CurrencyMismatchError("CHF vs EUR internal"), "createOrder", "fail"),
+    ).toEqual({
+      message: "The cart currency does not match the shipping country",
+      status: 400,
+      code: "VALIDATION",
     });
 
     expect(mapRouteError(new MissingPriceError("no GBP+DE price"), "addToCart", "fail")).toEqual({
-      message: "no GBP+DE price",
+      message: "No matching price for this cart currency and country",
       status: 400,
+      code: "MISSING_PRICE",
     });
 
     expect(mapRouteError(new CartNotFoundError(), "removeFromCart", "fail")).toEqual({
       message: "Cart not found",
       status: 404,
+      code: "CART_NOT_FOUND",
     });
 
     expect(mapRouteError(new CartAccessDeniedError(), "removeFromCart", "fail")).toEqual({
       message: "Cart does not belong to this session",
       status: 403,
+      code: "CART_ACCESS_DENIED",
     });
 
     expect(mapRouteError(new InvalidCredentialsError(), "login", "fail")).toEqual({
       message: "Invalid credentials",
       status: 401,
+      code: "INVALID_CREDENTIALS",
     });
 
     expect(mapRouteError(new TooManyRequestsError(60), "login", "fail")).toEqual({
       message: LOGIN_RATE_LIMIT_MESSAGE,
       status: 429,
+      code: "RATE_LIMITED",
     });
+  });
+});
+
+describe("mapRouteError fallthrough", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("returns the fallback and INTERNAL for unknown errors and non-Error throws", () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    expect(mapRouteError(new Error("secret detail"), "search", "Search failed")).toEqual({
+      message: "Search failed",
+      status: 500,
+      code: "INTERNAL",
+    });
+    expect(mapRouteError("boom", "search", "Search failed")).toEqual({
+      message: "Search failed",
+      status: 500,
+      code: "INTERNAL",
+    });
+  });
+
+  it("a 503 UPSTREAM_UNAVAILABLE is logged at warn", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("CAT_DEBUG", "");
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    mapRouteError(new VoiceNotConfiguredError(), "searchVoice", "fail");
+    mapRouteError(new HttpError(503, "UPSTREAM_UNAVAILABLE", "Facet schema is not available"), "facetSchema", "fail");
+
+    expect(warnSpy.mock.calls.map((call) => call[0])).toEqual([
+      "[commerce-ai-tool/server] searchVoice: UPSTREAM_UNAVAILABLE (503)",
+      "[commerce-ai-tool/server] facetSchema: UPSTREAM_UNAVAILABLE (503)",
+    ]);
+    expect(errorSpy).not.toHaveBeenCalled();
+    vi.unstubAllEnvs();
+  });
+
+  it("does not log 4xx client errors", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    mapRouteError(new UnsupportedAudioTypeError("audio/<script>"), "searchVoice", "fail");
+    mapRouteError(new ValidationError("bad input"), "search", "fail");
+    mapRouteError(new HttpError(413, "PAYLOAD_TOO_LARGE", "Too large"), "searchImage", "fail");
+
+    expect(warnSpy).not.toHaveBeenCalled();
+    expect(errorSpy).not.toHaveBeenCalled();
+    vi.unstubAllEnvs();
+  });
+
+  it("maps HttpError to its own status and code", () => {
+    expect(
+      mapRouteError(new HttpError(503, "UPSTREAM_UNAVAILABLE", "Voice service is not configured"), "tts", "fail"),
+    ).toEqual({
+      message: "Voice service is not configured",
+      status: 503,
+      code: "UPSTREAM_UNAVAILABLE",
+    });
+  });
+});
+
+describe("createHandlers request abort", () => {
+  it("maps any error to 499 without logging once the request signal is aborted", async () => {
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const server = createMockServer();
+    const controller = new AbortController();
+    controller.abort(Object.assign(new Error("closed"), { name: "SomethingElse" }));
+    vi.mocked(server.orchestrator.searchByText).mockRejectedValue(new Error("ECONNRESET upstream"));
+    const handlers = createHandlers(server);
+
+    const response = await handlers.search(jsonRequest({ query: "hat" }), undefined, controller.signal);
+
+    expect(response.status).toBe(499);
+    expect(errorLog).not.toHaveBeenCalled();
+    errorLog.mockRestore();
+  });
+});
+
+describe("createHandlers tts abort", () => {
+  it("forwards the request signal to synthesizeSpeech", async () => {
+    const server = createMockServer();
+    const controller = new AbortController();
+    const handlers = createHandlers(server);
+
+    const response = await handlers.tts(jsonRequest({ text: "hello" }), undefined, controller.signal);
+
+    expect(response.status).toBe(200);
+    expect(server.synthesizeSpeech).toHaveBeenCalledWith("hello", controller.signal);
+  });
+
+  it("maps a synthesis cut short by the client to 499 without logging an error", async () => {
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const server = createMockServer();
+    const controller = new AbortController();
+    vi.mocked(server.synthesizeSpeech).mockImplementation(async () => {
+      controller.abort();
+      throw new Error("socket hang up");
+    });
+    const handlers = createHandlers(server);
+
+    const response = await handlers.tts(jsonRequest({ text: "hello" }), undefined, controller.signal);
+
+    expect(response.status).toBe(499);
+    expect(errorLog).not.toHaveBeenCalled();
+    errorLog.mockRestore();
   });
 });
 
@@ -331,12 +536,275 @@ describe("createHandlers HTTP", () => {
     expect(JSON.parse(response.body as string)).toEqual({ status: "ok" });
   });
 
+  it("returns the generic fallback, not the internal message, for unknown errors", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const server = createMockServer();
+    vi.mocked(server.orchestrator.searchByText).mockRejectedValue(
+      new Error("ECONNRESET at 10.0.0.1"),
+    );
+    const handlers = createHandlers(server);
+    const response = await handlers.search(jsonRequest({ query: "boots" }));
+
+    expect(response.status).toBe(500);
+    expect(JSON.parse(response.body as string)).toEqual({
+      error: "Search failed",
+      code: "INTERNAL",
+    });
+    expect(response.body as string).not.toContain("10.0.0.1");
+  });
+
+  it("maps malformed JSON to 400 VALIDATION", async () => {
+    const handlers = createHandlers(createMockServer());
+    const req = Readable.from([Buffer.from("{")]) as unknown as IncomingMessage;
+    const response = await handlers.search(req);
+
+    expect(response.status).toBe(400);
+    expect(JSON.parse(response.body as string)).toEqual({
+      error: "Invalid JSON body",
+      code: "VALIDATION",
+    });
+  });
+
+  it("maps a non-object JSON body to 400 VALIDATION", async () => {
+    const handlers = createHandlers(createMockServer());
+    const response = await handlers.tts(jsonRequest(null));
+
+    expect(response.status).toBe(400);
+    expect(JSON.parse(response.body as string)).toMatchObject({ code: "VALIDATION" });
+  });
+
+  it("maps missing tts text to 400", async () => {
+    const handlers = createHandlers(createMockServer());
+    const response = await handlers.tts(jsonRequest({}));
+
+    expect(response.status).toBe(400);
+    expect(JSON.parse(response.body as string)).toEqual({
+      error: "text is required",
+      code: "VALIDATION",
+    });
+  });
+
+  it("rejects tts text over 500 chars with 400", async () => {
+    const server = createMockServer();
+    const handlers = createHandlers(server);
+    const response = await handlers.tts(jsonRequest({ text: "a".repeat(501) }));
+
+    expect(response.status).toBe(400);
+    expect(JSON.parse(response.body as string)).toEqual({
+      error: "text must be at most 500 characters",
+      code: "VALIDATION",
+    });
+    expect(server.synthesizeSpeech).not.toHaveBeenCalled();
+  });
+
+  it("accepts tts text of exactly 500 chars", async () => {
+    const server = createMockServer();
+    const handlers = createHandlers(server);
+    const response = await handlers.tts(jsonRequest({ text: "a".repeat(500) }));
+
+    expect(response.status).toBe(200);
+  });
+
+  it("rejects query over 300 chars with 400", async () => {
+    const server = createMockServer();
+    const handlers = createHandlers(server);
+    const response = await handlers.search(jsonRequest({ query: "a".repeat(301) }));
+
+    expect(response.status).toBe(400);
+    expect(JSON.parse(response.body as string)).toEqual({
+      error: "query must be at most 300 characters",
+      code: "VALIDATION",
+    });
+    expect(server.orchestrator.searchByText).not.toHaveBeenCalled();
+  });
+
+  it("rejects refineQuery over 300 chars with 400", async () => {
+    const server = createMockServer();
+    const handlers = createHandlers(server);
+    const response = await handlers.search(
+      jsonRequest({ query: "boots", refineQuery: "a".repeat(301), searchTerms: ["boots"] }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(JSON.parse(response.body as string)).toEqual({
+      error: "refineQuery must be at most 300 characters",
+      code: "VALIDATION",
+    });
+  });
+
+  it("forwards validated searchTerms, sort and suggestedFacets (trimmed) to the orchestrator", async () => {
+    const server = createMockServer();
+    const handlers = createHandlers(server);
+    const response = await handlers.search(
+      jsonRequest({
+        query: "boots",
+        searchTerms: ["  red boots ", "leather"],
+        sort: "price_asc",
+        suggestedFacets: [{ name: "color", reason: "shoppers filter by colour", extra: 1 }],
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(server.orchestrator.searchByText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        searchTerms: ["red boots", "leather"],
+        sort: "price_asc",
+        suggestedFacets: [{ name: "color", reason: "shoppers filter by colour" }],
+      }),
+    );
+  });
+
+  it.each([
+    ["a non-string entry", { searchTerms: [1] }],
+    ["a plain string", { searchTerms: "red shoes" }],
+    ["an object", { searchTerms: { 0: "red" } }],
+    ["an empty entry", { searchTerms: ["  "] }],
+    ["more than 20 entries", { searchTerms: Array.from({ length: 21 }, (_, i) => `term ${i}`) }],
+    ["an over-long entry", { searchTerms: ["a".repeat(301)] }],
+    ["an unknown sort", { sort: "newest" }],
+    ["a non-string sort", { sort: 1 }],
+    ["suggestedFacets that is not an array", { suggestedFacets: "color" }],
+    ["a suggestedFacets entry that is a string", { suggestedFacets: ["color"] }],
+    ["a suggestedFacets entry without a name", { suggestedFacets: [{ reason: "x" }] }],
+    ["a non-string suggestedFacets reason", { suggestedFacets: [{ name: "color", reason: 1 }] }],
+    ["more than 20 suggestedFacets", { suggestedFacets: Array.from({ length: 21 }, () => ({ name: "color" })) }],
+    ["an over-long suggestedFacets name", { suggestedFacets: [{ name: "a".repeat(101) }] }],
+  ])("rejects %s with 400 VALIDATION instead of a 500", async (_label, fields) => {
+    const server = createMockServer();
+    const handlers = createHandlers(server);
+    const response = await handlers.search(jsonRequest({ query: "boots", ...fields }));
+
+    expect(response.status).toBe(400);
+    expect(JSON.parse(response.body as string)).toMatchObject({ code: "VALIDATION" });
+    expect(server.orchestrator.searchByText).not.toHaveBeenCalled();
+  });
+
+  it("accepts searchTerms at the limits", async () => {
+    const server = createMockServer();
+    const handlers = createHandlers(server);
+    const searchTerms = Array.from({ length: 20 }, (_, i) => (i === 0 ? "a".repeat(300) : `term ${i}`));
+    const response = await handlers.search(jsonRequest({ query: "boots", searchTerms }));
+
+    expect(response.status).toBe(200);
+  });
+
+  it("forwards facetSelections to the orchestrator", async () => {
+    const server = createMockServer();
+    const handlers = createHandlers(server);
+    // `filters` carries the concrete (single-valued) filter values; `facetSelections` only names the chip groups.
+    const facetSelections = { color: ["red"], categories: ["cat-1"] };
+    const response = await handlers.search(
+      jsonRequest({ query: "boots", filters: { color: "red", category: "cat-1" }, facetSelections }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(server.orchestrator.searchByText).toHaveBeenCalledWith(
+      expect.objectContaining({ facetSelections, filters: { color: "red", category: "cat-1" } }),
+    );
+  });
+
+  it("leaves facetSelections undefined when the client omits it", async () => {
+    const server = createMockServer();
+    const handlers = createHandlers(server);
+    await handlers.search(jsonRequest({ query: "boots" }));
+
+    expect(vi.mocked(server.orchestrator.searchByText).mock.calls[0]?.[0].facetSelections).toBeUndefined();
+  });
+
+  it.each([
+    ["an array", ["color"]],
+    ["a string", "color"],
+    ["a group that is not an array", { color: "red" }],
+    ["a non-string value", { color: ["red", 3] }],
+    ["too many groups", Object.fromEntries(Array.from({ length: 21 }, (_, i) => [`attr${i}`, ["x"]]))],
+    ["too many values in a group", { color: Array.from({ length: 21 }, (_, i) => `v${i}`) }],
+    ["an over-long group id", { ["a".repeat(101)]: ["x"] }],
+    ["an over-long value", { color: ["a".repeat(201)] }],
+  ])("rejects facetSelections with %s with 400", async (_label, facetSelections) => {
+    const server = createMockServer();
+    const handlers = createHandlers(server);
+    const response = await handlers.search(jsonRequest({ query: "boots", facetSelections }));
+
+    expect(response.status).toBe(400);
+    expect(JSON.parse(response.body as string)).toMatchObject({ code: "VALIDATION" });
+    expect(server.orchestrator.searchByText).not.toHaveBeenCalled();
+  });
+
+  it("accepts facetSelections at the limits", async () => {
+    const server = createMockServer();
+    const handlers = createHandlers(server);
+    const facetSelections = Object.fromEntries(
+      Array.from({ length: 20 }, (_, i) => [
+        i === 0 ? "a".repeat(100) : `attr${i}`,
+        Array.from({ length: 20 }, (_, v) => "v".repeat(v === 0 ? 200 : 50)),
+      ]),
+    );
+    const response = await handlers.search(jsonRequest({ query: "boots", facetSelections }));
+
+    expect(response.status).toBe(200);
+  });
+
+  it("rejects suggestions query over 300 chars with 400", async () => {
+    const server = createMockServer();
+    const handlers = createHandlers(server);
+    const response = await handlers.searchSuggestions(jsonRequest({ query: "a".repeat(301) }));
+
+    expect(response.status).toBe(400);
+    expect(JSON.parse(response.body as string)).toMatchObject({ code: "VALIDATION" });
+    expect(server.orchestrator.suggestByText).not.toHaveBeenCalled();
+  });
+
+  it("clamps search limit 1000 to 100", async () => {
+    const server = createMockServer();
+    const handlers = createHandlers(server);
+    const response = await handlers.search(jsonRequest({ query: "boots", limit: 1000 }));
+
+    expect(response.status).toBe(200);
+    expect(server.orchestrator.searchByText).toHaveBeenCalledWith(
+      expect.objectContaining({ limit: 100 }),
+    );
+  });
+
+  it("leaves search limit unset when the client omits it", async () => {
+    const server = createMockServer();
+    const handlers = createHandlers(server);
+    await handlers.search(jsonRequest({ query: "boots" }));
+
+    expect(vi.mocked(server.orchestrator.searchByText).mock.calls[0]?.[0].limit).toBeUndefined();
+  });
+
+  it("maps a non-string search query to 400", async () => {
+    const handlers = createHandlers(createMockServer());
+    const response = await handlers.search(jsonRequest({ query: 42 }));
+
+    expect(response.status).toBe(400);
+    expect(JSON.parse(response.body as string)).toEqual({
+      error: "query is required",
+      code: "VALIDATION",
+    });
+  });
+
+  it("maps PaymentDeclinedError to 402 PAYMENT_DECLINED", async () => {
+    const server = createMockServer();
+    vi.mocked(server.orchestrator.searchByText).mockRejectedValue(
+      new PaymentDeclinedError("Card declined"),
+    );
+    const handlers = createHandlers(server);
+    const response = await handlers.search(jsonRequest({ query: "boots" }));
+
+    expect(response.status).toBe(402);
+    expect(JSON.parse(response.body as string)).toEqual({
+      error: "Payment was declined",
+      code: "PAYMENT_DECLINED",
+    });
+  });
+
   it("search validates query via IncomingMessage", async () => {
     const handlers = createHandlers(createMockServer());
     const response = await handlers.search(jsonRequest({ query: "" }));
 
     expect(response.status).toBe(400);
-    expect(JSON.parse(response.body as string)).toEqual({ error: "query is required" });
+    expect(JSON.parse(response.body as string)).toEqual({ error: "query is required", code: "VALIDATION" });
   });
 
   it("search returns orchestrator result", async () => {
@@ -358,6 +826,7 @@ describe("createHandlers HTTP", () => {
     expect(response.status).toBe(400);
     expect(JSON.parse(response.body as string)).toEqual({
       error: "query must be at least 2 characters",
+      code: "VALIDATION",
     });
   });
 
@@ -421,6 +890,27 @@ describe("createHandlers HTTP", () => {
     expect(server.orchestrator.searchByVoice).toHaveBeenCalled();
   });
 
+  it("voice error context logs normalised locales, never the raw client values", async () => {
+    vi.stubEnv("CAT_DEBUG", "true");
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const server = createMockServer();
+    vi.mocked(server.orchestrator.searchByVoice).mockRejectedValue(new Error("boom"));
+    const app = createTestApp(createHandlers(server));
+
+    await request(app)
+      .post("/search/voice")
+      .field("queryLocale", "<script>raw-query-locale</script>")
+      .field("catalogLocale", "raw catalog locale")
+      .attach("audio", Buffer.from("voice-data"), { filename: "clip.webm", contentType: "audio/webm" })
+      .expect(500);
+
+    const logged = JSON.stringify(errorSpy.mock.calls);
+    expect(logged).toContain("context");
+    expect(logged).not.toContain("raw-query-locale");
+    expect(logged).not.toContain("raw catalog locale");
+    vi.unstubAllEnvs();
+  });
+
   it("forwards enableMissions and returns mission from voice search", async () => {
     const mission = {
       interpretation: "glasses and table",
@@ -475,7 +965,7 @@ describe("createHandlers HTTP", () => {
       .field("limit", "5")
       .expect(400);
 
-    expect(response.body).toEqual({ error: "audio file is required" });
+    expect(response.body).toEqual({ error: "audio file is required", code: "VALIDATION" });
   });
 
   it("express routes handle image upload", async () => {
@@ -501,7 +991,10 @@ describe("createHandlers HTTP", () => {
 
   it("getCart returns the current cart", async () => {
     const handlers = createHandlers(createMockServer());
-    const req = { url: "/cart?anonymousId=anon-1&catalogLocale=en" } as IncomingMessage;
+    const req = {
+      url: "/cart?catalogLocale=en",
+      headers: { [ANONYMOUS_ID_HEADER]: "anon-1" },
+    } as unknown as IncomingMessage;
     const response = await handlers.getCart(req);
 
     expect(response.status).toBe(200);
@@ -510,7 +1003,7 @@ describe("createHandlers HTTP", () => {
 
   it("getCart reads the session from the cart session header", async () => {
     const server = createMockServer();
-    const token = signCartSession({ customerId: "cust-1", email: "ada@example.com" }, "test-secret");
+    const token = signCartSession({ customerId: "cust-1" }, "test-secret");
     const handlers = createHandlers(server);
     const req = {
       url: "/cart",
@@ -524,6 +1017,136 @@ describe("createHandlers HTTP", () => {
     expect(response.status).toBe(200);
   });
 
+  it("GET /orders reads anonymousId from the header", async () => {
+    const server = createMockServer();
+    const getOrder = vi.fn().mockResolvedValue({ id: "order-1" });
+    const listOrders = vi.fn().mockResolvedValue([]);
+    Object.assign(server.commercetools, { getOrder, listOrders });
+    const handlers = createHandlers(server);
+
+    const single = await handlers.getOrder({
+      url: "/orders?orderNumber=cat-1",
+      headers: { [ANONYMOUS_ID_HEADER]: "anon-1" },
+    } as unknown as IncomingMessage);
+    const list = await handlers.getOrder({
+      url: "/orders?anonymousId=query-anon",
+      headers: { [ANONYMOUS_ID_HEADER]: ["anon-1"] },
+    } as unknown as IncomingMessage);
+    const queryOnly = await handlers.getCart({
+      url: "/cart?anonymousId=anon-legacy",
+      headers: {},
+    } as unknown as IncomingMessage);
+
+    expect([single.status, list.status, queryOnly.status]).toEqual([200, 200, 400]);
+    expect(getOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ orderNumber: "cat-1", anonymousId: "anon-1" }),
+    );
+    expect(listOrders).toHaveBeenCalledWith(expect.objectContaining({ anonymousId: "anon-1" }));
+    expect(server.commercetools.getCart).not.toHaveBeenCalled();
+  });
+
+  it("logout reads the cart session header and calls onLogout", async () => {
+    const onLogout = vi.fn();
+    const handlers = createHandlers(createMockServer({ cartSessionHooks: { onLogout } }));
+    const token = signCartSession({ customerId: "cust-1" }, "test-secret");
+
+    const response = await handlers.logout({
+      url: "/cart/logout",
+      headers: { [CART_SESSION_HEADER]: token },
+    } as unknown as IncomingMessage);
+
+    expect(response.status).toBe(200);
+    expect(JSON.parse(response.body as string)).toEqual({ cart: null, customer: null });
+    expect(onLogout).toHaveBeenCalledWith(expect.objectContaining({ customerId: "cust-1" }));
+  });
+
+  it("logout without a token returns 200 and skips onLogout", async () => {
+    const onLogout = vi.fn();
+    const handlers = createHandlers(createMockServer({ cartSessionHooks: { onLogout } }));
+
+    const response = await handlers.logout();
+
+    expect(response.status).toBe(200);
+    expect(onLogout).not.toHaveBeenCalled();
+  });
+
+  it("logout is 200 for a missing, invalid or revoked token, and 500 when a host hook throws", async () => {
+    const token = signCartSession({ customerId: "cust-1" }, "test-secret");
+    const withToken = {
+      url: "/cart/logout",
+      headers: { [CART_SESSION_HEADER]: token },
+    } as unknown as IncomingMessage;
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const revoked = createHandlers(
+      createMockServer({ cartSessionHooks: { onLogout: vi.fn(), isRevoked: () => true } }),
+    );
+    expect((await revoked.logout(withToken)).status).toBe(200);
+
+    const garbage = createHandlers(createMockServer({ cartSessionHooks: { onLogout: vi.fn() } }));
+    expect(
+      (
+        await garbage.logout({
+          url: "/cart/logout",
+          headers: { [CART_SESSION_HEADER]: "not-a-token" },
+        } as unknown as IncomingMessage)
+      ).status,
+    ).toBe(200);
+
+    const onLogoutThrows = createHandlers(
+      createMockServer({
+        cartSessionHooks: {
+          onLogout: () => {
+            throw new Error("denylist write failed: secret-detail");
+          },
+        },
+      }),
+    );
+    const failed = await onLogoutThrows.logout(withToken);
+    expect(failed.status).toBe(500);
+    expect(JSON.parse(failed.body as string)).toMatchObject({ code: "INTERNAL" });
+    expect(failed.body as string).not.toContain("secret-detail");
+
+    const isRevokedThrows = createHandlers(
+      createMockServer({
+        cartSessionHooks: {
+          onLogout: vi.fn(),
+          isRevoked: async () => {
+            throw new Error("denylist read failed: secret-detail");
+          },
+        },
+      }),
+    );
+    const failedRevocation = await isRevokedThrows.logout(withToken);
+    expect(failedRevocation.status).toBe(500);
+    expect(failedRevocation.body as string).not.toContain("secret-detail");
+    error.mockRestore();
+  });
+
+  it("a throwing isRevoked hook fails a cart read with 500, not 401", async () => {
+    const token = signCartSession({ customerId: "cust-1" }, "test-secret");
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const handlers = createHandlers(
+      createMockServer({
+        cartSessionHooks: {
+          isRevoked: () => {
+            throw new Error("denylist down: secret-detail");
+          },
+        },
+      }),
+    );
+
+    const response = await handlers.getCart({
+      url: "/cart",
+      headers: { [CART_SESSION_HEADER]: token },
+    } as unknown as IncomingMessage);
+
+    expect(response.status).toBe(500);
+    expect(JSON.parse(response.body as string)).toMatchObject({ code: "INTERNAL" });
+    expect(response.body as string).not.toContain("secret-detail");
+    error.mockRestore();
+  });
+
   it("addToCart validates sku or productId", async () => {
     const handlers = createHandlers(createMockServer());
     const response = await handlers.addToCart(jsonRequest({ anonymousId: "anon-1" }));
@@ -531,6 +1154,7 @@ describe("createHandlers HTTP", () => {
     expect(response.status).toBe(400);
     expect(JSON.parse(response.body as string)).toEqual({
       error: "sku or productId is required",
+      code: "VALIDATION",
     });
   });
 
@@ -556,6 +1180,7 @@ describe("createHandlers HTTP", () => {
     expect(response.status).toBe(400);
     expect(JSON.parse(response.body as string)).toEqual({
       error: "items is required",
+      code: "VALIDATION",
     });
   });
 
@@ -588,6 +1213,7 @@ describe("createHandlers HTTP", () => {
     expect(response.status).toBe(404);
     expect(JSON.parse(response.body as string)).toEqual({
       error: "Cart not found",
+      code: "CART_NOT_FOUND",
     });
   });
 
@@ -602,6 +1228,7 @@ describe("createHandlers HTTP", () => {
     expect(response.status).toBe(403);
     expect(JSON.parse(response.body as string)).toEqual({
       error: "Cart does not belong to this session",
+      code: "CART_ACCESS_DENIED",
     });
   });
 

@@ -6,7 +6,7 @@
     "dev": "next dev --port 3000",
     "build": "next build",
     "start": "next start",
-    "lint": "echo 'No lint configured'",
+    "lint": "eslint src --config ../../eslint.config.mjs",
     "typecheck": "tsc --noEmit",
     "test": "echo 'No unit tests'",
     "test:e2e": "playwright test"
@@ -14,17 +14,17 @@
   "dependencies": {
     "@commerce-ai-tool/react": "workspace:*",
     "@commerce-ai-tool/server": "workspace:*",
-    "@langfuse/otel": "^5.9.1",
-    "@opentelemetry/sdk-node": "^0.221.0",
-    "next": "^16.3.1",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "@langfuse/otel": "catalog:",
+    "@opentelemetry/sdk-node": "^0.223.1",
+    "next": "^16.4.6",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   },
   "devDependencies": {
-    "@playwright/test": "^1.61.1",
-    "@types/node": "^24.13.3",
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
+    "@playwright/test": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
     "@typescript/native": "catalog:",
     "typescript": "catalog:"
   }

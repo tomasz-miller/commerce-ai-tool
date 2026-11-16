@@ -1,11 +1,12 @@
+import { ORDER_NUMBER_PATTERN } from "@commerce-ai-tool/core";
 import type {
   CheckoutAddress,
   CheckoutRequest,
   CreateOrderRequest,
-  OrderSnapshot,
+  OrderResponse,
   SetCartAddressesRequest,
   SetShippingMethodRequest,
-  ShippingMethodSnapshot,
+  ShippingMethodsResponse,
 } from "@commerce-ai-tool/core";
 import type { CommerceAIServer } from "./server.js";
 import {
@@ -14,15 +15,9 @@ import {
   resolveCartIdentity,
   resolveLocale,
 } from "./cart-actions.js";
-import { ValidationError } from "./route-actions.js";
+import { ValidationError } from "./errors.js";
 
-export interface ShippingMethodsResponse {
-  shippingMethods: ShippingMethodSnapshot[];
-}
-
-export interface OrderResponse {
-  order: OrderSnapshot;
-}
+export type { OrderResponse, ShippingMethodsResponse };
 
 function parseAddress(value: unknown, field: string): CheckoutAddress {
   if (!value || typeof value !== "object") {
@@ -48,12 +43,28 @@ function parseAddress(value: unknown, field: string): CheckoutAddress {
   };
 }
 
-function checkoutIdentity(
+/** `orderNumber` becomes the Order number and part of the Payment key: `cat-<uuid>` only. */
+export function optionalOrderNumber(value: unknown): string | undefined {
+  const orderNumber = optionalString(value);
+  if (orderNumber !== undefined && !ORDER_NUMBER_PATTERN.test(orderNumber)) {
+    throw new ValidationError("orderNumber is invalid");
+  }
+  return orderNumber;
+}
+
+function assertShippingCountryAllowed(server: CommerceAIServer, country: string): void {
+  const allowed = server.cartPolicy?.allowedCountries;
+  if (allowed?.length && !allowed.includes(country)) {
+    throw new ValidationError("shippingAddress.country is not supported");
+  }
+}
+
+async function checkoutIdentity(
   server: CommerceAIServer,
   body: CheckoutRequest,
-): CheckoutRequest {
+): Promise<CheckoutRequest> {
   return {
-    ...resolveCartIdentity(server, body.sessionToken, body.anonymousId),
+    ...(await resolveCartIdentity(server, body.sessionToken, body.anonymousId)),
     cartId: optionalString(body.cartId),
     catalogLocale: resolveLocale(server, body.catalogLocale),
   };
@@ -63,9 +74,12 @@ export async function executeSetCartAddresses(
   server: CommerceAIServer,
   body: SetCartAddressesRequest,
 ) {
+  const identity = await checkoutIdentity(server, body);
+  const shippingAddress = parseAddress(body.shippingAddress, "shippingAddress");
+  assertShippingCountryAllowed(server, shippingAddress.country);
   const cart = await server.commercetools.setCartAddresses({
-    ...checkoutIdentity(server, body),
-    shippingAddress: parseAddress(body.shippingAddress, "shippingAddress"),
+    ...identity,
+    shippingAddress,
     billingAddress: body.billingAddress
       ? parseAddress(body.billingAddress, "billingAddress")
       : undefined,
@@ -78,7 +92,7 @@ export async function executeGetShippingMethods(
   body: CheckoutRequest,
 ): Promise<ShippingMethodsResponse> {
   const shippingMethods = await server.commercetools.getShippingMethods(
-    checkoutIdentity(server, body),
+    await checkoutIdentity(server, body),
   );
   return { shippingMethods };
 }
@@ -88,7 +102,7 @@ export async function executeSetShippingMethod(
   body: SetShippingMethodRequest,
 ) {
   const cart = await server.commercetools.setShippingMethod({
-    ...checkoutIdentity(server, body),
+    ...(await checkoutIdentity(server, body)),
     shippingMethodId: requiredString(body.shippingMethodId, "shippingMethodId"),
   });
   return { cart };
@@ -99,8 +113,8 @@ export async function executeCreateOrder(
   body: CreateOrderRequest,
 ): Promise<OrderResponse> {
   const order = await server.commercetools.createOrder({
-    ...checkoutIdentity(server, body),
-    orderNumber: optionalString(body.orderNumber),
+    ...(await checkoutIdentity(server, body)),
+    orderNumber: optionalOrderNumber(body.orderNumber),
   });
   return { order };
 }

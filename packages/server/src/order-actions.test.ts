@@ -6,7 +6,7 @@ import type {
 import { OrderNotFoundError } from "@commerce-ai-tool/core";
 import { describe, expect, it, vi } from "vitest";
 import { executeGetOrder } from "./order-actions.js";
-import { signCartSession } from "./cart-session.js";
+import { InvalidCartSessionError, signCartSession } from "./cart-session.js";
 import type { CommerceAIServer } from "./server.js";
 
 const order: OrderSnapshot = {
@@ -49,22 +49,25 @@ describe("order-actions", () => {
     });
   });
 
-  it("keeps the guest anonymousId when a customer session is present", async () => {
+  it("ignores body anonymousId when a session token resolves to a customer", async () => {
     const commerceServer = server();
-    const sessionToken = signCartSession(
-      { customerId: "cust-1", email: "ada@example.com" },
-      "test-secret",
-    );
+    const sessionToken = signCartSession({ customerId: "cust-1" }, "test-secret");
 
     await executeGetOrder(commerceServer, {
       sessionToken,
-      anonymousId: "anon-1",
+      anonymousId: "someone-elses-anon",
       orderNumber: "cat-1",
     });
+    await executeGetOrder(commerceServer, { sessionToken, anonymousId: "x".repeat(500) });
 
     expect(commerceServer.commercetools.getOrder).toHaveBeenCalledWith({
       orderNumber: "cat-1",
-      anonymousId: "anon-1",
+      anonymousId: undefined,
+      customerId: "cust-1",
+      catalogLocale: "en",
+    });
+    expect(commerceServer.commercetools.listOrders).toHaveBeenCalledWith({
+      anonymousId: undefined,
       customerId: "cust-1",
       catalogLocale: "en",
     });
@@ -96,5 +99,15 @@ describe("order-actions", () => {
         orderNumber: "missing",
       }),
     ).rejects.toBeInstanceOf(OrderNotFoundError);
+  });
+
+  it("rejects a revoked session before reading orders", async () => {
+    const sessionToken = signCartSession({ customerId: "cust-1" }, "test-secret");
+    const revoked = { ...server(), cartSessionHooks: { isRevoked: async () => true } };
+
+    await expect(
+      executeGetOrder(revoked, { sessionToken, orderNumber: "cat-1" }),
+    ).rejects.toBeInstanceOf(InvalidCartSessionError);
+    expect(revoked.commercetools.getOrder).not.toHaveBeenCalled();
   });
 });

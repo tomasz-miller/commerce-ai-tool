@@ -2,7 +2,7 @@ import {
   SUGGESTIONS_DEFAULT_LIMIT,
   SUGGESTIONS_MAX_LIMIT,
   SUGGESTIONS_MIN_PREFIX_LENGTH,
-} from "../types/index.js";
+} from "../config/defaults.js";
 import { isSuggestiblePhrase } from "../commercetools/suggestion-quality.js";
 
 export const SUGGESTIONS_MAX_PREFIX_LENGTH = 64;

@@ -1,40 +1,47 @@
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import type { ThemeMode } from "@commerce-ai-tool/core/client";
 
-export function useTheme(theme: ThemeMode = "auto"): ThemeMode {
-  const [resolved, setResolved] = useState<"light" | "dark">("light");
+const DARK_QUERY = "(prefers-color-scheme: dark)";
 
-  useEffect(() => {
-    if (theme === "light" || theme === "dark") {
-      setResolved(theme);
-      return;
-    }
-
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const update = () => setResolved(media.matches ? "dark" : "light");
-    update();
-    media.addEventListener("change", update);
-    return () => media.removeEventListener("change", update);
-  }, [theme]);
-
-  return theme === "auto" ? "auto" : resolved;
+function subscribeToColorScheme(onChange: () => void): () => void {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return () => undefined;
+  }
+  const media = window.matchMedia(DARK_QUERY);
+  media.addEventListener("change", onChange);
+  return () => media.removeEventListener("change", onChange);
 }
 
-export function useResolvedTheme(theme: ThemeMode = "auto"): "light" | "dark" | "auto" {
-  const [resolved, setResolved] = useState<"light" | "dark">("light");
+function getColorSchemeSnapshot(): "light" | "dark" {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return "light";
+  }
+  return window.matchMedia(DARK_QUERY).matches ? "dark" : "light";
+}
 
-  useEffect(() => {
-    if (theme !== "auto") {
-      setResolved(theme);
-      return;
-    }
+/** The server cannot know the visitor's scheme: `light` is the stable default markup. */
+function getServerColorSchemeSnapshot(): "light" {
+  return "light";
+}
 
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const update = () => setResolved(media.matches ? "dark" : "light");
-    update();
-    media.addEventListener("change", update);
-    return () => media.removeEventListener("change", update);
-  }, [theme]);
+/**
+ * The scheme the widget renders: `light` or `dark`. An explicit `theme` is returned as is, with
+ * no first-render flash; `auto` follows `prefers-color-scheme` and updates when it changes. The
+ * server and the hydration pass use `light`, so SSR markup and the first client render agree.
+ */
+export function useResolvedTheme(theme: ThemeMode = "auto"): "light" | "dark" {
+  const systemScheme = useSyncExternalStore(
+    subscribeToColorScheme,
+    getColorSchemeSnapshot,
+    getServerColorSchemeSnapshot,
+  );
+  return theme === "light" || theme === "dark" ? theme : systemScheme;
+}
 
-  return theme === "auto" ? "auto" : resolved;
+/**
+ * Value for the widget's `data-theme` attribute: `light` or `dark` as given, `auto` unchanged so
+ * the CSS can follow the system scheme itself. Use {@link useResolvedTheme} for the concrete scheme.
+ */
+export function useTheme(theme: ThemeMode = "auto"): ThemeMode {
+  return theme;
 }

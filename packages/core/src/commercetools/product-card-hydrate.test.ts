@@ -96,6 +96,7 @@ describe("hydrateProductCards", () => {
       locale: "no",
       currency: "EUR",
       country: "DE",
+      matchedSkus: {},
     });
   });
 
@@ -112,6 +113,58 @@ describe("hydrateProductCards", () => {
       locale: "en",
       currency: "EUR",
       country: "DE",
+      matchedSkus: {},
     });
+  });
+});
+
+describe("hydrateProductCards with matching variants", () => {
+  it("passes matched skus to GraphQL and to the REST fallback", async () => {
+    const transport = createTransport({
+      graphql: vi.fn().mockRejectedValue(new Error("down")),
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    await hydrateProductCards(transport, ["p1"], "en", "EUR", undefined, { p1: "SKU-2" });
+
+    expect(transport.graphql).toHaveBeenCalledWith(
+      expect.objectContaining({
+        variables: expect.objectContaining({ matchedSkus: ["SKU-2"], includeMatched: true }),
+      }),
+    );
+    expect(transport.rest).toHaveBeenCalledWith(
+      expect.objectContaining({ productIds: ["p1"], matchedSkus: { p1: "SKU-2" } }),
+    );
+    warn.mockRestore();
+  });
+
+  it("card shows the matched variant sku and image", async () => {
+    const transport = createTransport({
+      graphql: vi.fn().mockResolvedValue({
+        data: {
+          products: {
+            results: [
+              {
+                id: "p1",
+                masterData: {
+                  current: {
+                    name: "Shoe",
+                    masterVariant: { id: 1, sku: "SKU-1", images: [{ url: "https://cdn.example/1.jpg" }] },
+                    matchedVariants: [
+                      { id: 2, sku: "SKU-2", images: [{ url: "https://cdn.example/2.jpg" }] },
+                    ],
+                  },
+                },
+              },
+            ],
+          },
+        },
+      }),
+    });
+
+    const [card] = await hydrateProductCards(transport, ["p1"], "en", "EUR", undefined, {
+      p1: "SKU-2",
+    });
+    expect(card).toMatchObject({ sku: "SKU-2", variantId: 2, imageUrl: "https://cdn.example/2.jpg" });
   });
 });

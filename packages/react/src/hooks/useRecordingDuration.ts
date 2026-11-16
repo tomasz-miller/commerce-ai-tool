@@ -11,6 +11,7 @@ export function useRecordingDuration(isRecording: boolean): number {
 
   useEffect(() => {
     if (!isRecording) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset the timer when recording stops
       setDuration(0);
       return;
     }

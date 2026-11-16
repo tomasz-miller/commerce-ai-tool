@@ -1,17 +1,56 @@
+/**
+ * Public, semver-covered entry of `@commerce-ai-tool/core`: the config and wire types, the
+ * extension contracts (`AIProvider`, `PaymentProvider`, `CommercetoolsClient`, `SearchOrchestrator`),
+ * the factories hosts call, the error classes hosts may catch and the documented constants.
+ * Implementation helpers (builders, parsers, prompt utilities, commercetools internals, tracing
+ * helpers) live in `./internal.ts`, published as `@commerce-ai-tool/core/internal` without a semver
+ * guarantee. Browser-safe pieces are in `./client.ts`.
+ */
 export type * from "./types/index.js";
-export { CART_SESSION_HEADER, MAX_LINE_ITEM_QUANTITY } from "./types/index.js";
+/**
+ * @deprecated Use ProductSearchRequest from query-builder / platform-sdk.
+ * Kept on the server entry only: the browser-safe `client` entry is vendored
+ * into the React and Angular packages, which do not depend on platform-sdk.
+ */
+export type { ProductSearchRequest as ProductSearchQueryBody } from "@commercetools/platform-sdk";
+export {
+  ANONYMOUS_ID_HEADER,
+  CART_SESSION_HEADER,
+  MAX_LINE_ITEM_QUANTITY,
+  ORDER_NUMBER_PATTERN,
+} from "./config/defaults.js";
+/**
+ * Type-only, as before the constants moved out of `types/` (`export type *` never carried the
+ * runtime value); kept so `typeof SUGGESTIONS_MAX_LIMIT` still resolves for hosts.
+ */
+export type {
+  SUGGESTIONS_DEFAULT_LIMIT,
+  SUGGESTIONS_MAX_LIMIT,
+  SUGGESTIONS_MIN_PREFIX_LENGTH,
+} from "./config/defaults.js";
 export {
   DEFAULT_COMMERCE_AI_SEARCH_MESSAGES,
+  formatNamedMessage,
   resolveCommerceAISearchMessages,
 } from "./messages/index.js";
-export type { CommerceAISearchMessages } from "./messages/index.js";
+export type {
+  CommerceAISearchMessages,
+  ResolvedCommerceAISearchMessages,
+} from "./messages/index.js";
 export { createAIProvider } from "./ai/factory.js";
-export type { AIProvider, GenerationMetrics } from "./ai/types.js";
+export type { AIProvider, AICallMetrics, AICallOptions } from "./ai/types.js";
+export { AIOutputTruncatedError, AIRateLimitedError, AIUpstreamError } from "./ai/errors.js";
+export {
+  DEFAULT_OPENROUTER_MODEL,
+  DEFAULT_OPENROUTER_VISION_MODEL,
+  DEFAULT_OPENROUTER_VOICE_MODEL,
+  DEFAULT_BEDROCK_MODEL,
+  MAX_TOKENS,
+} from "./ai/defaults.js";
+export type { AITask } from "./ai/defaults.js";
 export { createCommercetoolsClient } from "./commercetools/client.js";
 export type { CommercetoolsClient, ProductSearchBuildInput, ProductSearchQueryOptions } from "./commercetools/client.js";
 export {
-  createCartOperations,
-  mapCartToSnapshot,
   CartAccessDeniedError,
   CartNotFoundError,
   InvalidCredentialsError,
@@ -19,31 +58,12 @@ export {
 } from "./commercetools/cart.js";
 export {
   CheckoutIncompleteError,
-  createCheckoutOperations,
-  createCheckoutOrderNumber,
+  CountryNotAllowedError,
+  CurrencyMismatchError,
 } from "./commercetools/checkout.js";
-export { mapOrderToSnapshot } from "./commercetools/order.js";
-export type {
-  CheckoutGateway,
-  CheckoutOperations,
-  CheckoutOperationsOptions,
-} from "./commercetools/checkout.js";
-export {
-  OrderNotFoundError,
-  createOrderOperations,
-  buildAnonymousOrderWhere,
-  buildCustomerOrderWhere,
-  buildOwnerOrderWhere,
-  buildOwnerOrdersWhere,
-} from "./commercetools/order.js";
-export type { OrderGateway, OrderOperations } from "./commercetools/order.js";
-export {
-  PaymentDeclinedError,
-  PaymentNotConfiguredError,
-  createPaymentOperations,
-  createPaymentKey,
-} from "./commercetools/payment.js";
-export type { PaymentGateway, PaymentOperations } from "./commercetools/payment.js";
+export { OrderNotFoundError } from "./commercetools/order.js";
+export { ProductSearchUnavailableError } from "./commercetools/search-helpers.js";
+export { PaymentDeclinedError, PaymentNotConfiguredError } from "./commercetools/payment.js";
 export type {
   PaymentProvider,
   PaymentAuthorizationRequest,
@@ -51,128 +71,15 @@ export type {
   PaymentMethodOption,
 } from "./payments/types.js";
 export {
-  FacetSchemaStore,
-  resolveFacetSchema,
-} from "./commercetools/product-types.js";
-export {
-  buildProductSearchFacets,
-  buildProjectionFacetParams,
-  filterFacetSuggestions,
   isFacetFilterSelected,
   normalizeProductSearchFacets,
   priceBucketKeyFromFilters,
   priceRangeToFilterValues,
   toggleFacetFilter,
-  CATEGORIES_FACET_ID,
-  DEFAULT_PRICE_RANGES,
-  PRICE_FACET_ID,
 } from "./commercetools/facets.js";
-export {
-  formatFacetBucketLabel,
-  hexColorSwatchValue,
-  isColorLikeFacetName,
-  isHexColorFacetKey,
-} from "./commercetools/facet-color.js";
-export {
-  buildProductSearchBody,
-  buildProductSearchRequest,
-  buildProjectionSearchQueryArgs,
-  hasSearchableContent,
-  joinSearchTerms,
-  PRIMARY_TERM_BOOST_MULTIPLIER,
-} from "./commercetools/query-builder.js";
-export {
-  buildSearchKeywordsFromProductCopy,
-  hasNonEmptySearchKeywords,
-} from "./commercetools/build-search-keywords.js";
-export type {
-  BuildSearchKeywordsFromProductCopyInput,
-  BuildSearchKeywordsFromProductCopyResult,
-  BuiltSearchKeywords,
-  LocalizedTextMap,
-  WhitespaceSearchKeyword,
-} from "./commercetools/build-search-keywords.js";
-export {
-  isSuggestiblePhrase,
-  SUGGESTION_MAX_LENGTH,
-  SUGGESTION_MAX_WORDS,
-} from "./commercetools/suggestion-quality.js";
-export {
-  looksLikeCompoundShoppingList,
-  isUsableMission,
-  resolveMissionOptions,
-} from "./search/mission.js";
-export { createSearchOrchestrator } from "./search/orchestrator.js";
+export { createSearchOrchestrator, VoiceNotConfiguredError } from "./search/orchestrator.js";
 export type { SearchOrchestrator, SearchOrchestratorDeps } from "./search/orchestrator.js";
-export {
-  parseInterpretedQuery,
-  parseVoiceAudioInterpretation,
-  parseSuggestSearchTerms,
-  parseDecomposedMission,
-  MAX_MISSION_INTENTS,
-  buildRefineQueryUserMessage,
-  buildSchemaAwareTextQueryUserMessage,
-  buildSuggestSearchTermsUserMessage,
-  TTS_SUMMARY_PROMPT,
-  REFINE_QUERY_SYSTEM_PROMPT,
-  MAX_INTERPRETED_SEARCH_TERMS,
-} from "./prompts/index.js";
-export {
-  SYSTEM_PROMPT_NAMES,
-  SYSTEM_PROMPT_CATALOG,
-  getLocalSystemPrompt,
-  listSystemPromptEntries,
-} from "./prompts/catalog.js";
-export type { SystemPromptName } from "./prompts/catalog.js";
-export {
-  resolveSystemPrompt,
-  resolveAndLinkSystemPrompt,
-  linkActiveGenerationPrompt,
-  configureLangfusePrompts,
-} from "./prompts/resolve.js";
-export type { ResolvedSystemPrompt, ResolvedSystemPromptSource } from "./prompts/resolve.js";
-export {
-  buildTtsSummaryFallback,
-  buildTtsSummaryUserMessage,
-} from "./search/voice-tts.js";
-export { resolveSearchLocales } from "./locale/resolve.js";
-export {
-  clampSuggestionsLimit,
-  normalizeSuggestionList,
-  normalizeSuggestionsPrefix,
-  resolveSuggestLocale,
-  resolveSuggestLocales,
-  shouldUseAiSuggestionFallback,
-  suggestionPrefixes,
-  suggestionMatchesQueryTokens,
-  filterSuggestionsByQueryTokens,
-  AI_SUGGESTION_FALLBACK_MIN_LENGTH,
-  SUGGESTIONS_MAX_PREFIX_LENGTH,
-} from "./search/suggestions-input.js";
-export {
-  isLikelyProductQuery,
-  localesShareLanguage,
-  mergeInterpretedSearchTerms,
-} from "./search/query-passthrough.js";
-export { relaxInterpretedSearch, dropSoftFilters, hasSoftFilters } from "./search/relax-search.js";
-export { logSearchTrace } from "./utils/dev-trace.js";
+// Type only: `SearchOrchestratorDeps.facetSchemaStore` is typed with it. The runtime class stays in /internal.
+export type { FacetSchemaStore } from "./commercetools/product-types.js";
 export { SearchTimeoutError } from "./utils/with-timeout.js";
-export {
-  isLangfuseEnabled,
-  isLangfusePromptsEnabled,
-  shouldExposeTraceId,
-  shouldTraceSuggestions,
-  getCurrentTraceId,
-  withPipelineSpan,
-  withPropagatedAttributes,
-  withTraceIdMeta,
-  wrapAIProvider,
-  redactBinaryInput,
-  redactBase64ImageInput,
-} from "./observability/index.js";
-export type {
-  AIProviderTraceMeta,
-  PipelineSpanAttributes,
-  PropagatedTraceMetadata,
-  RedactedBinaryInput,
-} from "./observability/index.js";
+export { UnsupportedAudioTypeError } from "./utils/audio.js";

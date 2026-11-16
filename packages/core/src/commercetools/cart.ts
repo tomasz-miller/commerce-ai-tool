@@ -2,6 +2,7 @@ import type {
   Cart,
   CartDraft,
   CartUpdateAction,
+  CustomerSignin,
   LineItem,
 } from "@commercetools/platform-sdk";
 import type {
@@ -17,6 +18,7 @@ import type {
   UpdateCartQuantityRequest,
 } from "../types/index.js";
 import { mapCartPayments } from "./payment-map.js";
+import { commercetoolsErrorParts } from "./sdk-error.js";
 
 export const DEFAULT_CART_CURRENCY = "EUR";
 export const DEFAULT_CART_LOCALE = "en";
@@ -24,7 +26,7 @@ export const DEFAULT_CART_LOCALE = "en";
 export interface CustomerLoginInput {
   email: string;
   password: string;
-  anonymousId?: string;
+  /** Ownership-checked anonymous Cart to merge. The guest `anonymousId` is never sent. */
   anonymousCartId?: string;
 }
 
@@ -51,6 +53,22 @@ export interface CartOperations {
   loginAndMerge(input: CartLoginRequest): Promise<CartLoginResult>;
 }
 
+/**
+ * CustomerSignin body. Only the verified `anonymousCart` is forwarded: `anonymousId` would make
+ * commercetools assign every Cart, Order, ShoppingList and Payment with that id to the
+ * signing-in Customer, and the id is a client-held bearer value.
+ */
+export function buildCustomerSignin(input: CustomerLoginInput): CustomerSignin {
+  return {
+    email: input.email,
+    password: input.password,
+    anonymousCartSignInMode: "MergeWithExistingCustomerCart",
+    ...(input.anonymousCartId
+      ? { anonymousCart: { typeId: "cart", id: input.anonymousCartId } }
+      : {}),
+  };
+}
+
 export function escapePredicateString(value: string): string {
   return value.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
 }
@@ -73,11 +91,25 @@ export function formatMoney(
   return {
     amount,
     currency: money.currencyCode,
-    formatted: new Intl.NumberFormat(locale, {
-      style: "currency",
-      currency: money.currencyCode,
-    }).format(amount),
+    formatted: formatCurrency(amount, money.currencyCode, locale),
   };
+}
+
+/**
+ * Formats a currency amount for display. An invalid locale (`RangeError`, for example
+ * `en_GB`) falls back to the default locale so presentation can never fail a request.
+ */
+export function formatCurrency(amount: number, currency: string, locale: string): string {
+  try {
+    return new Intl.NumberFormat(locale, { style: "currency", currency }).format(amount);
+  } catch (error) {
+    if (error instanceof RangeError && locale !== DEFAULT_CART_LOCALE) {
+      return new Intl.NumberFormat(DEFAULT_CART_LOCALE, { style: "currency", currency }).format(
+        amount,
+      );
+    }
+    throw error;
+  }
 }
 
 function localizedValue(
@@ -250,39 +282,14 @@ export class MissingPriceError extends Error {
   }
 }
 
-function commercetoolsErrorParts(error: unknown): {
-  status?: number;
-  codes: string[];
-  message?: string;
-} {
-  if (!error || typeof error !== "object") {
-    return { codes: [] };
-  }
-  const candidate = error as {
-    statusCode?: number;
-    message?: string;
-    body?: {
-      statusCode?: number;
-      message?: string;
-      errors?: Array<{ code?: string; message?: string }>;
-    };
-  };
-  const codes = (candidate.body?.errors ?? [])
-    .map((item) => item.code)
-    .filter((code): code is string => Boolean(code));
-  return {
-    status: candidate.statusCode ?? candidate.body?.statusCode,
-    codes,
-    message: candidate.body?.message ?? candidate.message,
-  };
-}
-
+/**
+ * The documented failed sign-in: HTTP 400 with error code `InvalidCredentials`. Any other status,
+ * a 401 from the API client's own token included, is an upstream problem and must not be shown to
+ * the shopper as a wrong password (or counted against the per-email login limit).
+ */
 export function isInvalidCredentials(error: unknown): boolean {
   const { status, codes } = commercetoolsErrorParts(error);
-  if (status !== 400 && status !== 401) {
-    return false;
-  }
-  return codes.includes("InvalidCredentials") || status === 401;
+  return (status === 400 || status === 401) && codes.includes("InvalidCredentials");
 }
 
 export function isConcurrentModification(error: unknown): boolean {
@@ -354,12 +361,36 @@ export function createCartOperations(gateway: CartGateway): CartOperations {
     return undefined;
   }
 
+  /**
+   * The cart behind a client-supplied `cartId`, or `null` when it is no longer usable. Ordered
+   * and Merged carts accept no operations and Frozen ones reject line-item changes, so any
+   * non-Active cart is unusable. Adds fall back to the identity's active cart; line-item
+   * mutations throw CartNotFoundError. Ownership is checked first so another session's cart
+   * is rejected instead of silently replaced.
+   */
+  async function findSuppliedActiveCart(input: {
+    anonymousId?: string;
+    customerId?: string;
+    cartId?: string;
+  }): Promise<Cart | null> {
+    if (!input.cartId) {
+      return null;
+    }
+    const cart = await gateway.getCartById(input.cartId);
+    assertCartOwner(cart, input);
+    return cart.cartState === "Active" ? cart : null;
+  }
+
   async function requireActiveCart(
     input: { anonymousId?: string; customerId?: string; cartId?: string },
   ): Promise<Cart> {
     if (input.cartId) {
-      const cart = await gateway.getCartById(input.cartId);
-      assertCartOwner(cart, input);
+      // A line item id belongs to one cart, so a stale cartId must not be redirected to
+      // another cart: the shopper gets CART_NOT_FOUND instead of editing the wrong cart.
+      const cart = await findSuppliedActiveCart(input);
+      if (!cart) {
+        throw new CartNotFoundError();
+      }
       return cart;
     }
 
@@ -411,7 +442,7 @@ export function createCartOperations(gateway: CartGateway): CartOperations {
     return null;
   }
 
-  async function createCartWithPriceFallback(
+  async function createCartWithItems(
     input: {
       country?: string;
       currency?: string;
@@ -420,10 +451,9 @@ export function createCartOperations(gateway: CartGateway): CartOperations {
     },
     lineItems: Array<ReturnType<typeof toLineItemIdentifier>>,
   ): Promise<Cart> {
-    const country = input.country?.trim() || undefined;
     const draft = {
       currency: input.currency?.trim() || DEFAULT_CART_CURRENCY,
-      country,
+      country: input.country?.trim() || undefined,
       anonymousId: input.customerId ? undefined : input.anonymousId,
       customerId: input.customerId,
       lineItems,
@@ -432,18 +462,13 @@ export function createCartOperations(gateway: CartGateway): CartOperations {
     try {
       return await gateway.createCart(draft);
     } catch (error) {
-      if (!country || !isMatchingPriceNotFound(error)) {
-        throw isMatchingPriceNotFound(error) ? toMissingPriceError(error) : error;
-      }
-      try {
-        return await gateway.createCart({ ...draft, country: undefined });
-      } catch (retryError) {
-        throw isMatchingPriceNotFound(retryError) ? toMissingPriceError(retryError) : retryError;
-      }
+      // commercetools already falls back to country-less prices when a country is set, so
+      // retrying without the country could not find another price.
+      throw isMatchingPriceNotFound(error) ? toMissingPriceError(error) : error;
     }
   }
 
-  async function addLineItemWithPriceFallback(
+  async function addLineItems(
     cart: Cart,
     input: { country?: string },
     addActions: CartUpdateAction[],
@@ -455,9 +480,10 @@ export function createCartOperations(gateway: CartGateway): CartOperations {
       if (!isMatchingPriceNotFound(error)) {
         throw error;
       }
-
-      const changedCountry = actions.some((action) => action.action === "setCountry");
-      if (changedCountry) {
+      // The requested country has no price and the cart already has a country: keep it and add
+      // without the prepended setCountry. The country is never unset, and a cart without one
+      // is not retried, because commercetools already falls back to prices without a country.
+      if (cart.country && actions.length > addActions.length) {
         try {
           return await updateWithRetry(cart, addActions);
         } catch (retryError) {
@@ -466,17 +492,6 @@ export function createCartOperations(gateway: CartGateway): CartOperations {
           }
         }
       }
-
-      if (cart.country || changedCountry) {
-        try {
-          return await updateWithRetry(cart, [{ action: "setCountry" }, ...addActions]);
-        } catch (retryError) {
-          if (!isMatchingPriceNotFound(retryError)) {
-            throw retryError;
-          }
-        }
-      }
-
       throw toMissingPriceError(error);
     }
   }
@@ -509,27 +524,21 @@ export function createCartOperations(gateway: CartGateway): CartOperations {
       const draft = toLineItemIdentifier(lineItem);
       const addActions: CartUpdateAction[] = [{ action: "addLineItem", ...draft }];
 
-      if (input.cartId) {
-        const cart = await requireActiveCart(input);
-        const updated = await addLineItemWithPriceFallback(cart, input, addActions);
-        return mapCartToSnapshot(updated, locale);
-      }
-
-      const existing = await findExistingCart(input);
+      const existing = (await findSuppliedActiveCart(input)) ?? (await findExistingCart(input));
       if (existing) {
-        const updated = await addLineItemWithPriceFallback(existing, input, addActions);
+        const updated = await addLineItems(existing, input, addActions);
         return mapCartToSnapshot(updated, locale);
       }
 
       try {
-        const created = await createCartWithPriceFallback(input, [draft]);
+        const created = await createCartWithItems(input, [draft]);
         return mapCartToSnapshot(created, locale);
       } catch (error) {
         const raced = await findExistingCart(input);
         if (!raced) {
           throw error;
         }
-        const updated = await addLineItemWithPriceFallback(raced, input, addActions);
+        const updated = await addLineItems(raced, input, addActions);
         return mapCartToSnapshot(updated, locale);
       }
     },
@@ -542,27 +551,21 @@ export function createCartOperations(gateway: CartGateway): CartOperations {
         ...draft,
       }));
 
-      if (input.cartId) {
-        const cart = await requireActiveCart(input);
-        const updated = await addLineItemWithPriceFallback(cart, input, addActions);
-        return mapCartToSnapshot(updated, locale);
-      }
-
-      const existing = await findExistingCart(input);
+      const existing = (await findSuppliedActiveCart(input)) ?? (await findExistingCart(input));
       if (existing) {
-        const updated = await addLineItemWithPriceFallback(existing, input, addActions);
+        const updated = await addLineItems(existing, input, addActions);
         return mapCartToSnapshot(updated, locale);
       }
 
       try {
-        const created = await createCartWithPriceFallback(input, drafts);
+        const created = await createCartWithItems(input, drafts);
         return mapCartToSnapshot(created, locale);
       } catch (error) {
         const raced = await findExistingCart(input);
         if (!raced) {
           throw error;
         }
-        const updated = await addLineItemWithPriceFallback(raced, input, addActions);
+        const updated = await addLineItems(raced, input, addActions);
         return mapCartToSnapshot(updated, locale);
       }
     },
@@ -598,7 +601,6 @@ export function createCartOperations(gateway: CartGateway): CartOperations {
         result = await gateway.loginCustomer({
           email: input.email,
           password: input.password,
-          anonymousId: input.anonymousId,
           anonymousCartId,
         });
       } catch (error) {

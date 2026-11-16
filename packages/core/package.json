@@ -14,7 +14,7 @@
         "default": "./dist/index.js"
       },
       "require": {
-        "types": "./dist/index.d.cts",
+        "types": "./dist/cjs/index.d.ts",
         "default": "./dist/index.cjs"
       }
     },
@@ -24,9 +24,29 @@
         "default": "./dist/client.js"
       },
       "require": {
-        "types": "./dist/client.d.cts",
+        "types": "./dist/cjs/client.d.ts",
         "default": "./dist/client.cjs"
       }
+    },
+    "./internal": {
+      "import": {
+        "types": "./dist/internal.d.ts",
+        "default": "./dist/internal.js"
+      },
+      "require": {
+        "types": "./dist/cjs/internal.d.ts",
+        "default": "./dist/internal.cjs"
+      }
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "client": [
+        "./dist/client.d.ts"
+      ],
+      "internal": [
+        "./dist/internal.d.ts"
+      ]
     }
   },
   "files": [
@@ -35,27 +55,30 @@
   ],
   "sideEffects": false,
   "scripts": {
-    "build": "tsup && node ../../scripts/emit-package-dts.mjs dist/index.d.ts dist/client.d.ts",
+    "build": "tsup && node ../../scripts/emit-package-dts.mjs dist/index.d.ts dist/client.d.ts dist/internal.d.ts",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
+    "check:package": "attw --pack . && publint",
     "test": "vitest run",
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@aws-sdk/client-bedrock-runtime": "^3.758.0",
-    "@commercetools/platform-sdk": "^8.0.0",
-    "@commercetools/sdk-client-v2": "^3.4.0",
-    "@langfuse/client": "^5.9.1",
-    "@langfuse/tracing": "^5.9.1",
-    "@openrouter/sdk": "^0.1.11",
+    "@aws-sdk/client-bedrock-runtime": "^3.1167.0",
+    "@commercetools/platform-sdk": "^9.8.0",
+    "@commercetools/ts-client": "^5.2.0",
+    "@langfuse/client": "catalog:",
+    "@langfuse/tracing": "catalog:",
+    "@openrouter/sdk": "^1.5.94",
     "@opentelemetry/api": "^1.9.1"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
+    "@types/node": "catalog:",
     "@typescript/native": "catalog:",
-    "tsup": "^8.4.0",
-    "vitest": "^3.0.9"
+    "tsup": "catalog:",
+    "vite": "catalog:",
+    "jsdom": "catalog:",
+    "vitest": "catalog:"
   },
   "publishConfig": {
     "access": "public"

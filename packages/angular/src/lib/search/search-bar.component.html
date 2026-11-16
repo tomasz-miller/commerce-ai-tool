@@ -1,0 +1,138 @@
+@let t = messages();
+<svg
+  width="18"
+  height="18"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  aria-hidden="true"
+>
+  <circle cx="11" cy="11" r="8" />
+  <path d="m21 21-4.3-4.3" />
+</svg>
+
+<div class="cat-search-input-wrap">
+  <input
+    #searchInput
+    type="search"
+    class="cat-search-input"
+    name="query"
+    [value]="query()"
+    [placeholder]="t.placeholder"
+    [attr.aria-label]="t.searchAriaLabel"
+    [attr.role]="enableAutocomplete() ? 'combobox' : null"
+    [attr.aria-haspopup]="enableAutocomplete() ? 'listbox' : null"
+    [attr.aria-autocomplete]="enableAutocomplete() ? 'list' : null"
+    [attr.aria-expanded]="enableAutocomplete() ? expanded() : null"
+    [attr.aria-controls]="enableAutocomplete() && expanded() ? listboxId() : null"
+    [attr.aria-activedescendant]="enableAutocomplete() && expanded() ? activeDescendantId() : null"
+    autocomplete="off"
+    (input)="onInput($event)"
+    (compositionend)="onCompositionEnd($event)"
+    (keydown)="inputKeyDown.emit($event)"
+  />
+</div>
+
+<div class="cat-search-actions">
+  @if (enableVoice()) {
+    <button
+      type="button"
+      class="cat-icon-btn"
+      [class.cat-icon-btn--active]="isRecording()"
+      [disabled]="isProcessing()"
+      [attr.aria-label]="isRecording() ? t.stopRecording : t.voiceSearch"
+      (click)="voiceToggle.emit()"
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+        <line x1="12" x2="12" y1="19" y2="22" />
+      </svg>
+    </button>
+  }
+
+  @if (enableCameraSearch()) {
+    <button
+      #cameraButton
+      type="button"
+      class="cat-icon-btn"
+      [disabled]="isLoading()"
+      [attr.aria-label]="t.searchByCamera"
+      (click)="cameraClick.emit()"
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
+        <circle cx="12" cy="13" r="3" />
+      </svg>
+    </button>
+    <input
+      #cameraInput
+      type="file"
+      accept="image/*"
+      [attr.capture]="cameraFacingMode()"
+      class="cat-hidden-input"
+      (change)="cameraFileSelected.emit($event)"
+    />
+  }
+
+  @if (enableImageSearch()) {
+    <button
+      type="button"
+      class="cat-icon-btn"
+      [disabled]="isLoading()"
+      [attr.aria-label]="t.searchByImage"
+      (click)="fileInput.click()"
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+        <circle cx="9" cy="9" r="2" />
+        <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+      </svg>
+    </button>
+    <input
+      #fileInput
+      type="file"
+      accept="image/*"
+      class="cat-hidden-input"
+      (change)="imageSelected.emit($event)"
+    />
+  }
+
+  @if (showVoiceReplay()) {
+    <button
+      type="button"
+      class="cat-icon-btn"
+      [attr.aria-label]="t.replayVoiceSummary"
+      (click)="replay.emit()"
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+        <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+      </svg>
+    </button>
+  }
+</div>
+
+@if (enableCart()) {
+  <button
+    #cartToggleButton
+    type="button"
+    class="cat-icon-btn cat-cart-toggle"
+    [class.cat-cart-toggle--open]="cartOpen()"
+    [attr.aria-label]="cartLabel()"
+    [attr.aria-expanded]="cartOpen()"
+    (click)="cartToggle.emit()"
+  >
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+      <circle cx="8" cy="21" r="1" />
+      <circle cx="19" cy="21" r="1" />
+      <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" />
+    </svg>
+    @if (cartQuantity() > 0) {
+      <span class="cat-cart-badge" aria-hidden="true">{{ cartBadgeLabel() }}</span>
+    }
+  </button>
+}
+
+<ng-content />

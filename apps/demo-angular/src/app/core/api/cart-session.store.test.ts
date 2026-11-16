@@ -38,12 +38,12 @@ describe("CartSessionStore", () => {
     const store = createStore();
     expect(store.readSessionToken()).toBeNull();
 
-    store.writeSession("sess-1", JSON.stringify({ id: "cust-1", email: "ada@example.com" }));
+    store.writeSession("sess-1", { id: "cust-1", email: "ada@example.com" });
     expect(store.readSessionToken()).toBe("sess-1");
-    expect(store.readCustomerJson()).toContain("ada@example.com");
+    expect(store.readCustomer()).toEqual({ id: "cust-1", email: "ada@example.com" });
 
     store.clearSession();
     expect(store.readSessionToken()).toBeNull();
-    expect(store.readCustomerJson()).toBeNull();
+    expect(store.readCustomer()).toBeNull();
   });
 });

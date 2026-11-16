@@ -1,13 +1,17 @@
-import { Injectable, computed, signal, type OnDestroy } from "@angular/core";
+import { Injectable, computed, inject, signal, type OnDestroy } from "@angular/core";
 import {
-  CART_SESSION_HEADER,
+  CommerceAIApiError,
+  createCommerceAIApiClient,
+  getSharedCartSessionStore,
+  messageForError,
+  resolveCommerceAISearchMessages,
   type CartSnapshot,
+  type CartSyncMember,
+  type CommerceAIApiClient,
+  type CommerceAISearchMessages,
   type CustomerSnapshot,
 } from "@commerce-ai-tool/core/client";
-
-export const ANONYMOUS_ID_STORAGE_KEY = "commerce-ai-tool:anonymousId";
-export const CUSTOMER_SESSION_STORAGE_KEY = "commerce-ai-tool:customerSession";
-export const CUSTOMER_STORAGE_KEY = "commerce-ai-tool:customer";
+import { COMMERCE_AI_FETCH } from "./commerce-ai-fetch.token";
 
 export interface AddToCartItem {
   sku?: string;
@@ -22,130 +26,36 @@ export interface CommerceAiCartOptions {
   country?: string;
   catalogLocale?: string;
   enabled?: boolean;
+  /** Host message overrides. `error` is always taken from these, never from the server's text. */
+  messages?: Partial<CommerceAISearchMessages>;
   onCartChange?: (cart: CartSnapshot | null) => void;
 }
 
-interface CartApiBody {
-  cart?: CartSnapshot | null;
-  customer?: CustomerSnapshot | null;
-  sessionToken?: string;
-  error?: string;
+type MessageKey = keyof CommerceAISearchMessages;
+
+/** The server rejected the customer session token (expired, revoked or unknown). */
+function isSessionRejected(error: unknown): boolean {
+  return error instanceof CommerceAIApiError && error.status === 401;
 }
 
-/** Ignore in-flight GET/refresh responses that lost a race to a newer mutation. */
-function isStaleCartSnapshot(
-  current: CartSnapshot | null,
-  next: CartSnapshot | null,
-): boolean {
-  return Boolean(
-    next &&
-      current &&
-      next.id === current.id &&
-      next.version < current.version,
-  );
+/**
+ * Request fields of a cart mutation. `currency`, `country` and `catalogLocale` are captured when
+ * the mutation is queued; only `cartId` is read when it runs, from the cart its
+ * predecessor produced.
+ */
+interface CartMutationContext {
+  currency?: string;
+  country?: string;
+  catalogLocale?: string;
+  cartId?: string;
 }
 
-function readStorage(key: string): string | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  try {
-    return window.localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function writeStorage(key: string, value: string): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-  try {
-    window.localStorage.setItem(key, value);
-  } catch {
-    // Ignore quota / privacy mode failures — session still works in memory.
-  }
-}
-
-function removeStorage(key: string): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-  try {
-    window.localStorage.removeItem(key);
-  } catch {
-    // Ignore privacy mode failures.
-  }
-}
-
-function readStoredCustomer(): CustomerSnapshot | null {
-  const raw = readStorage(CUSTOMER_STORAGE_KEY);
-  if (!raw) {
-    return null;
-  }
-  try {
-    const parsed = JSON.parse(raw) as CustomerSnapshot;
-    if (typeof parsed.id === "string" && typeof parsed.email === "string") {
-      return parsed;
-    }
-  } catch {
-    return null;
-  }
-  return null;
-}
-
-export function createAnonymousId(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  return `anon-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-export function getOrCreateAnonymousId(): string {
-  const existing = readStorage(ANONYMOUS_ID_STORAGE_KEY);
-  if (existing) {
-    return existing;
-  }
-  const created = createAnonymousId();
-  writeStorage(ANONYMOUS_ID_STORAGE_KEY, created);
-  return created;
-}
-
-function rotateAnonymousId(): string {
-  const created = createAnonymousId();
-  writeStorage(ANONYMOUS_ID_STORAGE_KEY, created);
-  return created;
-}
-
-class CartRequestError extends Error {
-  status: number;
-
-  constructor(message: string, status: number) {
-    super(message);
-    this.name = "CartRequestError";
-    this.status = status;
-  }
-}
-
-async function parseCartApi(response: Response): Promise<CartApiBody> {
-  const body = (await response.json()) as CartApiBody;
-  if (!response.ok) {
-    throw new CartRequestError(body.error ?? "Cart request failed", response.status);
-  }
-  return body;
-}
-
-type CartSyncListener = (sourceId: number, cart: CartSnapshot | null) => void;
-
-const cartSyncListeners = new Set<CartSyncListener>();
-let cartSyncSeq = 0;
-
-function emitCartSync(sourceId: number, cart: CartSnapshot | null): void {
-  for (const listener of cartSyncListeners) {
-    listener(sourceId, cart);
-  }
-}
-
+/**
+ * Cart state of one widget instance. Identity, the mutation queue and the cross-instance sync
+ * live in the page-wide store of `@commerce-ai-tool/core/client`, shared with the React hook and
+ * with host code, so instances on one page show one cart. State is exposed as signals, which
+ * keeps the widget correct in zoneless and `OnPush` hosts.
+ */
 @Injectable()
 export class CommerceAiCartService implements OnDestroy {
   readonly cart = signal<CartSnapshot | null>(null);
@@ -156,28 +66,26 @@ export class CommerceAiCartService implements OnDestroy {
   readonly isLoggingIn = signal(false);
   readonly error = signal<string | null>(null);
   readonly isCartOpen = signal(false);
-  readonly isAuthenticated = computed(() => Boolean(this.customer() && this.sessionToken()));
+  private readonly sessionTokenSignal = signal<string | null>(null);
+  readonly isAuthenticated = computed(() => Boolean(this.customer() && this.sessionTokenSignal()));
 
   private apiBaseUrl = "";
   private currency?: string;
   private country?: string;
   private catalogLocale?: string;
+  private messages?: Partial<CommerceAISearchMessages>;
   private enabled = false;
   private onCartChange?: (cart: CartSnapshot | null) => void;
   private sessionTokenValue: string | null = null;
   private cartValue: CartSnapshot | null = null;
-  private mutationChain: Promise<unknown> = Promise.resolve();
   private started = false;
-  private readonly syncId = ++cartSyncSeq;
-  private readonly onRemoteCart: CartSyncListener = (sourceId, next) => {
-    if (sourceId === this.syncId) {
-      return;
-    }
-    this.applyCart(next, false);
-  };
+  private syncMember: CartSyncMember | null = null;
+  private readonly store = getSharedCartSessionStore();
+  private readonly fetch = inject(COMMERCE_AI_FETCH);
 
   ngOnDestroy(): void {
-    cartSyncListeners.delete(this.onRemoteCart);
+    this.syncMember?.leave();
+    this.syncMember = null;
   }
 
   sessionToken(): string | null {
@@ -189,24 +97,26 @@ export class CommerceAiCartService implements OnDestroy {
     this.currency = options.currency;
     this.country = options.country;
     this.catalogLocale = options.catalogLocale;
+    this.messages = options.messages;
     this.enabled = options.enabled !== false;
     this.onCartChange = options.onCartChange;
 
     if (!this.enabled) {
-      cartSyncListeners.delete(this.onRemoteCart);
+      this.syncMember?.leave();
+      this.syncMember = null;
       return;
     }
 
-    cartSyncListeners.add(this.onRemoteCart);
+    this.syncMember ??= this.store.joinSync((next) => this.applyCart(next, false));
 
     if (!this.started) {
       this.started = true;
-      this.anonymousId.set(getOrCreateAnonymousId());
-      const storedToken = readStorage(CUSTOMER_SESSION_STORAGE_KEY);
-      const storedCustomer = readStoredCustomer();
-      if (storedToken && storedCustomer) {
-        this.sessionTokenValue = storedToken;
-        this.customer.set(storedCustomer);
+      this.anonymousId.set(this.store.getAnonymousId());
+      const session = this.store.readSession();
+      if (session) {
+        this.sessionTokenValue = session.token;
+        this.sessionTokenSignal.set(session.token);
+        this.customer.set(session.customer);
       }
       void this.refresh();
     }
@@ -214,6 +124,9 @@ export class CommerceAiCartService implements OnDestroy {
 
   openCart(): void {
     this.isCartOpen.set(true);
+    // Re-fetch so the panel never shows a stale cart after a mutation from another instance
+    // (for example host-owned add-to-cart UI).
+    void this.refresh();
   }
 
   closeCart(): void {
@@ -221,70 +134,87 @@ export class CommerceAiCartService implements OnDestroy {
   }
 
   toggleCart(): void {
-    this.isCartOpen.update((open) => !open);
+    if (this.isCartOpen()) {
+      this.closeCart();
+    } else {
+      this.openCart();
+    }
   }
 
   async refresh(): Promise<void> {
-    const anonymousId = this.anonymousId();
-    if (!this.enabled || !anonymousId) {
+    if (!this.enabled || !this.anonymousId()) {
       return;
-    }
-
-    const params = new URLSearchParams();
-    const headers: Record<string, string> = {};
-    const token = this.sessionTokenValue;
-    if (token) {
-      headers[CART_SESSION_HEADER] = token;
-    } else {
-      params.set("anonymousId", anonymousId);
-    }
-    if (this.catalogLocale) {
-      params.set("catalogLocale", this.catalogLocale);
     }
 
     this.isLoading.set(true);
     this.error.set(null);
     try {
-      const query = params.toString();
-      const url = `${this.apiBaseUrl}/cart${query ? `?${query}` : ""}`;
-      const response = await (token ? fetch(url, { headers }) : fetch(url));
-      const body = await parseCartApi(response);
+      const body = await this.client().cart.get({ catalogLocale: this.catalogLocale });
       this.applyCart(body.cart ?? null);
     } catch (err) {
-      if (err instanceof CartRequestError && err.status === 401 && this.sessionTokenValue) {
-        this.clearSession();
-        this.anonymousId.set(rotateAnonymousId());
-        this.applyCart(null);
-        this.error.set(err.message);
+      if (isSessionRejected(err) && this.sessionTokenValue) {
+        this.resetToGuest();
+        this.error.set(this.failure(err, "cartLoadFailed"));
         this.isLoading.set(false);
         await this.refresh();
         return;
       }
-      this.error.set(err instanceof Error ? err.message : "Cart request failed");
+      this.error.set(this.failure(err, "cartLoadFailed"));
     } finally {
       this.isLoading.set(false);
     }
   }
 
   addToCart(item: AddToCartItem): Promise<CartSnapshot | null> {
-    return this.mutate("/cart/add", {
-      sku: item.sku,
-      productId: item.productId,
-      variantId: item.variantId,
-      quantity: item.quantity,
-    });
+    return this.mutate(
+      (client, context) =>
+        client.cart.add({
+          sku: item.sku,
+          productId: item.productId,
+          variantId: item.variantId,
+          quantity: item.quantity,
+          currency: context.currency,
+          country: context.country,
+          catalogLocale: context.catalogLocale,
+          cartId: context.cartId,
+        }),
+      "unableToAddToCart",
+    );
   }
 
   addItems(items: AddToCartItem[]): Promise<CartSnapshot | null> {
-    return this.mutate("/cart/add-items", { items });
+    return this.mutate(
+      (client, context) =>
+        client.cart.addItems({
+          items,
+          currency: context.currency,
+          country: context.country,
+          catalogLocale: context.catalogLocale,
+          cartId: context.cartId,
+        }),
+      "unableToAddToCart",
+    );
   }
 
   removeFromCart(lineItemId: string): Promise<CartSnapshot | null> {
-    return this.mutate("/cart/remove", { lineItemId });
+    return this.mutate((client, context) =>
+      client.cart.remove({
+        lineItemId,
+        catalogLocale: context.catalogLocale,
+        cartId: context.cartId,
+      }),
+    );
   }
 
   updateQuantity(lineItemId: string, quantity: number): Promise<CartSnapshot | null> {
-    return this.mutate("/cart/update-quantity", { lineItemId, quantity });
+    return this.mutate((client, context) =>
+      client.cart.updateQuantity({
+        lineItemId,
+        quantity,
+        catalogLocale: context.catalogLocale,
+        cartId: context.cartId,
+      }),
+    );
   }
 
   async login(input: { email: string; password: string }): Promise<CartSnapshot | null> {
@@ -295,26 +225,20 @@ export class CommerceAiCartService implements OnDestroy {
     this.isLoggingIn.set(true);
     this.error.set(null);
     try {
-      const response = await fetch(`${this.apiBaseUrl}/cart/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: input.email,
-          password: input.password,
-          anonymousId: this.anonymousId(),
-          catalogLocale: this.catalogLocale,
-          cartId: this.cartValue?.id,
-        }),
+      const body = await this.client().cart.login({
+        email: input.email,
+        password: input.password,
+        catalogLocale: this.catalogLocale,
+        cartId: this.cartValue?.id,
       });
-      const body = await parseCartApi(response);
       if (!body.sessionToken || !body.customer) {
-        throw new CartRequestError("Sign in failed", response.status);
+        throw new Error("Sign in response is missing");
       }
       this.persistSession(body.sessionToken, body.customer);
       this.applyCart(body.cart ?? null);
       return body.cart ?? null;
     } catch (err) {
-      this.error.set(err instanceof Error ? err.message : "Sign in failed");
+      this.error.set(this.failure(err, "signInFailed"));
       return null;
     } finally {
       this.isLoggingIn.set(false);
@@ -323,90 +247,101 @@ export class CommerceAiCartService implements OnDestroy {
 
   async logout(): Promise<void> {
     try {
-      await fetch(`${this.apiBaseUrl}/cart/logout`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
+      // The token lets the host run its `cartSession.onLogout` hook (for example a denylist).
+      await this.client().cart.logout();
     } catch {
       // Client-side logout still proceeds if the network call fails.
     }
-    this.clearSession();
-    this.applyCart(null);
-    this.anonymousId.set(rotateAnonymousId());
+    this.resetToGuest();
   }
 
-  private mutate(path: string, body: Record<string, unknown>): Promise<CartSnapshot | null> {
-    const run = async (): Promise<CartSnapshot | null> => {
-      const anonymousId = this.anonymousId();
-      if (!this.enabled || !anonymousId) {
+  private client(): CommerceAIApiClient {
+    return createCommerceAIApiClient({
+      baseUrl: this.apiBaseUrl,
+      fetch: this.fetch,
+      getSessionToken: () => this.sessionTokenValue,
+      getAnonymousId: () => this.anonymousId(),
+    });
+  }
+
+  private failure(err: unknown, fallback: MessageKey): string {
+    return messageForError(err, resolveCommerceAISearchMessages(this.messages), { fallback });
+  }
+
+  /**
+   * Runs one cart mutation behind the page-wide queue, so it sees the cart version its
+   * predecessor produced. `call` runs when its turn comes: the cart id and version are read then,
+   * the other context fields are the values from when the mutation was queued.
+   */
+  private mutate(
+    call: (
+      client: CommerceAIApiClient,
+      context: CartMutationContext,
+    ) => Promise<{ cart: CartSnapshot | null }>,
+    fallback: MessageKey = "checkoutFailed",
+  ): Promise<CartSnapshot | null> {
+    const captured = {
+      currency: this.currency,
+      country: this.country,
+      catalogLocale: this.catalogLocale,
+    };
+
+    return this.store.enqueueMutation(async (): Promise<CartSnapshot | null> => {
+      if (!this.enabled || !this.anonymousId()) {
         return null;
       }
 
       this.isMutating.set(true);
       this.error.set(null);
       try {
-        const response = await fetch(`${this.apiBaseUrl}${path}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            anonymousId,
-            sessionToken: this.sessionTokenValue ?? undefined,
-            currency: this.currency,
-            country: this.country,
-            catalogLocale: this.catalogLocale,
-            cartId: this.cartValue?.id,
-            cartVersion: this.cartValue?.version,
-            ...body,
-          }),
+        const next = await call(this.client(), {
+          ...captured,
+          cartId: this.cartValue?.id,
         });
-        const next = await parseCartApi(response);
         this.applyCart(next.cart ?? null);
         return next.cart ?? null;
       } catch (err) {
-        if (err instanceof CartRequestError && err.status === 401 && this.sessionTokenValue) {
-          this.clearSession();
-          this.anonymousId.set(rotateAnonymousId());
-          this.applyCart(null);
+        if (isSessionRejected(err) && this.sessionTokenValue) {
+          this.resetToGuest();
         }
-        this.error.set(err instanceof Error ? err.message : "Cart request failed");
+        this.error.set(this.failure(err, fallback));
         return null;
       } finally {
         this.isMutating.set(false);
       }
-    };
-
-    const pending = this.mutationChain.then(run, run);
-    this.mutationChain = pending.then(
-      () => undefined,
-      () => undefined,
-    );
-    return pending;
+    });
   }
 
   private applyCart(next: CartSnapshot | null, sync = true): void {
-    if (isStaleCartSnapshot(this.cartValue, next)) {
+    if (this.store.isStaleCartSnapshot(this.cartValue, next)) {
       return;
     }
     this.cartValue = next;
     this.cart.set(next);
     this.onCartChange?.(next);
     if (sync) {
-      emitCartSync(this.syncId, next);
+      this.syncMember?.emit(next);
     }
   }
 
   private persistSession(token: string, nextCustomer: CustomerSnapshot): void {
     this.sessionTokenValue = token;
+    this.sessionTokenSignal.set(token);
     this.customer.set(nextCustomer);
-    writeStorage(CUSTOMER_SESSION_STORAGE_KEY, token);
-    writeStorage(CUSTOMER_STORAGE_KEY, JSON.stringify(nextCustomer));
+    this.store.saveSession(token, nextCustomer);
   }
 
   private clearSession(): void {
     this.sessionTokenValue = null;
+    this.sessionTokenSignal.set(null);
     this.customer.set(null);
-    removeStorage(CUSTOMER_SESSION_STORAGE_KEY);
-    removeStorage(CUSTOMER_STORAGE_KEY);
+    this.store.clearSession();
+  }
+
+  /** Drops the customer session (logout, or a token the server rejected) and starts as a new guest. */
+  private resetToGuest(): void {
+    this.clearSession();
+    this.anonymousId.set(this.store.rotateAnonymousId());
+    this.applyCart(null);
   }
 }

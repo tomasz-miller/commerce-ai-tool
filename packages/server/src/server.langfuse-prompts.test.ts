@@ -23,6 +23,8 @@ describe("loadConfigFromEnv langfuse prompts", () => {
       "LANGFUSE_PROMPTS",
       "LANGFUSE_PROMPT_LABEL",
       "LANGFUSE_PROMPT_CACHE_TTL_SECONDS",
+      "LANGFUSE_PROMPT_FETCH_TIMEOUT_MS",
+      "LANGFUSE_PROMPT_MAX_RETRIES",
       "CAT_AI_PROVIDER",
       "OPENROUTER_JSON_SCHEMA",
     ]) {
@@ -60,10 +62,42 @@ describe("loadConfigFromEnv langfuse prompts", () => {
     });
   });
 
-  it("ignores invalid prompt cache TTL and leaves prompts disabled by default", () => {
+  it("fails at boot on an invalid prompt cache TTL", () => {
     process.env.LANGFUSE_PROMPT_CACHE_TTL_SECONDS = "nope";
+    expect(() => loadConfigFromEnv()).toThrow("Invalid LANGFUSE_PROMPT_CACHE_TTL_SECONDS");
+  });
+
+  it("maps prompt fetch timeout and retry env into langfuse config", () => {
+    process.env.LANGFUSE_PROMPT_FETCH_TIMEOUT_MS = "1500";
+    process.env.LANGFUSE_PROMPT_MAX_RETRIES = "0";
 
     const config = loadConfigFromEnv();
+
+    expect(config.langfuse?.promptFetchTimeoutMs).toBe(1500);
+    expect(config.langfuse?.promptMaxRetries).toBe(0);
+  });
+
+  it("accepts a positive prompt retry count", () => {
+    process.env.LANGFUSE_PROMPT_MAX_RETRIES = "2";
+    expect(loadConfigFromEnv().langfuse?.promptMaxRetries).toBe(2);
+  });
+
+  it("fails at boot on an invalid prompt fetch timeout or retry count", () => {
+    process.env.LANGFUSE_PROMPT_FETCH_TIMEOUT_MS = "0";
+    expect(() => loadConfigFromEnv()).toThrow("Invalid LANGFUSE_PROMPT_FETCH_TIMEOUT_MS");
+    process.env.LANGFUSE_PROMPT_FETCH_TIMEOUT_MS = "fast";
+    expect(() => loadConfigFromEnv()).toThrow("Invalid LANGFUSE_PROMPT_FETCH_TIMEOUT_MS");
+    delete process.env.LANGFUSE_PROMPT_FETCH_TIMEOUT_MS;
+
+    process.env.LANGFUSE_PROMPT_MAX_RETRIES = "-1";
+    expect(() => loadConfigFromEnv()).toThrow("Invalid LANGFUSE_PROMPT_MAX_RETRIES");
+  });
+
+  it("leaves prompts disabled and the TTL unset by default", () => {
+    const config = loadConfigFromEnv();
+
+    expect(config.langfuse?.promptFetchTimeoutMs).toBeUndefined();
+    expect(config.langfuse?.promptMaxRetries).toBeUndefined();
 
     expect(config.langfuse?.promptCacheTtlSeconds).toBeUndefined();
     expect(config.langfuse?.promptsEnabled).toBe(false);

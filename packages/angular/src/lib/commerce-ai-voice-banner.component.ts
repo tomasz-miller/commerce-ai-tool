@@ -1,20 +1,15 @@
 import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output } from "@angular/core";
-import type { CommerceAISearchMessages } from "@commerce-ai-tool/core/client";
-import { formatRecordingDuration } from "./recording-duration.js";
+import type { ResolvedCommerceAISearchMessages } from "@commerce-ai-tool/core/client";
+import { formatRecordingDuration } from "./recording-duration";
 
 @Component({
   selector: "commerce-ai-voice-banner",
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div
-      class="cat-voice-banner"
-      [class.cat-voice-banner--error]="isError"
-      role="status"
-      aria-live="polite"
-    >
+    <div class="cat-voice-banner" [class.cat-voice-banner--error]="isError">
       @if (isError) {
-        <div class="cat-voice-banner__content">
+        <div class="cat-voice-banner__content" role="alert">
           <span class="cat-voice-banner__label">{{ error }}</span>
           <button
             type="button"
@@ -39,7 +34,7 @@ import { formatRecordingDuration } from "./recording-duration.js";
             <span></span>
             <span></span>
           </div>
-          <span class="cat-voice-banner__timer">{{ formattedDuration }}</span>
+          <span class="cat-voice-banner__timer" role="timer">{{ formattedDuration }}</span>
           <span class="cat-voice-banner__hint">{{ messages.tapMicToStop }}</span>
         </div>
       } @else if (isProcessing) {
@@ -63,7 +58,7 @@ export class CommerceAiVoiceBannerComponent {
   @Input() error: string | null = null;
   @Input() durationSeconds = 0;
   @Input({ required: true }) messages!: Pick<
-    CommerceAISearchMessages,
+    ResolvedCommerceAISearchMessages,
     "listening" | "tapMicToStop" | "understandingQuery" | "preparingAudioSummary" | "dismiss"
   >;
   @Output() dismissError = new EventEmitter<void>();

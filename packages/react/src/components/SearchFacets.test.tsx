@@ -30,6 +30,33 @@ describe("SearchFacets", () => {
     expect(onChange).toHaveBeenCalledWith({ priceMax: "50" });
   });
 
+  it("scales price chips with the facet group currency", () => {
+    const onChange = vi.fn();
+
+    render(
+      <SearchFacets
+        facets={[
+          {
+            id: "price",
+            label: "Price",
+            type: "range",
+            currency: "JPY",
+            buckets: [{ key: "under-50", label: "under-50", count: 3 }],
+          },
+        ]}
+        suggestedFacets={[{ name: "price" }]}
+        filters={{ priceMax: "5000" }}
+        messages={messages}
+        onChange={onChange}
+      />,
+    );
+
+    const chip = screen.getByRole("button", { name: /under-50/ });
+    expect(chip.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(chip);
+    expect(onChange).toHaveBeenCalledWith({});
+  });
+
   it("exposes a new search action", () => {
     const onNewSearch = vi.fn();
 

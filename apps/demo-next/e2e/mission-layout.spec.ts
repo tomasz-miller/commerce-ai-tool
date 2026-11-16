@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { gotoHydrated } from "./helpers";
 
 const missionResponse = {
   products: [
@@ -92,7 +93,7 @@ async function assertNoHorizontalOverflow(page: Page) {
 test("keeps the demo header above a bounded search stage at 1440px", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockMissionSearch(page);
-  await page.goto("/");
+  await gotoHydrated(page, "/");
   await runMissionSearch(page);
 
   const hero = page.locator(".demo-hero");
@@ -139,7 +140,7 @@ test("keeps the demo header above a bounded search stage at 1440px", async ({ pa
 test("does not crush the header or stretch search at 1024px", async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 768 });
   await mockMissionSearch(page);
-  await page.goto("/");
+  await gotoHydrated(page, "/");
   await runMissionSearch(page);
 
   const hero = page.locator(".demo-hero");
@@ -162,7 +163,7 @@ test("does not crush the header or stretch search at 1024px", async ({ page }) =
 test("stacks mission lanes and wraps search actions at 390px", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await mockMissionSearch(page);
-  await page.goto("/");
+  await gotoHydrated(page, "/");
   await runMissionSearch(page);
 
   const groups = page.locator(".cat-mission-group");
@@ -207,7 +208,7 @@ test("grows the mission canvas when three lanes are present", async ({ page }) =
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockMissionSearch(page, threeLaneResponse);
-  await page.goto("/");
+  await gotoHydrated(page, "/");
   await runMissionSearch(page);
 
   await expect(page.locator(".cat-root--mission-lanes-3")).toBeVisible();

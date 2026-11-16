@@ -12,12 +12,26 @@ const MIME_TO_AUDIO_FORMAT: Record<string, string> = {
   "audio/aac": "aac",
 };
 
+/** Audio MIME types accepted for voice search (without parameters such as `;codecs=opus`). */
+export const SUPPORTED_AUDIO_MIME_TYPES: readonly string[] = Object.keys(MIME_TO_AUDIO_FORMAT);
+
+/** Thrown for an audio MIME type outside {@link SUPPORTED_AUDIO_MIME_TYPES}; hosts map it to 415. */
+export class UnsupportedAudioTypeError extends Error {
+  readonly mimeType: string;
+
+  constructor(mimeType: string) {
+    super(`Unsupported audio MIME type for voice search: ${mimeType}`);
+    this.name = "UnsupportedAudioTypeError";
+    this.mimeType = mimeType;
+  }
+}
+
 /** Maps a MIME type to an OpenRouter `input_audio.format` value. */
 export function mimeTypeToAudioFormat(mimeType: string): string {
   const normalized = mimeType.split(";")[0]?.trim().toLowerCase() ?? "";
   const format = MIME_TO_AUDIO_FORMAT[normalized];
   if (!format) {
-    throw new Error(`Unsupported audio MIME type for voice search: ${mimeType}`);
+    throw new UnsupportedAudioTypeError(mimeType);
   }
   return format;
 }

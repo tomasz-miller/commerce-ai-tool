@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildProjectionSearchQueryArgs,
+  extractMatchedSkus,
   extractProductSearchIds,
   extractSearchTerms,
   isProductSearchUnavailable,
@@ -95,5 +96,27 @@ describe("isProductSearchUnavailable", () => {
 
   it("returns false for unrelated errors", () => {
     expect(isProductSearchUnavailable(new Error("Unauthorized"))).toBe(false);
+  });
+});
+
+describe("extractMatchedSkus", () => {
+  it("maps each partially matched product to its first matched sku", () => {
+    expect(
+      extractMatchedSkus([
+        {
+          id: "p1",
+          matchingVariants: {
+            allMatched: false,
+            matchedVariants: [
+              { id: 3, sku: "RED-42" },
+              { id: 4, sku: "RED-43" },
+            ],
+          },
+        },
+        { id: "p2", matchingVariants: { allMatched: true, matchedVariants: [] } },
+        { id: "p3", matchingVariants: { allMatched: false, matchedVariants: [{ id: 2 }] } },
+        { id: "p4" },
+      ]),
+    ).toEqual({ p1: "RED-42" });
   });
 });

@@ -2,6 +2,8 @@ name: Mirror to Bitbucket
 
 on:
   push:
+    branches: [main]
+    tags: ["*"]
   workflow_dispatch:
 
 concurrency:
@@ -14,6 +16,8 @@ permissions:
 jobs:
   mirror:
     name: Push mirror to Bitbucket
+    # Forks do not have the secret and must not attempt a mirror push.
+    if: github.repository == 'tomasz-miller/commerce-ai-tool'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -33,5 +37,8 @@ jobs:
             git -C mirror.git update-ref -d "$ref"
           done
 
+          # Bitbucket Cloud documents the x-token-auth URL form for access
+          # tokens; the Bearer http.extraHeader form is only documented for
+          # Bitbucket Server / Data Center, so the URL form is kept.
           git -C mirror.git push --mirror \
             "https://x-token-auth:${BITBUCKET_MIRROR_TOKEN}@bitbucket.org/istonecrosscommerce/${repo}.git"

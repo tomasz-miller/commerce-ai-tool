@@ -13,7 +13,7 @@ import {
 import {
   SUGGESTIONS_DEFAULT_LIMIT,
   SUGGESTIONS_MAX_LIMIT,
-} from "../types/index.js";
+} from "../config/defaults.js";
 
 describe("clampSuggestionsLimit", () => {
   it("returns default when limit is omitted", () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Cart, CartUpdateAction } from "@commercetools/platform-sdk";
-import { createCartOperations, type CartGateway } from "./cart.js";
+import { createCartOperations, MissingPriceError, type CartGateway } from "./cart.js";
 
 function money(centAmount: number, currencyCode = "EUR") {
   return {
@@ -74,8 +74,7 @@ describe("addItemsToCart", () => {
     expect(snapshot.version).toBe(2);
   });
 
-  it("retries all addLineItem actions without country when the scoped price is missing", async () => {
-    const existing = createCart();
+  it("retries all addLineItem actions without setCountry when the requested country has no price", async () => {
     const updated = createCart({ version: 2 });
     const missingPrice = {
       statusCode: 400,
@@ -86,7 +85,7 @@ describe("addItemsToCart", () => {
       .mockRejectedValueOnce(missingPrice)
       .mockResolvedValueOnce(updated);
     const gateway = createGateway({
-      queryCarts: vi.fn().mockResolvedValue([existing]),
+      queryCarts: vi.fn().mockResolvedValue([createCart({ country: "PL" })]),
       updateCart,
     });
     const ops = createCartOperations(gateway);
@@ -110,5 +109,60 @@ describe("addItemsToCart", () => {
       { action: "addLineItem", sku: "RACKET-1", quantity: 1 },
       { action: "addLineItem", sku: "BALL-1", quantity: 2 },
     ]);
+  });
+
+  it("maps MissingPriceError when both add attempts have no price", async () => {
+    const missingPrice = {
+      statusCode: 400,
+      body: { errors: [{ code: "MatchingPriceNotFound" }] },
+    };
+    const updateCart = vi
+      .fn<(id: string, version: number, actions: CartUpdateAction[]) => Promise<Cart>>()
+      .mockRejectedValue(missingPrice);
+    const gateway = createGateway({
+      queryCarts: vi.fn().mockResolvedValue([createCart({ country: "PL" })]),
+      updateCart,
+    });
+    const ops = createCartOperations(gateway);
+
+    await expect(
+      ops.addItemsToCart({
+        anonymousId: "anon-1",
+        country: "DE",
+        catalogLocale: "en",
+        items: [
+          { sku: "RACKET-1", quantity: 1 },
+          { sku: "BALL-1", quantity: 2 },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(MissingPriceError);
+
+    expect(updateCart).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry a cart without a country when the requested country has no price", async () => {
+    const missingPrice = {
+      statusCode: 400,
+      body: { errors: [{ code: "MatchingPriceNotFound" }] },
+    };
+    const updateCart = vi
+      .fn<(id: string, version: number, actions: CartUpdateAction[]) => Promise<Cart>>()
+      .mockRejectedValue(missingPrice);
+    const gateway = createGateway({
+      queryCarts: vi.fn().mockResolvedValue([createCart()]),
+      updateCart,
+    });
+    const ops = createCartOperations(gateway);
+
+    await expect(
+      ops.addItemsToCart({
+        anonymousId: "anon-1",
+        country: "DE",
+        catalogLocale: "en",
+        items: [{ sku: "RACKET-1", quantity: 1 }],
+      }),
+    ).rejects.toBeInstanceOf(MissingPriceError);
+
+    expect(updateCart).toHaveBeenCalledTimes(1);
   });
 });

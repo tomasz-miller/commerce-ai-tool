@@ -15,14 +15,13 @@ export function redactBinaryInput(mimeType: string, bytes: Uint8Array): Redacted
   };
 }
 
+/**
+ * Redacts a base64 (or data URI) image. The hash covers the whole decoded payload, so it equals
+ * `redactBinaryInput(mimeType, bytes).hash` of the same image and the two spans correlate.
+ */
 export function redactBase64ImageInput(mimeType: string, imageBase64: string): RedactedBinaryInput {
   const payload = imageBase64.includes(",")
     ? imageBase64.slice(imageBase64.indexOf(",") + 1)
     : imageBase64;
-  const byteLength = Math.floor((payload.length * 3) / 4);
-  return {
-    mimeType,
-    byteLength,
-    hash: hashUint8Array(new TextEncoder().encode(payload.slice(0, 64))),
-  };
+  return redactBinaryInput(mimeType, Buffer.from(payload, "base64"));
 }
