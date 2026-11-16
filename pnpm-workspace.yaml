@@ -7,7 +7,7 @@ catalog:
   "@langfuse/otel": "^6.1.1"
   "@langfuse/tracing": "^6.1.1"
   "@playwright/test": "^1.65.0"
-  "@types/node": "^24.13.3"
+  "@types/node": "^26.6.6"
   "@types/react": "^19.3.0"
   "@types/react-dom": "^19.3.0"
   "@typescript/native": "npm:typescript@^7.0.2"
