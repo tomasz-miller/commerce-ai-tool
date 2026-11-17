@@ -80,7 +80,7 @@ TypeScript 7 ships a native `tsc` (Go) without the JavaScript Compiler API. The 
 - **Library packages** (`core`, `server`, `react`): `@typescript/native` only.
 - **`packages/angular`** is the exception: it builds with ng-packagr, whose Angular compiler needs the TypeScript range `@angular/compiler-cli` declares as its peer (`>=5.8 <6.0` for 20.3), so it declares `typescript: ~5.9.3` and never `@typescript/native` or the TS 6 alias. Its `tsc --noEmit` typecheck uses that same TypeScript.
 - **Root** and **`demo-next`**: both `@typescript/native` and `typescript` (API alias).
-- **`demo-angular`**: `typescript ~5.9.x` (Angular 21.2 compiler-cli peers `>=5.9 <6.1`); Angular 22 needs TS 6 and is deferred until the TS 7 API lands.
+- **`demo-angular`**: `typescript ~6.0.x` (Angular 21.2 compiler-cli peers `>=5.9 <6.1`); Angular 22 is deferred until the TS 7 API lands.
 - **Next.js 16.3+**: `demo-next` sets `experimental.useTypeScriptCli: false` so `next build` uses the TypeScript 6 JS API. CLI mode looks for `typescript/bin/tsc`, which `@typescript/typescript6` does not ship (`tsc6` only).
 
 **Declaration emit** (`core`, `server`, `react`) — do not use `tsup` `dts: true` (relies on deprecated Compiler API and injects `baseUrl`). Instead:
