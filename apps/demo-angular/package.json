@@ -40,7 +40,7 @@
     "@types/node": "catalog:",
     "concurrently": "^10.0.7",
     "dotenv": "^16.4.5",
-    "eslint": "^10.14.0",
+    "eslint": "^10.15.0",
     "express": "catalog:",
     "jsdom": "catalog:",
     "tsx": "^4.23.15",

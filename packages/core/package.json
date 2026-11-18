@@ -64,12 +64,12 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@aws-sdk/client-bedrock-runtime": "^3.1168.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.1169.0",
     "@commercetools/platform-sdk": "^9.8.0",
     "@commercetools/ts-client": "^5.2.0",
     "@langfuse/client": "catalog:",
     "@langfuse/tracing": "catalog:",
-    "@openrouter/sdk": "^1.5.100",
+    "@openrouter/sdk": "^1.5.103",
     "@opentelemetry/api": "^1.10.0"
   },
   "devDependencies": {
