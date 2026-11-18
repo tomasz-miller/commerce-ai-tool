@@ -40,7 +40,7 @@
     "jsdom": "catalog:",
     "ng-packagr": "^20.3.2",
     "rxjs": "^7.8.2",
-    "typescript": "~5.9.3",
+    "typescript": "~6.0.3",
     "vite": "catalog:",
     "vitest": "catalog:"
   },

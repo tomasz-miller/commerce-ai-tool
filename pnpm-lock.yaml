@@ -253,7 +253,7 @@ importers:
         version: 20.3.35
       '@angular/compiler-cli':
         specifier: ^20.3.35
-        version: 20.3.35(@angular/compiler@20.3.35)(supports-color@10.2.2)(typescript@5.9.3)
+        version: 20.3.35(@angular/compiler@20.3.35)(supports-color@10.2.2)(typescript@6.0.3)
       '@angular/core':
         specifier: ^20.3.35
         version: 20.3.35(@angular/compiler@20.3.35)(rxjs@7.8.2)(zone.js@0.15.1)
@@ -271,13 +271,13 @@ importers:
         version: 29.1.1(@noble/hashes@1.8.0)
       ng-packagr:
         specifier: ^20.3.2
-        version: 20.3.2(@angular/compiler-cli@20.3.35(@angular/compiler@20.3.35)(supports-color@10.2.2)(typescript@5.9.3))(@typescript/typescript6@6.0.2)(supports-color@10.2.2)(tslib@2.9.1)(typescript@5.9.3)
+        version: 20.3.2(@angular/compiler-cli@20.3.35(@angular/compiler@20.3.35)(supports-color@10.2.2)(typescript@6.0.3))(@typescript/typescript6@6.0.2)(supports-color@10.2.2)(tslib@2.9.1)(typescript@6.0.3)
       rxjs:
         specifier: ^7.8.2
         version: 7.8.2
       typescript:
-        specifier: ~5.9.3
-        version: 5.9.3
+        specifier: ~6.0.3
+        version: 6.0.3
       vite:
         specifier: 'catalog:'
         version: 8.3.8(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(less@4.9.0(supports-color@10.2.2))(sass@1.97.3)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.0)
@@ -9687,11 +9687,6 @@ packages:
     engines: {node: '>=14.17'}
     hasBin: true
 
-  typescript@5.9.3:
-    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
-    engines: {node: '>=14.17'}
-    hasBin: true
-
   typescript@6.0.3:
     resolution: {integrity: sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw==}
     engines: {node: '>=14.17'}
@@ -10577,7 +10572,7 @@ snapshots:
       rxjs: 7.8.2
       tslib: 2.9.1
 
-  '@angular/compiler-cli@20.3.35(@angular/compiler@20.3.35)(supports-color@10.2.2)(typescript@5.9.3)':
+  '@angular/compiler-cli@20.3.35(@angular/compiler@20.3.35)(supports-color@10.2.2)(typescript@6.0.3)':
     dependencies:
       '@angular/compiler': 20.3.35
       '@babel/core': 7.29.7(supports-color@10.2.2)
@@ -10589,7 +10584,7 @@ snapshots:
       tslib: 2.9.1
       yargs: 18.1.0
     optionalDependencies:
-      typescript: 5.9.3
+      typescript: 6.0.3
     transitivePeerDependencies:
       - supports-color
 
@@ -18274,10 +18269,10 @@ snapshots:
       - '@types/node'
       - babel-plugin-macros
 
-  ng-packagr@20.3.2(@angular/compiler-cli@20.3.35(@angular/compiler@20.3.35)(supports-color@10.2.2)(typescript@5.9.3))(@typescript/typescript6@6.0.2)(supports-color@10.2.2)(tslib@2.9.1)(typescript@5.9.3):
+  ng-packagr@20.3.2(@angular/compiler-cli@20.3.35(@angular/compiler@20.3.35)(supports-color@10.2.2)(typescript@6.0.3))(@typescript/typescript6@6.0.2)(supports-color@10.2.2)(tslib@2.9.1)(typescript@6.0.3):
     dependencies:
       '@ampproject/remapping': 2.3.0
-      '@angular/compiler-cli': 20.3.35(@angular/compiler@20.3.35)(supports-color@10.2.2)(typescript@5.9.3)
+      '@angular/compiler-cli': 20.3.35(@angular/compiler@20.3.35)(supports-color@10.2.2)(typescript@6.0.3)
       '@rollup/plugin-json': 6.1.0(rollup@4.63.1)
       '@rollup/wasm-node': 4.68.2
       ajv: 8.20.0
@@ -18294,12 +18289,12 @@ snapshots:
       ora: 8.2.0
       piscina: 5.3.2
       postcss: 8.5.28
-      rollup-plugin-dts: 6.5.1(@typescript/typescript6@6.0.2)(rollup@4.63.1)(typescript@5.9.3)
+      rollup-plugin-dts: 6.5.1(@typescript/typescript6@6.0.2)(rollup@4.63.1)(typescript@6.0.3)
       rxjs: 7.8.2
       sass: 1.90.0
       tinyglobby: 0.2.17
       tslib: 2.9.1
-      typescript: 5.9.3
+      typescript: 6.0.3
     optionalDependencies:
       rollup: 4.63.1
     transitivePeerDependencies:
@@ -19499,14 +19494,14 @@ snapshots:
       '@rolldown/binding-win32-arm64-msvc': 1.2.19
       '@rolldown/binding-win32-x64-msvc': 1.2.19
 
-  rollup-plugin-dts@6.5.1(@typescript/typescript6@6.0.2)(rollup@4.63.1)(typescript@5.9.3):
+  rollup-plugin-dts@6.5.1(@typescript/typescript6@6.0.2)(rollup@4.63.1)(typescript@6.0.3):
     dependencies:
       '@jridgewell/remapping': 2.3.5
       '@jridgewell/sourcemap-codec': 1.6.0
       convert-source-map: 2.0.0
       magic-string: 0.30.21
       rollup: 4.63.1
-      typescript: 5.9.3
+      typescript: 6.0.3
     optionalDependencies:
       '@babel/code-frame': 8.0.6
       '@typescript/typescript6': 6.0.2
@@ -20420,8 +20415,6 @@ snapshots:
       - supports-color
 
   typescript@5.6.1-rc: {}
-
-  typescript@5.9.3: {}
 
   typescript@6.0.3: {}
 
