@@ -77,10 +77,10 @@
   },
   "dependencies": {
     "@commerce-ai-tool/core": "workspace:*",
-    "@elevenlabs/elevenlabs-js": "^2.78.0",
+    "@elevenlabs/elevenlabs-js": "^2.79.0",
     "busboy": "^1.6.0",
     "cors": "^2.8.5",
-    "express-rate-limit": "^8.7.4"
+    "express-rate-limit": "^8.7.5"
   },
   "peerDependencies": {
     "express": "^5.0.0"
